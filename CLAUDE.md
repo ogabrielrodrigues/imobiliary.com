@@ -106,6 +106,13 @@ component base (not Radix), `-t start` the framework template.
   hooks start failing after a dependency change, clear `node_modules/.vite`
   **and restart the dev server** — clearing it under a running server leaves it
   serving 504s for stale modules.
+- **Base UI's Button asserts a native `<button>`.** Rendering one as a link
+  (`render={<Link />}`) needs `nativeButton={false}`, or it warns at runtime
+  about losing button semantics.
+- **Never read `event.currentTarget` inside a state updater.** React nulls it
+  once the handler returns, so `setValues(c => ({ ...c, [k]: e.currentTarget
+  .value }))` throws and takes the page down. Capture the value first. This
+  cost a blank screen once.
 - Dependencies it pulled in: `@base-ui/react` (the point of `-b base`),
   `class-variance-authority`, `cn`, `lucide-react`, `tw-animate-css`, and
   `shadcn` itself for `shadcn/tailwind.css`. `@fontsource-variable/geist` was
@@ -168,7 +175,14 @@ Requires `DOCGEN_TRUST_PROXY_HEADERS=true` on the API — which in turn requires
 the API to be unreachable from outside, or the header becomes forgeable.
 
 **CSRF:** `SameSite=Lax` plus an `Origin` check on every mutating server
-function.
+function. Note that Start also exports `createCsrfMiddleware`,
+`isCsrfRequestAllowed` and `getCsrfRequestValidationResult` — worth evaluating
+against the hand-rolled `assertSameOrigin`, which stays for now because it is
+explicit and its behaviour is known.
+
+**Binary crosses a server function intact.** Returning a `Uint8Array` uses
+Start's binary frame — no base64 and none of the third it would add. Verified:
+the downloaded document arrives with the ZIP magic `50 4b 03 04` and opens.
 
 ### The UI direction: 1b, the live document
 
@@ -278,7 +292,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-09 — upload works; generating a document is next
+**Last updated:** 2026-09-09 — the core loop is closed end to end
 
 ### Done
 
@@ -336,20 +350,31 @@ _Update this section as work proceeds. It is what a fresh session reads first._
      know a default is wrong. **Base UI uses a `render` prop, not Radix's
      `asChild`** — that is how a Button becomes a Link.
 
+8. **The core loop is closed.** Upload → discover schema → fill → generate →
+   download, verified end to end in the browser against a running API.
+   - `/templates/$templateId` builds its form from the version's placeholders,
+     grouped, with a live "n de m preenchidos" counter.
+   - The generated document was opened and read: values substituted, an
+     accent survived as UTF-8, and `Acme & Filhos <Ltda>` came out as
+     `&amp;` / `&lt;` / `&gt;`. Without that escaping Word refuses the file.
+
 ### Next step
 
-**Generating a document**, which is the last gap in the core loop: a template
-can be uploaded but not yet used.
+Pick up whichever the user asks for; nothing is half-finished.
 
-1. A template detail route, `/templates/$templateId`, loading `getTemplate`
-   for the placeholder schema.
-2. A form built from that schema, grouped with `groupPlaceholders`, validated
-   with `validateDocumentData` before sending.
-3. `server/documents.ts` gains `generateDocument`, and a download that streams
-   the bytes back through a server function.
+- **The live document preview (direction 1b).** The biggest remaining piece,
+  and the reason the template file endpoint exists. Needs the docx `parse`
+  module: `word/document.xml` → the same block tree the editor will use.
+  Re-read "The UI direction" above before starting.
+- **The block editor**, which needs the docx `build` module first — write the
+  OOXML writer and open its output in Word *before* building any interface
+  around it.
+- Smaller, real gaps: a template has no delete in the interface, documents
+  cannot be downloaded from `/documentos`, and there is no way to publish a
+  new version of an existing template.
 
-Then `shadcn add dialog table tabs toast progress` as each screen needs them —
-**never `shadcn init` again**, which would overwrite the theme.
+Add components with `shadcn add dialog table tabs toast progress` as screens
+need them — **never `shadcn init` again**, which would overwrite the theme.
 
 ### After that
 

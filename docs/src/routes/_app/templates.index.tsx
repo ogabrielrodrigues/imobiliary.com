@@ -27,7 +27,7 @@ function TemplatesPage() {
       <PageHeader
         title="Templates"
         actions={
-          <Button render={<Link to="/templates/novo" />}>Enviar modelo</Button>
+          <Button nativeButton={false} render={<Link to="/templates/novo" />}>Enviar modelo</Button>
         }
       />
       <PageBody>
@@ -38,7 +38,7 @@ function TemplatesPage() {
             title="Nenhum template ainda"
             description="Envie um .docx com campos no formato {{.campo}} para começar. A plataforma descobre os campos sozinha."
             action={
-              <Button size="sm" render={<Link to="/templates/novo" />}>Enviar modelo</Button>
+              <Button size="sm" nativeButton={false} render={<Link to="/templates/novo" />}>Enviar modelo</Button>
             }
           />
         ) : (
@@ -59,13 +59,17 @@ function TemplateCard({ template }: { readonly template: Template }) {
   const fields = template.version?.placeholders.length;
 
   return (
-    <article className="flex h-full flex-col gap-3.5 rounded-lg border border-border bg-card p-5 transition-colors hover:border-border-hover hover:bg-row-hover">
+    <Link
+      to="/templates/$templateId"
+      params={{ templateId: template.id }}
+      className="flex h-full flex-col gap-3.5 rounded-lg border border-border bg-card p-5 transition-colors hover:border-border-hover hover:bg-row-hover"
+    >
       <div className="flex items-start gap-3">
         <DocxIcon />
         <div className="flex min-w-0 flex-col gap-0.5">
-          <h2 className="text-sm leading-tight font-semibold">
+          <span className="text-sm leading-tight font-semibold">
             {template.name}
-          </h2>
+          </span>
           <p className="text-xs text-faint">
             Atualizado {relativeDate(template.updatedAt)}
           </p>
@@ -85,6 +89,6 @@ function TemplateCard({ template }: { readonly template: Template }) {
         </span>
         <StatusPill tone="success">Pronto</StatusPill>
       </div>
-    </article>
+    </Link>
   );
 }
