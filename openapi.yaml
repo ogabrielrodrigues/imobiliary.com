@@ -1,0 +1,809 @@
+openapi: 3.1.0
+
+info:
+  title: docgen API
+  version: "1.0.0"
+  summary: Generates standardised DOCX documents from user-uploaded templates.
+  description: |
+    Upload a `.docx` containing `{{.placeholder}}` markers. The service discovers
+    the placeholder schema, renders documents against it, and serves the result
+    for download.
+
+    ## Authentication
+
+    Two credentials make up a session.
+
+    The **access token** is a short-lived JWT sent as `Authorization: Bearer
+    <token>`. It is validated without touching the database, so it cannot be
+    revoked before it expires — hence the short lifetime, 15 minutes by default.
+
+    The **refresh token** is an opaque secret, stored only as a digest, and
+    **rotated on every use**: each call to `/v1/auth/refresh` consumes the
+    secret and returns a new one. Presenting a secret that was already consumed
+    means two parties hold it, and there is no way to tell the owner from a
+    thief, so every session of that account is revoked. Always replace the
+    stored secret with the one the response returns.
+
+    ## Rate limiting
+
+    Three layers, all answering `429` with a `Retry-After` header in seconds:
+
+    - a global limit per client IP, applied to every request;
+    - a strict limit per client IP on `/v1/auth/*`, which is what makes password
+      guessing impractical;
+    - a limit per account on uploading a template and generating a document.
+
+    Because the global layer covers everything, any endpoint may answer `429`.
+
+    ## Errors
+
+    Every failure uses one shape, so a client needs a single error path. The
+    `code` field is stable and safe to branch on; `message` is prose and may be
+    reworded. Only validation failures carry `fields`.
+
+    Note that `401` deliberately collapses several causes — bad password,
+    expired token, revoked session, replayed refresh secret — into one response.
+    Distinguishing them would tell an attacker whether a stolen credential had
+    been genuine.
+  license:
+    name: Unlicensed
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: Health
+    description: Liveness.
+  - name: Authentication
+    description: Accounts and sessions.
+  - name: Templates
+    description: Uploaded DOCX models and their immutable versions.
+  - name: Documents
+    description: Rendered documents.
+
+security:
+  - bearerAuth: []
+
+paths:
+  /healthz:
+    get:
+      tags: [Health]
+      summary: Liveness check
+      description: Reports whether the database is reachable. Public.
+      operationId: getHealth
+      security: []
+      responses:
+        "200":
+          description: The service can serve traffic.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    const: ok
+                required: [status]
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503":
+          description: A dependency is unreachable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/auth/register:
+    post:
+      tags: [Authentication]
+      summary: Create an account
+      description: |
+        Creates an account. It does **not** start a session: call
+        `/v1/auth/login` afterwards.
+
+        The email is lowercased and trimmed before the uniqueness check, so
+        `Ada@Example.com` and `ada@example.com` are the same account.
+      operationId: register
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterRequest" }
+      responses:
+        "201":
+          description: The account was created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/auth/login:
+    post:
+      tags: [Authentication]
+      summary: Exchange credentials for a session
+      description: |
+        An unknown address and a wrong password fail identically, in the same
+        response and in the same amount of time, so the endpoint cannot be used
+        to discover which addresses are registered.
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: A new session.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/auth/refresh:
+    post:
+      tags: [Authentication]
+      summary: Rotate the token pair
+      description: |
+        Consumes the refresh secret and returns a fresh pair. **Replace both
+        stored tokens with the ones returned**: the secret just sent is now
+        spent.
+
+        Sending a spent secret is treated as evidence that it leaked, and
+        revokes every session of the account — including the successor a
+        legitimate client is holding. That collateral damage is deliberate.
+      operationId: refreshSession
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefreshRequest" }
+      responses:
+        "200":
+          description: A rotated session.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "401":
+          description: |
+            The secret is unknown, expired, revoked, or was already consumed.
+            The response is identical in every case.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/auth/logout:
+    post:
+      tags: [Authentication]
+      summary: End a session
+      description: |
+        Revokes the session the secret belongs to. Answers `204` whether or not
+        the secret matched a live session: the caller's intent is satisfied
+        either way, and a different answer for an unknown secret would let the
+        endpoint be used to probe for valid ones.
+      operationId: logout
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefreshRequest" }
+      responses:
+        "204":
+          description: The session is gone.
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/me:
+    get:
+      tags: [Authentication]
+      summary: Current account
+      operationId: getCurrentUser
+      responses:
+        "200":
+          description: The authenticated account.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/templates:
+    get:
+      tags: [Templates]
+      summary: List templates
+      description: |
+        Newest first. The `version` field is omitted from listed items; fetch a
+        single template to see its placeholder schema.
+      operationId: listTemplates
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: A page of templates.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Template" }
+                required: [items]
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+    post:
+      tags: [Templates]
+      summary: Upload a template
+      description: |
+        Creates a template and its first version from an uploaded `.docx`.
+
+        The upload is normalised on the way in: Word routinely splits a
+        placeholder across several runs, and a pass reassembles each one before
+        the template is compiled. The response reports the placeholders found,
+        which is the schema a generation request must satisfy exactly.
+
+        Rejected with `422` if the file is not a valid `.docx`, is missing
+        `word/document.xml`, exceeds the size limit, or contains a construct
+        outside the accepted placeholder grammar.
+      operationId: createTemplate
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  maxLength: 120
+                  description: Required.
+                  examples: ["Service agreement"]
+                description:
+                  type: string
+                  maxLength: 500
+                  examples: ["Standard contract template"]
+                file:
+                  type: string
+                  format: binary
+                  description: The `.docx` model. Required. Defaults to a 10 MiB limit.
+              required: [name, file]
+      responses:
+        "201":
+          description: The template and its first version.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateWithVersion" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/templates/{id}:
+    parameters:
+      - $ref: "#/components/parameters/TemplateId"
+    get:
+      tags: [Templates]
+      summary: Get a template and its schema
+      description: |
+        `version.placeholders` is the exact set of keys a generation request
+        must supply — no more, no fewer.
+      operationId: getTemplate
+      responses:
+        "200":
+          description: The template and its latest version.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateWithVersion" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+    delete:
+      tags: [Templates]
+      summary: Delete a template
+      description: |
+        A soft delete: the template disappears from the API, but the versions
+        behind already-generated documents are retained, so those documents stay
+        downloadable.
+      operationId: deleteTemplate
+      responses:
+        "204":
+          description: The template was removed.
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/templates/{id}/versions:
+    parameters:
+      - $ref: "#/components/parameters/TemplateId"
+    post:
+      tags: [Templates]
+      summary: Publish a new version
+      description: |
+        Appends a version. Numbering is allocated by the server, so concurrent
+        uploads cannot collide.
+
+        Earlier versions remain usable and are never rewritten, which is what
+        keeps a document generated last month reproducible after the template
+        has moved on. A generation request can pin one with `version`.
+      operationId: addTemplateVersion
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The new `.docx` model. Required.
+              required: [file]
+      responses:
+        "201":
+          description: The template and its new version.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateWithVersion" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/documents:
+    get:
+      tags: [Documents]
+      summary: List documents
+      description: Newest first.
+      operationId: listDocuments
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: A page of documents.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Document" }
+                required: [items]
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+    post:
+      tags: [Documents]
+      summary: Generate a document
+      description: |
+        Renders the template with the supplied values and stores the result.
+        Generation is synchronous: the document exists by the time the response
+        arrives.
+
+        The keys of `data` must match the version's placeholders **exactly**. A
+        missing key and an unrecognised key are both `422`, and every problem is
+        reported at once. Rejecting unknown keys is deliberate: silently
+        dropping a misspelled one would produce a document missing text the
+        caller believed it had supplied.
+
+        Values are XML-escaped before substitution, so `&`, `<` and `>` are safe
+        to send and appear literally in the finished document.
+      operationId: generateDocument
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GenerateRequest" }
+      responses:
+        "201":
+          description: The generated document.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Document" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: The template, or the pinned version, does not exist.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/documents/{id}:
+    parameters:
+      - $ref: "#/components/parameters/DocumentId"
+    get:
+      tags: [Documents]
+      summary: Get document metadata
+      description: |
+        Includes the input data and the exact template version used, which
+        together make the output reproducible.
+      operationId: getDocument
+      responses:
+        "200":
+          description: The document.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Document" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/documents/{id}/download:
+    parameters:
+      - $ref: "#/components/parameters/DocumentId"
+    get:
+      tags: [Documents]
+      summary: Download the rendered .docx
+      description: |
+        Streams the file. Range and conditional requests are supported.
+
+        A generated document never changes, so the response is marked
+        immutable and may be cached indefinitely.
+      operationId: downloadDocument
+      responses:
+        "200":
+          description: The document bytes.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                examples: ['attachment; filename="service-agreement.docx"']
+            Cache-Control:
+              schema:
+                type: string
+                examples: ["private, max-age=31536000, immutable"]
+          content:
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema:
+                type: string
+                format: binary
+        "206":
+          description: A requested byte range.
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: The `access_token` returned by login or refresh.
+
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Page size. Values above the maximum are clamped, not rejected.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    Offset:
+      name: offset
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    TemplateId:
+      name: id
+      in: path
+      required: true
+      description: Template identifier.
+      schema:
+        type: string
+        format: uuid
+    DocumentId:
+      name: id
+      in: path
+      required: true
+      description: Document identifier.
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: A path identifier is not a valid UUID.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: |
+        No credential, or one that was not accepted. Carries
+        `WWW-Authenticate: Bearer`.
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+            examples: ["Bearer"]
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: |
+        No such resource **for this account**. A resource owned by someone else
+        is reported as missing rather than forbidden, so the API never confirms
+        that an identifier exists.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: The resource already exists.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    UnsupportedMediaType:
+      description: The body was sent under an unexpected `Content-Type`.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationFailed:
+      description: |
+        The request was well formed but could not be accepted. Every problem
+        found is listed in `fields`, so one round trip reveals all of them.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            missingAndMisspelledPlaceholder:
+              summary: A field left out and a key that matches no placeholder
+              value:
+                error:
+                  code: validation_failed
+                  message: the request could not be processed
+                  fields:
+                    - field: data.amount
+                      message: is required by the template
+                    - field: data.paln
+                      message: is not used by this template version
+    RateLimited:
+      description: Too many requests.
+      headers:
+        Retry-After:
+          description: Whole seconds to wait, rounded up.
+          schema:
+            type: integer
+            examples: [5]
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    RegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        password:
+          type: string
+          minLength: 12
+          maxLength: 256
+          description: |
+            Length is the only rule. Composition requirements are deliberately
+            absent, following current NIST guidance.
+      required: [email, name, password]
+      examples:
+        - email: someone@example.com
+          name: Ada Lovelace
+          password: a-sufficiently-long-password
+
+    LoginRequest:
+      type: object
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+      required: [email, password]
+
+    RefreshRequest:
+      type: object
+      properties:
+        refresh_token:
+          type: string
+          description: The most recent refresh secret. It is consumed by this call.
+      required: [refresh_token]
+
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        name: { type: string }
+        created_at: { type: string, format: date-time }
+      required: [id, email, name, created_at]
+      examples:
+        - id: 01a08374-3567-79e9-83a1-ab0c71a3f88e
+          email: someone@example.com
+          name: Ada Lovelace
+          created_at: "2026-09-08T23:57:06.279Z"
+
+    Session:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: "Send as the header `Authorization: Bearer <token>`."
+        token_type:
+          type: string
+          const: Bearer
+        expires_at:
+          type: string
+          format: date-time
+          description: When the access token stops being accepted.
+        refresh_token:
+          type: string
+          description: |
+            Opaque secret. Store it, and replace it on every refresh — it is
+            single-use.
+        refresh_expires_at: { type: string, format: date-time }
+        user: { $ref: "#/components/schemas/User" }
+      required:
+        [access_token, token_type, expires_at, refresh_token, refresh_expires_at, user]
+
+    Template:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        latest_version:
+          type: integer
+          description: The highest version number published.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        version:
+          description: Present when a single template is fetched; absent in listings.
+          anyOf:
+            - $ref: "#/components/schemas/TemplateVersion"
+            - type: "null"
+      required: [id, name, description, latest_version, created_at, updated_at]
+
+    TemplateWithVersion:
+      allOf:
+        - $ref: "#/components/schemas/Template"
+      description: A template whose `version` field is populated.
+
+    TemplateVersion:
+      type: object
+      description: |
+        An immutable snapshot of an uploaded `.docx`. Publishing a change
+        creates a new version rather than altering this one.
+      properties:
+        id: { type: string, format: uuid }
+        version: { type: integer, minimum: 1 }
+        size:
+          type: integer
+          description: Size in bytes of the stored, normalised archive.
+        placeholders:
+          type: array
+          description: |
+            The field names found in the document, sorted. This is the schema a
+            generation request must satisfy exactly.
+          items:
+            type: string
+            pattern: "^[a-z][a-z0-9_]*$"
+        created_at: { type: string, format: date-time }
+      required: [id, version, size, placeholders, created_at]
+      examples:
+        - id: 01a08374-6a08-749d-b6b8-9cd2fa9d2483
+          version: 1
+          size: 1379
+          placeholders: [amount, customer_name, plan]
+          created_at: "2026-09-08T23:57:19.752Z"
+
+    GenerateRequest:
+      type: object
+      properties:
+        template_id: { type: string, format: uuid }
+        version:
+          type: integer
+          minimum: 1
+          description: |
+            Pins a template version. Omit to use the latest. Pinning matters
+            when a caller must keep producing documents against a schema it has
+            already validated against.
+        filename:
+          type: string
+          description: |
+            Suggested download name. Sanitised, and given a `.docx` extension if
+            it lacks one. Defaults to `document.docx`.
+        data:
+          type: object
+          description: |
+            One entry per placeholder. Keys must match the version's
+            placeholders exactly.
+          additionalProperties:
+            type: string
+            maxLength: 10000
+      required: [template_id, data]
+      examples:
+        - template_id: 01a08374-6a08-746a-ade6-08aac54590b0
+          filename: service-agreement.docx
+          data:
+            customer_name: Acme & Sons <Ltd>
+            plan: Premium
+            amount: "1500.00"
+
+    Document:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        template_id: { type: string, format: uuid }
+        template_version:
+          type: integer
+          description: The version actually used, resolved at generation time.
+        filename: { type: string }
+        size: { type: integer, description: Size in bytes of the rendered file. }
+        data:
+          type: object
+          description: The values used, retained so the output can be reproduced.
+          additionalProperties: { type: string }
+        created_at: { type: string, format: date-time }
+        download_url:
+          type: string
+          description: Path to the download endpoint, relative to the server.
+      required:
+        [id, template_id, template_version, filename, size, data, created_at, download_url]
+
+    FieldError:
+      type: object
+      properties:
+        field:
+          type: string
+          description: |
+            The input that caused the problem. Values inside the generation
+            payload are named `data.<placeholder>`.
+        message: { type: string }
+      required: [field, message]
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              description: Stable and safe to branch on.
+              enum:
+                - validation_failed
+                - not_found
+                - conflict
+                - unauthorized
+                - rate_limited
+                - bad_request
+                - unsupported_media_type
+                - internal_error
+            message:
+              type: string
+              description: Prose for a human. May be reworded; do not match on it.
+            fields:
+              type: array
+              description: Present only when `code` is `validation_failed`.
+              items: { $ref: "#/components/schemas/FieldError" }
+          required: [code, message]
+      required: [error]

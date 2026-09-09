@@ -1,0 +1,637 @@
+{
+  "info": {
+    "_postman_id": "7c1f3a92-5d84-4f0b-9a13-2b6e8c4d1f70",
+    "name": "docgen API",
+    "description": "Standardised DOCX generation API. Import into HTTPie Desktop via Library > + > Import. Set the access_token variable from a Log in response before calling the authenticated requests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "email",
+      "value": "someone@example.com",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "a-sufficiently-long-password",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "template_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "document_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Liveness check",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/healthz",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "healthz"
+              ]
+            },
+            "description": "Public. Reports whether the database is reachable."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"name\": \"Test Account\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/auth/register",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Creates an account. The password must be at least 12 characters. Returns 201, or 409 if the address is taken."
+          },
+          "response": []
+        },
+        {
+          "name": "Log in",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Copy access_token and refresh_token from the response into the collection variables of the same name."
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh session",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/auth/refresh",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Rotates the pair. The old refresh token is consumed: update both variables from the response. Replaying a consumed token revokes every session of the account."
+          },
+          "response": []
+        },
+        {
+          "name": "Log out",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/auth/logout",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Always answers 204, whether or not the secret matched a live session."
+          },
+          "response": []
+        },
+        {
+          "name": "Current account",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "me"
+              ]
+            },
+            "description": "Useful for checking that access_token is set correctly."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Templates",
+      "item": [
+        {
+          "name": "Upload template",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "Service agreement",
+                  "type": "text"
+                },
+                {
+                  "key": "description",
+                  "value": "Standard contract template",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/templates",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "templates"
+              ]
+            },
+            "description": "Attach a .docx to the file field by hand: HTTPie does not import body files. The response reports the placeholders discovered in the document; copy the template id into the template_id variable."
+          },
+          "response": []
+        },
+        {
+          "name": "List templates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/templates?limit=20&offset=0",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "templates"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "limit is capped at 100."
+          },
+          "response": []
+        },
+        {
+          "name": "Get template and its schema",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/templates/{{template_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "templates",
+                "{{template_id}}"
+              ]
+            },
+            "description": "The version.placeholders array is the exact set of keys a Generate document call must supply."
+          },
+          "response": []
+        },
+        {
+          "name": "Publish new version",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/templates/{{template_id}}/versions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "templates",
+                "{{template_id}}",
+                "versions"
+              ]
+            },
+            "description": "Earlier versions stay usable, so documents generated from them remain reproducible."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete template",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/templates/{{template_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "templates",
+                "{{template_id}}"
+              ]
+            },
+            "description": "Soft delete: existing documents keep working."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Documents",
+      "item": [
+        {
+          "name": "Generate document",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"template_id\": \"{{template_id}}\",\n  \"filename\": \"service-agreement.docx\",\n  \"data\": {\n    \"customer_name\": \"Acme & Sons <Ltd>\",\n    \"plan\": \"Premium\",\n    \"amount\": \"R$ 1,500.00\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/documents",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "documents"
+              ]
+            },
+            "description": "The data keys must match the template's placeholders exactly. A missing or unknown key returns 422 listing every problem at once. Omit version to use the latest, or add \"version\": 1 to pin one."
+          },
+          "response": []
+        },
+        {
+          "name": "Generate from a pinned version",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"template_id\": \"{{template_id}}\",\n  \"version\": 1,\n  \"filename\": \"service-agreement-v1.docx\",\n  \"data\": {\n    \"customer_name\": \"Acme & Sons <Ltd>\",\n    \"plan\": \"Premium\",\n    \"amount\": \"R$ 1,500.00\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/documents",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "documents"
+              ]
+            },
+            "description": "Pinning a version keeps producing documents against a schema the caller has already validated against."
+          },
+          "response": []
+        },
+        {
+          "name": "List documents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/documents?limit=20&offset=0",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "documents"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "Newest first."
+          },
+          "response": []
+        },
+        {
+          "name": "Get document",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/documents/{{document_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "documents",
+                "{{document_id}}"
+              ]
+            },
+            "description": "Includes the input data used, which is what makes the output reproducible."
+          },
+          "response": []
+        },
+        {
+          "name": "Download document",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/documents/{{document_id}}/download",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "documents",
+                "{{document_id}}",
+                "download"
+              ]
+            },
+            "description": "Streams the .docx. Save the response to a file and open it in Word."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Error cases",
+      "item": [
+        {
+          "name": "Missing and misspelled placeholder (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"template_id\": \"{{template_id}}\",\n  \"data\": {\n    \"customer_name\": \"Acme\",\n    \"paln\": \"typo\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/documents",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "documents"
+              ]
+            },
+            "description": "Every problem is reported at once: the fields left out and the key that matches no placeholder."
+          },
+          "response": []
+        },
+        {
+          "name": "No credentials (401)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/templates",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "templates"
+              ]
+            },
+            "description": "Answers 401 with a WWW-Authenticate: Bearer header."
+          },
+          "response": []
+        },
+        {
+          "name": "Brute force the login (429)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"the-wrong-password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Send this about ten times in a row. Once the burst is spent the endpoint answers 429 with a Retry-After header."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1139 @@
+<title>docgen API Reference</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+  /* Light palette. Every token is declared here first, so the un-stamped
+     "system" state always resolves. */
+  :root {
+    --paper:      #FBFAF7;
+    --surface:    #FFFFFF;
+    --surface-2:  #F4F2EC;
+    --ink:        #1B1F2A;
+    --ink-soft:   #5A6172;
+    --ink-faint:  #868C9B;
+    --rule:       #E4E1D9;
+    --rule-firm:  #CFCBC0;
+    --seal:       #8A5D18;
+    --seal-tint:  #F6EEDC;
+
+    --get:        #2C6E63;
+    --post:       #2B5C9B;
+    --delete:     #9E3B2B;
+
+    --font-display: "Spectral", Georgia, "Times New Roman", serif;
+    --font-body: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+    --measure: 68ch;
+    --rail: 268px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:      #14161C;
+      --surface:    #1B1E26;
+      --surface-2:  #22262F;
+      --ink:        #E9E7E1;
+      --ink-soft:   #A0A6B4;
+      --ink-faint:  #767D8C;
+      --rule:       #2A2E38;
+      --rule-firm:  #3A3F4B;
+      --seal:       #D7A64A;
+      --seal-tint:  #2A2317;
+
+      --get:        #6BBFAE;
+      --post:       #7BA9E0;
+      --delete:     #DE8B78;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:      #14161C;
+    --surface:    #1B1E26;
+    --surface-2:  #22262F;
+    --ink:        #E9E7E1;
+    --ink-soft:   #A0A6B4;
+    --ink-faint:  #767D8C;
+    --rule:       #2A2E38;
+    --rule-firm:  #3A3F4B;
+    --seal:       #D7A64A;
+    --seal-tint:  #2A2317;
+
+    --get:        #6BBFAE;
+    --post:       #7BA9E0;
+    --delete:     #DE8B78;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 15.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------- shell ---------- */
+
+  .shell {
+    display: grid;
+    grid-template-columns: var(--rail) minmax(0, 1fr);
+    align-items: start;
+    max-width: 1180px;
+    margin: 0 auto;
+    gap: 0;
+  }
+
+  .rail {
+    position: sticky;
+    top: 0;
+    max-height: 100vh;
+    overflow-y: auto;
+    padding: 40px 28px 48px 24px;
+    border-right: 1px solid var(--rule);
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+  }
+
+  .main {
+    min-width: 0;
+    padding: 40px 40px 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 56px;
+  }
+
+  /* ---------- rail contents ---------- */
+
+  .mark {
+    font-family: var(--font-display);
+    font-size: 21px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+  }
+
+  .mark span { color: var(--seal); }
+
+  .mark-sub {
+    margin-top: 4px;
+    font-size: 12.5px;
+    color: var(--ink-faint);
+    line-height: 1.45;
+  }
+
+  .nav-group { display: flex; flex-direction: column; gap: 7px; }
+
+  .nav-title {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 2px;
+  }
+
+  .rail a {
+    color: var(--ink-soft);
+    text-decoration: none;
+    font-size: 13.5px;
+    line-height: 1.4;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    border-radius: 3px;
+  }
+
+  .rail a:hover { color: var(--seal); }
+  .rail a:focus-visible { outline: 2px solid var(--seal); outline-offset: 3px; }
+
+  .rail a code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: inherit;
+  }
+
+  .verb {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    flex: 0 0 auto;
+    width: 42px;
+    text-align: right;
+  }
+
+  .verb-get { color: var(--get); }
+  .verb-post { color: var(--post); }
+  .verb-delete { color: var(--delete); }
+
+  /* ---------- masthead ---------- */
+
+  .masthead { display: flex; flex-direction: column; gap: 18px; }
+
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(34px, 5vw, 46px);
+    font-weight: 600;
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  .standfirst {
+    font-family: var(--font-display);
+    font-size: 19px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    max-width: var(--measure);
+    margin: 0;
+  }
+
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 26px;
+    padding-top: 4px;
+    border-top: 1px solid var(--rule);
+  }
+
+  .fact { display: flex; flex-direction: column; gap: 1px; padding-top: 10px; }
+
+  .fact dt {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  .fact dd {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink);
+  }
+
+  /* ---------- sections ---------- */
+
+  section { display: flex; flex-direction: column; gap: 18px; scroll-margin-top: 24px; }
+
+  h2 {
+    font-family: var(--font-display);
+    font-size: 27px;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    line-height: 1.2;
+    margin: 0;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--ink);
+    text-wrap: balance;
+  }
+
+  h3 {
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    margin: 0;
+  }
+
+  p { margin: 0; max-width: var(--measure); }
+
+  a { color: var(--seal); }
+
+  ul, ol { margin: 0; padding-left: 20px; max-width: var(--measure); }
+  li { margin-bottom: 6px; }
+  li:last-child { margin-bottom: 0; }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.885em;
+    background: var(--surface-2);
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
+
+  strong { font-weight: 600; }
+
+  /* ---------- steps ---------- */
+
+  .steps {
+    list-style: none;
+    padding: 0;
+    counter-reset: step;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-width: var(--measure);
+  }
+
+  .steps li {
+    counter-increment: step;
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr);
+    gap: 12px;
+    align-items: baseline;
+    margin: 0;
+  }
+
+  .steps li::before {
+    content: counter(step);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--seal);
+    text-align: right;
+  }
+
+  /* ---------- code ---------- */
+
+  pre {
+    margin: 0;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 2px solid var(--rule-firm);
+    border-radius: 3px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 12.7px;
+    line-height: 1.62;
+    color: var(--ink);
+  }
+
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  .cmt { color: var(--ink-faint); }
+  .str { color: var(--get); }
+  .key { color: var(--post); }
+
+  .pair { display: grid; gap: 10px; }
+  @media (min-width: 940px) {
+    .pair { grid-template-columns: 1fr 1fr; align-items: start; }
+  }
+
+  .pair-label {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 6px;
+  }
+
+  /* ---------- endpoint records ---------- */
+
+  .endpoint {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-top: 22px;
+    border-top: 1px solid var(--rule);
+    scroll-margin-top: 24px;
+  }
+
+  .endpoint:first-of-type { border-top: none; padding-top: 0; }
+
+  .sig { display: flex; align-items: baseline; gap: 11px; flex-wrap: wrap; }
+
+  .chip {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    padding: 3px 7px;
+    border-radius: 3px;
+    border: 1px solid currentColor;
+  }
+
+  .chip-get { color: var(--get); }
+  .chip-post { color: var(--post); }
+  .chip-delete { color: var(--delete); }
+
+  .path {
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  .path em { font-style: normal; color: var(--seal); }
+
+  .lock {
+    font-size: 10.5px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 600;
+  }
+
+  /* ---------- tables ---------- */
+
+  .table-wrap { overflow-x: auto; }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 13.6px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  th {
+    text-align: left;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding: 0 14px 7px 0;
+    border-bottom: 1px solid var(--rule-firm);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 9px 14px 9px 0;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+
+  tr:last-child td { border-bottom: none; }
+
+  td code { background: none; padding: 0; }
+
+  .status {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  /* ---------- note ---------- */
+
+  .note {
+    background: var(--seal-tint);
+    border-left: 2px solid var(--seal);
+    padding: 13px 16px;
+    border-radius: 0 3px 3px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    max-width: var(--measure);
+  }
+
+  .note-title {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--seal);
+  }
+
+  .note p { max-width: none; font-size: 14.3px; }
+
+  /* ---------- field lists ---------- */
+
+  .fields { display: flex; flex-direction: column; gap: 0; max-width: var(--measure); }
+
+  .field {
+    display: grid;
+    grid-template-columns: minmax(0, 190px) minmax(0, 1fr);
+    gap: 4px 18px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .field:last-child { border-bottom: none; }
+
+  .field-name {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 500;
+    word-break: break-word;
+  }
+
+  .field-type {
+    font-size: 11px;
+    color: var(--ink-faint);
+    letter-spacing: 0.02em;
+  }
+
+  .field-desc { font-size: 14px; color: var(--ink-soft); }
+  .field-desc code { font-size: 0.9em; }
+
+  .req { color: var(--seal); font-size: 11px; font-weight: 600; }
+
+  footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 18px;
+    font-size: 13px;
+    color: var(--ink-faint);
+    max-width: var(--measure);
+  }
+
+  /* ---------- narrow ---------- */
+
+  @media (max-width: 860px) {
+    .shell { grid-template-columns: minmax(0, 1fr); }
+    .rail {
+      position: static;
+      max-height: none;
+      border-right: none;
+      border-bottom: 1px solid var(--rule);
+      padding: 28px 24px;
+    }
+    .main { padding: 32px 24px 72px; }
+    .field { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="shell">
+  <nav class="rail">
+    <div>
+      <div class="mark">docgen<span>.</span></div>
+      <div class="mark-sub">DOCX generation API<br>v1.0.0</div>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-title">Guide</div>
+      <a href="#quickstart">Quickstart</a>
+      <a href="#auth">Authentication</a>
+      <a href="#placeholders">Placeholders</a>
+      <a href="#versions">Template versions</a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-title">Authentication</div>
+      <a href="#register"><span class="verb verb-post">POST</span><code>/auth/register</code></a>
+      <a href="#login"><span class="verb verb-post">POST</span><code>/auth/login</code></a>
+      <a href="#refresh"><span class="verb verb-post">POST</span><code>/auth/refresh</code></a>
+      <a href="#logout"><span class="verb verb-post">POST</span><code>/auth/logout</code></a>
+      <a href="#me"><span class="verb verb-get">GET</span><code>/me</code></a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-title">Templates</div>
+      <a href="#create-template"><span class="verb verb-post">POST</span><code>/templates</code></a>
+      <a href="#list-templates"><span class="verb verb-get">GET</span><code>/templates</code></a>
+      <a href="#get-template"><span class="verb verb-get">GET</span><code>/templates/{id}</code></a>
+      <a href="#add-version"><span class="verb verb-post">POST</span><code>/versions</code></a>
+      <a href="#delete-template"><span class="verb verb-delete">DEL</span><code>/templates/{id}</code></a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-title">Documents</div>
+      <a href="#generate"><span class="verb verb-post">POST</span><code>/documents</code></a>
+      <a href="#list-documents"><span class="verb verb-get">GET</span><code>/documents</code></a>
+      <a href="#get-document"><span class="verb verb-get">GET</span><code>/documents/{id}</code></a>
+      <a href="#download"><span class="verb verb-get">GET</span><code>/download</code></a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-title">Reference</div>
+      <a href="#errors">Errors</a>
+      <a href="#limits">Rate limits</a>
+      <a href="#health">Health</a>
+    </div>
+  </nav>
+
+  <main class="main">
+    <header class="masthead">
+      <h1>docgen API Reference</h1>
+      <p class="standfirst">
+        Upload a Word template with <code>{{.placeholder}}</code> markers. The service
+        works out which fields it contains, renders documents against that schema, and
+        serves the finished <code>.docx</code>.
+      </p>
+      <dl class="facts">
+        <div class="fact">
+          <dt>Base URL</dt>
+          <dd>http://localhost:8080</dd>
+        </div>
+        <div class="fact">
+          <dt>Auth</dt>
+          <dd>Bearer JWT</dd>
+        </div>
+        <div class="fact">
+          <dt>Content type</dt>
+          <dd>application/json</dd>
+        </div>
+        <div class="fact">
+          <dt>Machine spec</dt>
+          <dd>openapi.yaml</dd>
+        </div>
+      </dl>
+    </header>
+
+    <section id="quickstart">
+      <h2>Quickstart</h2>
+      <p>Four calls take you from nothing to a finished document.</p>
+      <ol class="steps">
+        <li>Create an account, then log in to get a token pair.</li>
+        <li>Upload a <code>.docx</code>. The response tells you which placeholders it found.</li>
+        <li>Generate a document by supplying a value for each of those placeholders.</li>
+        <li>Download the result.</li>
+      </ol>
+
+      <pre><code><span class="cmt"># 1. Log in.</span>
+curl -X POST localhost:8080/v1/auth/login \
+  -H <span class="str">'Content-Type: application/json'</span> \
+  -d <span class="str">'{"email":"someone@example.com","password":"a-sufficiently-long-password"}'</span>
+
+<span class="cmt"># 2. Upload a template. Attach the .docx as the "file" part.</span>
+curl -X POST localhost:8080/v1/templates \
+  -H <span class="str">"Authorization: Bearer $ACCESS_TOKEN"</span> \
+  -F <span class="str">'name=Service agreement'</span> \
+  -F <span class="str">'file=@agreement.docx'</span>
+
+<span class="cmt"># 3. Generate. The keys must match the placeholders exactly.</span>
+curl -X POST localhost:8080/v1/documents \
+  -H <span class="str">"Authorization: Bearer $ACCESS_TOKEN"</span> \
+  -H <span class="str">'Content-Type: application/json'</span> \
+  -d <span class="str">'{"template_id":"...","data":{"customer_name":"Acme","plan":"Premium"}}'</span>
+
+<span class="cmt"># 4. Download.</span>
+curl -OJ localhost:8080/v1/documents/$ID/download \
+  -H <span class="str">"Authorization: Bearer $ACCESS_TOKEN"</span></code></pre>
+    </section>
+
+    <section id="auth">
+      <h2>Authentication</h2>
+      <p>
+        A session is two credentials with different jobs. The <strong>access token</strong>
+        is a short-lived JWT you send on every authenticated request. The
+        <strong>refresh token</strong> is an opaque secret whose only purpose is to obtain
+        the next access token.
+      </p>
+
+      <pre><code>Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...</code></pre>
+
+      <p>
+        The access token is verified without touching the database, which is what keeps
+        it fast — and also why it cannot be revoked before it expires. That is the reason
+        its life is short: 15 minutes by default.
+      </p>
+
+      <div class="note">
+        <div class="note-title">The refresh token is single-use</div>
+        <p>
+          Every call to <code>/v1/auth/refresh</code> consumes the secret you sent and
+          returns a new one. Store the new pair immediately.
+        </p>
+        <p>
+          If a spent secret is presented again, two parties are holding it and there is no
+          way to tell the owner from a thief — so <strong>every session of that account is
+          revoked</strong>, including the successor a legitimate client holds. Losing your
+          session and having to log in again is the intended outcome of that situation.
+        </p>
+      </div>
+
+      <p>
+        Passwords are hashed with argon2id. The only rule is length — at least 12
+        characters — with no composition requirements, following current NIST guidance.
+      </p>
+
+      <h3>Why a failed login is vague</h3>
+      <p>
+        An unknown address and a wrong password produce the same response, in the same
+        amount of time. Nor does the API distinguish an expired token from a revoked one:
+        all of it is a single <code>401 unauthorized</code>. Telling those cases apart
+        would confirm to an attacker which addresses are registered and whether a stolen
+        credential was genuine.
+      </p>
+    </section>
+
+    <section id="placeholders">
+      <h2>Writing a template</h2>
+      <p>
+        Put placeholders anywhere in the document body, a header or a footer. Names are
+        lowercase <code>snake_case</code>, and start with a letter.
+      </p>
+
+      <pre><code>Dear {{.customer_name}},
+
+Your plan is {{.plan}} at {{.amount}} per month.</code></pre>
+
+      <div class="note">
+        <div class="note-title">Word splits your placeholders — that is handled</div>
+        <p>
+          Word fragments a paragraph into runs for reasons of its own: a spell-check pass,
+          an edit you made and undid, a stray formatting toggle. A placeholder you typed as
+          one word routinely ends up stored as three fragments, and the literal text
+          <code>{{.customer_name}}</code> appears nowhere in the file.
+        </p>
+        <p>
+          On upload, a normalisation pass reassembles each one. You do not need to retype
+          anything, and the placeholder takes the formatting of its first character.
+        </p>
+      </div>
+
+      <h3>What is allowed</h3>
+      <p>
+        A placeholder is a bare field reference and nothing else. Pipelines, function
+        calls, variables, conditionals and loops are rejected with an error naming exactly
+        what was refused. The grammar is deliberately narrow because the template is
+        untrusted input, and this is all the feature needs.
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Accepted</th><th>Rejected</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>{{.customer_name}}</code></td><td><code>{{.CustomerName}}</code> — must be lowercase</td></tr>
+            <tr><td><code>{{.line_1}}</code></td><td><code>{{.customer.name}}</code> — no nested fields</td></tr>
+            <tr><td><code>{{.amount}}</code></td><td><code>{{if .name}}…{{end}}</code> — no control flow</td></tr>
+            <tr><td></td><td><code>{{printf "%s" .name}}</code> — no function calls</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Values are escaped for you</h3>
+      <p>
+        A value containing <code>&amp;</code>, <code>&lt;</code> or <code>&gt;</code> is
+        escaped before substitution, so it appears literally in the finished document
+        rather than corrupting its XML. Sending
+        <code>Acme &amp; Sons &lt;Ltd&gt;</code> is safe.
+      </p>
+      <p>
+        One limitation worth knowing: a newline inside a value does not become a line break
+        in the document. Word needs explicit markup for that, which is not yet generated.
+      </p>
+    </section>
+
+    <section id="versions">
+      <h2>Template versions</h2>
+      <p>
+        Publishing a change never rewrites an existing version — it appends a new one. Every
+        generated document records the exact version it came from, so a document made last
+        month can still be reproduced after the template has moved on.
+      </p>
+      <p>
+        Generation uses the latest version unless you pin one with <code>version</code>.
+        Pinning matters when you have already validated your payload against a specific
+        schema and do not want a colleague's upload to change what your integration sends.
+      </p>
+      <p>
+        Deleting a template is a soft delete: it disappears from the API, but documents
+        already generated from it stay downloadable.
+      </p>
+    </section>
+
+    <section id="endpoints-auth">
+      <h2>Authentication endpoints</h2>
+
+      <div class="endpoint" id="register">
+        <div class="sig">
+          <span class="chip chip-post">POST</span>
+          <span class="path">/v1/auth/register</span>
+          <span class="lock">Public</span>
+        </div>
+        <p>
+          Creates an account and returns it. This does <strong>not</strong> start a session —
+          call <code>/v1/auth/login</code> next. Email is lowercased and trimmed before the
+          uniqueness check.
+        </p>
+        <div class="fields">
+          <div class="field">
+            <div><span class="field-name">email</span><br><span class="field-type">string · <span class="req">required</span></span></div>
+            <div class="field-desc">A valid address, at most 254 characters.</div>
+          </div>
+          <div class="field">
+            <div><span class="field-name">name</span><br><span class="field-type">string · <span class="req">required</span></span></div>
+            <div class="field-desc">At most 120 characters.</div>
+          </div>
+          <div class="field">
+            <div><span class="field-name">password</span><br><span class="field-type">string · <span class="req">required</span></span></div>
+            <div class="field-desc">Between 12 and 256 characters.</div>
+          </div>
+        </div>
+        <div class="pair">
+          <div>
+            <div class="pair-label">Request</div>
+            <pre><code>{
+  <span class="key">"email"</span>: <span class="str">"someone@example.com"</span>,
+  <span class="key">"name"</span>: <span class="str">"Ada Lovelace"</span>,
+  <span class="key">"password"</span>: <span class="str">"a-sufficiently-long-password"</span>
+}</code></pre>
+          </div>
+          <div>
+            <div class="pair-label">201 Created</div>
+            <pre><code>{
+  <span class="key">"id"</span>: <span class="str">"01a08374-3567-79e9-83a1-…"</span>,
+  <span class="key">"email"</span>: <span class="str">"someone@example.com"</span>,
+  <span class="key">"name"</span>: <span class="str">"Ada Lovelace"</span>,
+  <span class="key">"created_at"</span>: <span class="str">"2026-09-08T23:57:06Z"</span>
+}</code></pre>
+          </div>
+        </div>
+        <p><span class="status">409</span> if the address is already registered.</p>
+      </div>
+
+      <div class="endpoint" id="login">
+        <div class="sig">
+          <span class="chip chip-post">POST</span>
+          <span class="path">/v1/auth/login</span>
+          <span class="lock">Public</span>
+        </div>
+        <p>Exchanges <code>email</code> and <code>password</code> for a session.</p>
+        <div class="pair-label">200 OK</div>
+        <pre><code>{
+  <span class="key">"access_token"</span>: <span class="str">"eyJhbGciOiJIUzI1NiIs…"</span>,
+  <span class="key">"token_type"</span>: <span class="str">"Bearer"</span>,
+  <span class="key">"expires_at"</span>: <span class="str">"2026-09-08T21:12:06Z"</span>,
+  <span class="key">"refresh_token"</span>: <span class="str">"PXhrICkLRqbVYB3KNBaa9YKZX813itfz6a_1ZNgVjVo"</span>,
+  <span class="key">"refresh_expires_at"</span>: <span class="str">"2026-10-08T23:57:06Z"</span>,
+  <span class="key">"user"</span>: { <span class="key">"id"</span>: <span class="str">"01a08374-…"</span>, <span class="key">"email"</span>: <span class="str">"someone@example.com"</span>, … }
+}</code></pre>
+        <p><span class="status">401</span> for both a wrong password and an unknown address.</p>
+      </div>
+
+      <div class="endpoint" id="refresh">
+        <div class="sig">
+          <span class="chip chip-post">POST</span>
+          <span class="path">/v1/auth/refresh</span>
+          <span class="lock">Public</span>
+        </div>
+        <p>
+          Send <code>refresh_token</code>; receive a complete new session in the same shape
+          as login. The secret you sent is now spent — replace both stored tokens.
+        </p>
+        <p>
+          <span class="status">401</span> if the secret is unknown, expired, revoked, or
+          already consumed. In the last case every session of the account is revoked as well.
+        </p>
+      </div>
+
+      <div class="endpoint" id="logout">
+        <div class="sig">
+          <span class="chip chip-post">POST</span>
+          <span class="path">/v1/auth/logout</span>
+          <span class="lock">Public</span>
+        </div>
+        <p>
+          Send <code>refresh_token</code> to end that session. Always answers
+          <span class="status">204</span>, whether or not the secret matched a live session:
+          your intent is satisfied either way, and a different answer for an unknown secret
+          would let this endpoint be used to probe for valid ones.
+        </p>
+      </div>
+
+      <div class="endpoint" id="me">
+        <div class="sig">
+          <span class="chip chip-get">GET</span>
+          <span class="path">/v1/me</span>
+        </div>
+        <p>Returns the authenticated account. Useful for checking that a token is being sent correctly.</p>
+      </div>
+    </section>
+
+    <section id="endpoints-templates">
+      <h2>Template endpoints</h2>
+
+      <div class="endpoint" id="create-template">
+        <div class="sig">
+          <span class="chip chip-post">POST</span>
+          <span class="path">/v1/templates</span>
+        </div>
+        <p>
+          Uploads a <code>.docx</code> as <code>multipart/form-data</code> and creates version 1.
+          The response reports the placeholders discovered in it.
+        </p>
+        <div class="fields">
+          <div class="field">
+            <div><span class="field-name">name</span><br><span class="field-type">text part · <span class="req">required</span></span></div>
+            <div class="field-desc">At most 120 characters.</div>
+          </div>
+          <div class="field">
+            <div><span class="field-name">description</span><br><span class="field-type">text part</span></div>
+            <div class="field-desc">At most 500 characters.</div>
+          </div>
+          <div class="field">
+            <div><span class="field-name">file</span><br><span class="field-type">file part · <span class="req">required</span></span></div>
+            <div class="field-desc">The <code>.docx</code> model. Up to 10 MiB by default.</div>
+          </div>
+        </div>
+        <div class="pair-label">201 Created</div>
+        <pre><code>{
+  <span class="key">"id"</span>: <span class="str">"01a08374-6a08-746a-ade6-08aac54590b0"</span>,
+  <span class="key">"name"</span>: <span class="str">"Service agreement"</span>,
+  <span class="key">"description"</span>: <span class="str">"Standard contract template"</span>,
+  <span class="key">"latest_version"</span>: 1,
+  <span class="key">"created_at"</span>: <span class="str">"2026-09-08T23:57:19Z"</span>,
+  <span class="key">"updated_at"</span>: <span class="str">"2026-09-08T23:57:19Z"</span>,
+  <span class="key">"version"</span>: {
+    <span class="key">"id"</span>: <span class="str">"01a08374-6a08-749d-b6b8-9cd2fa9d2483"</span>,
+    <span class="key">"version"</span>: 1,
+    <span class="key">"size"</span>: 1379,
+    <span class="key">"placeholders"</span>: [<span class="str">"amount"</span>, <span class="str">"customer_name"</span>, <span class="str">"plan"</span>],
+    <span class="key">"created_at"</span>: <span class="str">"2026-09-08T23:57:19Z"</span>
+  }
+}</code></pre>
+        <p>
+          <span class="status">422</span> if the file is not a valid <code>.docx</code>, is
+          missing <code>word/document.xml</code>, is too large, or uses a construct outside
+          the placeholder grammar.
+        </p>
+      </div>
+
+      <div class="endpoint" id="list-templates">
+        <div class="sig">
+          <span class="chip chip-get">GET</span>
+          <span class="path">/v1/templates</span>
+        </div>
+        <p>
+          Returns <code>{"items": […]}</code>, newest first. Takes <code>limit</code>
+          (default 20, clamped to 100) and <code>offset</code>. Listed items omit
+          <code>version</code> — fetch a single template to see its schema.
+        </p>
+      </div>
+
+      <div class="endpoint" id="get-template">
+        <div class="sig">
+          <span class="chip chip-get">GET</span>
+          <span class="path">/v1/templates/<em>{id}</em></span>
+        </div>
+        <p>
+          Returns the template with its latest version. <code>version.placeholders</code> is
+          the exact set of keys a generation request must supply — no more, no fewer.
+        </p>
+      </div>
+
+      <div class="endpoint" id="add-version">
+        <div class="sig">
+          <span class="chip chip-post">POST</span>
+          <span class="path">/v1/templates/<em>{id}</em>/versions</span>
+        </div>
+        <p>
+          Publishes a new version from an uploaded <code>file</code> part. The version number
+          is allocated by the server, so simultaneous uploads cannot collide. Earlier versions
+          remain usable.
+        </p>
+      </div>
+
+      <div class="endpoint" id="delete-template">
+        <div class="sig">
+          <span class="chip chip-delete">DELETE</span>
+          <span class="path">/v1/templates/<em>{id}</em></span>
+        </div>
+        <p>
+          Soft delete, answering <span class="status">204</span>. Documents already generated
+          from this template stay downloadable.
+        </p>
+      </div>
+    </section>
+
+    <section id="endpoints-documents">
+      <h2>Document endpoints</h2>
+
+      <div class="endpoint" id="generate">
+        <div class="sig">
+          <span class="chip chip-post">POST</span>
+          <span class="path">/v1/documents</span>
+        </div>
+        <p>
+          Renders a document and stores it. Generation is synchronous: the document exists by
+          the time the response arrives.
+        </p>
+        <div class="fields">
+          <div class="field">
+            <div><span class="field-name">template_id</span><br><span class="field-type">uuid · <span class="req">required</span></span></div>
+            <div class="field-desc">The template to render.</div>
+          </div>
+          <div class="field">
+            <div><span class="field-name">version</span><br><span class="field-type">integer</span></div>
+            <div class="field-desc">Pins a template version. Omit to use the latest.</div>
+          </div>
+          <div class="field">
+            <div><span class="field-name">filename</span><br><span class="field-type">string</span></div>
+            <div class="field-desc">Suggested download name. Sanitised, and given a <code>.docx</code> extension if it lacks one. Defaults to <code>document.docx</code>.</div>
+          </div>
+          <div class="field">
+            <div><span class="field-name">data</span><br><span class="field-type">object · <span class="req">required</span></span></div>
+            <div class="field-desc">One string value per placeholder, up to 10 000 bytes each.</div>
+          </div>
+        </div>
+        <div class="pair">
+          <div>
+            <div class="pair-label">Request</div>
+            <pre><code>{
+  <span class="key">"template_id"</span>: <span class="str">"01a08374-6a08-…"</span>,
+  <span class="key">"filename"</span>: <span class="str">"contract-acme.docx"</span>,
+  <span class="key">"data"</span>: {
+    <span class="key">"customer_name"</span>: <span class="str">"Acme &amp; Sons &lt;Ltd&gt;"</span>,
+    <span class="key">"plan"</span>: <span class="str">"Premium"</span>,
+    <span class="key">"amount"</span>: <span class="str">"1500.00"</span>
+  }
+}</code></pre>
+          </div>
+          <div>
+            <div class="pair-label">201 Created</div>
+            <pre><code>{
+  <span class="key">"id"</span>: <span class="str">"01a08374-9bf6-7341-…"</span>,
+  <span class="key">"template_id"</span>: <span class="str">"01a08374-6a08-…"</span>,
+  <span class="key">"template_version"</span>: 1,
+  <span class="key">"filename"</span>: <span class="str">"contract-acme.docx"</span>,
+  <span class="key">"size"</span>: 1393,
+  <span class="key">"data"</span>: { … },
+  <span class="key">"created_at"</span>: <span class="str">"2026-09-08T23:57:32Z"</span>,
+  <span class="key">"download_url"</span>: <span class="str">"/v1/documents/01a08374-…/download"</span>
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="note">
+          <div class="note-title">Keys must match the schema exactly</div>
+          <p>
+            A missing key and an unrecognised key are both <code>422</code>, and every problem
+            is reported in one response rather than one round trip at a time. Rejecting
+            unknown keys is deliberate: silently dropping a misspelled one would hand you a
+            document missing text you believed you had supplied.
+          </p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="list-documents">
+        <div class="sig">
+          <span class="chip chip-get">GET</span>
+          <span class="path">/v1/documents</span>
+        </div>
+        <p>Returns <code>{"items": […]}</code>, newest first, with the same <code>limit</code> and <code>offset</code> parameters.</p>
+      </div>
+
+      <div class="endpoint" id="get-document">
+        <div class="sig">
+          <span class="chip chip-get">GET</span>
+          <span class="path">/v1/documents/<em>{id}</em></span>
+        </div>
+        <p>
+          Returns the document's metadata, including the input data and the template version
+          used — which together are what make the output reproducible.
+        </p>
+      </div>
+
+      <div class="endpoint" id="download">
+        <div class="sig">
+          <span class="chip chip-get">GET</span>
+          <span class="path">/v1/documents/<em>{id}</em>/download</span>
+        </div>
+        <p>Streams the file. Range and conditional requests are supported.</p>
+        <pre><code>Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document
+Content-Disposition: attachment; filename="contract-acme.docx"
+Cache-Control: private, max-age=31536000, immutable</code></pre>
+        <p>
+          A generated document never changes, so the response is marked immutable and can be
+          cached indefinitely.
+        </p>
+      </div>
+    </section>
+
+    <section id="errors">
+      <h2>Errors</h2>
+      <p>
+        Every failure uses one shape, so a client needs a single error path. Branch on
+        <code>code</code>, which is stable; <code>message</code> is prose and may be reworded.
+      </p>
+
+      <pre><code>{
+  <span class="key">"error"</span>: {
+    <span class="key">"code"</span>: <span class="str">"validation_failed"</span>,
+    <span class="key">"message"</span>: <span class="str">"the request could not be processed"</span>,
+    <span class="key">"fields"</span>: [
+      { <span class="key">"field"</span>: <span class="str">"data.amount"</span>, <span class="key">"message"</span>: <span class="str">"is required by the template"</span> },
+      { <span class="key">"field"</span>: <span class="str">"data.paln"</span>,   <span class="key">"message"</span>: <span class="str">"is not used by this template version"</span> }
+    ]
+  }
+}</code></pre>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Status</th><th>Code</th><th>Meaning</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="status">400</td><td><code>bad_request</code></td><td>A path identifier is not a valid UUID.</td></tr>
+            <tr><td class="status">401</td><td><code>unauthorized</code></td><td>No credential, or one that was not accepted. Carries <code>WWW-Authenticate: Bearer</code>.</td></tr>
+            <tr><td class="status">404</td><td><code>not_found</code></td><td>No such resource <em>for this account</em>.</td></tr>
+            <tr><td class="status">409</td><td><code>conflict</code></td><td>The email address is already registered.</td></tr>
+            <tr><td class="status">415</td><td><code>unsupported_media_type</code></td><td>The body was sent under an unexpected <code>Content-Type</code>.</td></tr>
+            <tr><td class="status">422</td><td><code>validation_failed</code></td><td>Well formed, but not acceptable. The only code that carries <code>fields</code>.</td></tr>
+            <tr><td class="status">429</td><td><code>rate_limited</code></td><td>Too many requests. Carries <code>Retry-After</code> in seconds.</td></tr>
+            <tr><td class="status">500</td><td><code>internal_error</code></td><td>Something failed on our side. Details are logged, never returned.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note">
+        <div class="note-title">404 rather than 403</div>
+        <p>
+          A resource belonging to another account is reported as missing, not forbidden. A
+          <code>403</code> would confirm that the identifier exists, which is information the
+          caller has no right to.
+        </p>
+      </div>
+    </section>
+
+    <section id="limits">
+      <h2>Rate limits</h2>
+      <p>
+        Three layers, each a token bucket. Refusals answer <span class="status">429</span> with
+        a <code>Retry-After</code> header in whole seconds, rounded up.
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Layer</th><th>Keyed by</th><th>Applies to</th><th>Default</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Global</td><td>Client IP</td><td>Every request</td><td>10/s, burst 60</td></tr>
+            <tr><td>Credentials</td><td>Client IP</td><td><code>/v1/auth/*</code></td><td>0.2/s, burst 10</td></tr>
+            <tr><td>Write</td><td>Account</td><td>Uploading and generating</td><td>2/s, burst 20</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Because the global layer covers everything, any endpoint can answer <code>429</code>.
+        The strict limit on the credential routes is what makes password guessing impractical:
+        after ten attempts you are waiting five seconds per try.
+      </p>
+      <p>
+        The client IP is taken from the connection. <code>X-Forwarded-For</code> is honoured
+        only when the deployment declares that a trusted proxy sets it — otherwise any client
+        could choose its own rate-limit key by sending a header.
+      </p>
+    </section>
+
+    <section id="health">
+      <h2>Health</h2>
+      <div class="endpoint">
+        <div class="sig">
+          <span class="chip chip-get">GET</span>
+          <span class="path">/healthz</span>
+          <span class="lock">Public</span>
+        </div>
+        <p>
+          Answers <code>{"status":"ok"}</code> when the database is reachable, and
+          <span class="status">503</span> when it is not. It is public, but not exempt from the
+          global rate limit.
+        </p>
+      </div>
+    </section>
+
+    <footer>
+      Generated from <code>openapi.yaml</code>, the machine-readable source of truth for this
+      API. Where this page and the specification disagree, the specification is correct.
+    </footer>
+  </main>
+</div>

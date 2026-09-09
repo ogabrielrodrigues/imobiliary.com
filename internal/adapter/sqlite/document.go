@@ -1,0 +1,123 @@
+package sqlite
+
+import (
+	"context"
+	"database/sql"
+	json "encoding/json/v2"
+	"errors"
+	"fmt"
+	"uuid"
+
+	"docgen/internal/domain"
+)
+
+// DocumentRepository stores the metadata of generated documents. The rendered
+// bytes themselves live in the blob store, keyed by the hash recorded here.
+type DocumentRepository struct {
+	db *DB
+}
+
+// NewDocumentRepository returns a repository backed by db.
+func NewDocumentRepository(db *DB) *DocumentRepository {
+	return &DocumentRepository{db: db}
+}
+
+const documentColumns = "id, owner_id, template_id, template_version_id, template_version, " +
+	"filename, blob_hash, size, data, created_at"
+
+// Create records a generated document.
+func (r *DocumentRepository) Create(ctx context.Context, d *domain.Document) error {
+	const query = `INSERT INTO documents (` + documentColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	data, err := json.Marshal(d.Data)
+	if err != nil {
+		return fmt.Errorf("sqlite: encode document data: %w", err)
+	}
+
+	_, err = r.db.write.ExecContext(ctx, query,
+		idOf(d.ID), idOf(d.OwnerID), idOf(d.TemplateID), idOf(d.TemplateVersionID),
+		d.TemplateVersion, d.Filename, d.BlobHash, d.Size, string(data),
+		formatTime(d.CreatedAt),
+	)
+	if err != nil {
+		return fmt.Errorf("sqlite: create document: %w", err)
+	}
+	return nil
+}
+
+// ByID returns one document owned by ownerID. Ownership is part of the query,
+// so a caller cannot accidentally read another account's document.
+func (r *DocumentRepository) ByID(ctx context.Context, ownerID, id uuid.UUID) (*domain.Document, error) {
+	const query = `SELECT ` + documentColumns + ` FROM documents WHERE id = ? AND owner_id = ?`
+	return scanDocumentRow(r.db.read.QueryRowContext(ctx, query, idOf(id), idOf(ownerID)))
+}
+
+// List returns a page of the documents owned by ownerID, newest first. The
+// ordering comes free from the identifier: UUIDv7 sorts by creation time.
+func (r *DocumentRepository) List(ctx context.Context, ownerID uuid.UUID, limit, offset int) ([]domain.Document, error) {
+	const query = `SELECT ` + documentColumns + ` FROM documents
+		WHERE owner_id = ? ORDER BY id DESC LIMIT ? OFFSET ?`
+
+	rows, err := r.db.read.QueryContext(ctx, query, idOf(ownerID), limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("sqlite: list documents: %w", err)
+	}
+	defer rows.Close()
+
+	var out []domain.Document
+	for rows.Next() {
+		d, err := scanDocumentRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("sqlite: list documents: %w", err)
+	}
+	return out, nil
+}
+
+func scanDocumentRow(row rowScanner) (*domain.Document, error) {
+	var (
+		d               domain.Document
+		rawID           []byte
+		rawOwnerID      []byte
+		rawTemplateID   []byte
+		rawVersionID    []byte
+		data, createdAt string
+	)
+
+	err := row.Scan(
+		&rawID, &rawOwnerID, &rawTemplateID, &rawVersionID, &d.TemplateVersion,
+		&d.Filename, &d.BlobHash, &d.Size, &data, &createdAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("document: %w", domain.ErrNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("sqlite: scan document: %w", err)
+	}
+
+	for _, field := range []struct {
+		raw []byte
+		dst *uuid.UUID
+	}{
+		{rawID, &d.ID},
+		{rawOwnerID, &d.OwnerID},
+		{rawTemplateID, &d.TemplateID},
+		{rawVersionID, &d.TemplateVersionID},
+	} {
+		if *field.dst, err = idFrom(field.raw); err != nil {
+			return nil, err
+		}
+	}
+
+	if err = json.Unmarshal([]byte(data), &d.Data); err != nil {
+		return nil, fmt.Errorf("sqlite: decode document data: %w", err)
+	}
+	if d.CreatedAt, err = parseTime(createdAt); err != nil {
+		return nil, fmt.Errorf("sqlite: parse document created_at: %w", err)
+	}
+	return &d, nil
+}

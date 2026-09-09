@@ -1,0 +1,11 @@
+# Runtime state: the SQLite database and the generated documents.
+/data/
+
+# Build output.
+/docgen
+/docgen.exe
+
+# Local secrets. DOCGEN_JWT_SECRET belongs here, never in the repository.
+.env
+.env.*
+!.env.example
