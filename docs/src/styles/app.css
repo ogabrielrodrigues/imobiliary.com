@@ -1,0 +1,137 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+  The product commits to a single dark theme — there is no light mode and no
+  toggle. The palette is therefore stated once, here, and never redefined.
+
+  The document still carries `class="dark"`, so the `dark:` variants that
+  shadcn's components are written with resolve as their authors intended
+  instead of silently falling through to their light-mode branch.
+
+  Values come from the Claude Design project "Design System Imobiliary Docs".
+  That project is the source of truth: change a colour there first.
+*/
+:root {
+  color-scheme: dark;
+
+  /* Surfaces */
+  --background: #0b0d10;
+  --foreground: #e8eaee;
+  --card: #12151a;
+  --card-foreground: #e8eaee;
+  --popover: #12151a;
+  --popover-foreground: #e8eaee;
+  --muted: #191d24;
+  --muted-foreground: #9aa3b2;
+  --accent: #191d24;
+  --accent-foreground: #e8eaee;
+  --secondary: #191d24;
+  --secondary-foreground: #e8eaee;
+  --border: #262b34;
+  --input: #0b0d10;
+
+  /* Accents */
+  --primary: oklch(0.74 0.13 195);
+  --primary-foreground: #06201f;
+  --destructive: oklch(0.68 0.17 25);
+  --destructive-foreground: #2a0703;
+  --ring: oklch(0.74 0.13 195);
+
+  /*
+    Names the design system uses that shadcn has no slot for.
+
+    --docs is the subapplication colour: it marks the "docs" half of the
+    wordmark and every placeholder token, and doubles as the warning hue.
+  */
+  --docs: oklch(0.78 0.14 85);
+  --success: oklch(0.74 0.13 150);
+  --faint: #828c9b;
+  --border-strong: #343b47;
+  --border-hover: #3f4756;
+  --raised: #0f1216;
+  --row-hover: #151920;
+  --disabled-foreground: #525b69;
+
+  --radius: 8px;
+}
+
+@theme inline {
+  --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-ring: var(--ring);
+
+  --color-docs: var(--docs);
+  --color-success: var(--success);
+  --color-faint: var(--faint);
+  --color-border-strong: var(--border-strong);
+  --color-border-hover: var(--border-hover);
+  --color-raised: var(--raised);
+  --color-row-hover: var(--row-hover);
+  --color-disabled-foreground: var(--disabled-foreground);
+
+  /* The design system fixes these three rather than deriving them, so they are
+     written out instead of scaled from --radius. */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    background-color: var(--color-background);
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  /* Keyboard focus stays visible everywhere, in the same hue the design system
+     uses on a focused input. */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: color-mix(in oklch, var(--color-primary) 30%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

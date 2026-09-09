@@ -85,6 +85,26 @@ Confirmed versions: `@tanstack/react-start` 1.168.50, `@tanstack/react-router`
 Scaffold: `shadcn init -b base -t start` — `-b base` selects **Base UI** as the
 component base (not Radix), `-t start` the framework template.
 
+### Scaffold gotchas already paid for
+
+- **TypeScript 7 removed `baseUrl`.** Path aliases resolve relative to
+  `tsconfig.json` now; adding `baseUrl` back is a hard error.
+- **`shadcn init` prompts for a preset even with `-y`.** Pass `-p nova`
+  (Lucide icons) or it blocks forever in a non-interactive shell.
+- **`shadcn init` appends its own palette and overrides the theme.** It wrote a
+  light `:root`, a `.dark` block, and an `@theme inline` that replaced the font
+  with Geist and the colours with greys. `src/styles/app.css` has since been
+  rewritten by hand: the design palette lives once in `:root`, `@theme inline`
+  maps it onto Tailwind's colour utilities, and `<html>` carries `class="dark"`
+  so the `dark:` variants shadcn's components are written with resolve as their
+  authors intended rather than falling through to a light branch. **Re-running
+  `shadcn init` would clobber this again** — only run `shadcn add`.
+- Dependencies it pulled in: `@base-ui/react` (the point of `-b base`),
+  `class-variance-authority`, `cn`, `lucide-react`, `tw-animate-css`, and
+  `shadcn` itself for `shadcn/tailwind.css`. `@fontsource-variable/geist` was
+  removed — the design calls for Figtree, loaded from Google Fonts in
+  `__root.tsx`.
+
 ### Architecture
 
 ```
@@ -238,16 +258,30 @@ _Update this section as work proceeds. It is what a fresh session reads first._
    integration tests including the byte-for-byte round trip of an embedded
    part. Spec, collection and reference page updated. (`d3b73ff`)
 
+4. Platform scaffolded in `docs/` — TanStack Start on Vite 8, React 19,
+   TypeScript 7 strict, Tailwind 4, shadcn on Base UI. Design tokens wired and
+   confirmed rendering in the browser. A placeholder landing page exists at `/`.
+   `pnpm build` and `pnpm typecheck` are clean.
+
 ### Next step
 
-**Scaffold the platform in `docs/`:** TanStack Start + Tailwind v4 +
-`shadcn init -b base -t start`, tsconfig aliases, `strict` on, the `@theme`
-block above wired into the stylesheet. Nothing is written in `docs/` yet.
+**The core, in `docs/src/`, in this order:**
+
+1. `domain/` — `User`, `Template`, `TemplateVersion`, `Document`, plus the
+   validation rules that mirror the API's (password ≥ 12, placeholder names
+   `^[a-z][a-z0-9_]*$`). No framework imports.
+2. `application/ports.ts` — the interfaces the use cases consume.
+3. `infrastructure/api/` — a typed docgen client. The contract is
+   `docgen-api/openapi.yaml`; read it rather than guessing field names.
+4. `infrastructure/session/` — the AES-GCM cookie.
+5. `server/` — auth server functions. **Single-flight the refresh**, and
+   forward `X-Forwarded-For`.
+
+Start the dev server with `pnpm dev` from the root; the API needs
+`pnpm api:dev` alongside it.
 
 ### After that
 
-4. Core: `domain`, `application` ports, typed docgen client, encrypted session
-   cookie, auth server functions with single-flight refresh.
 5. Routes and the app shell, semantic HTML, SEO (`noindex` on app routes).
 6. Templates and documents: list, upload, preview, generate, download.
 7. The docx `parse`/`build` module, then the block editor and live preview.
