@@ -360,6 +360,55 @@ paths:
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /v1/templates/{id}/versions/{version}/file:
+    parameters:
+      - $ref: "#/components/parameters/TemplateId"
+      - $ref: "#/components/parameters/VersionNumber"
+    get:
+      tags: [Templates]
+      summary: Download a template version
+      description: |
+        Streams the stored `.docx` of one version.
+
+        This is what lets a client work with a template's content rather than
+        only its metadata — rendering a preview of it, or reopening one that was
+        authored in an editor.
+
+        The archive returned is the **normalised** one, not the bytes originally
+        uploaded: placeholders that Word had split across runs have been pulled
+        back together. Parts the service does not template are copied through
+        untouched, so an authoring client can embed its own source inside the
+        archive and find it here unchanged.
+
+        A published version never changes, so the response is marked immutable.
+      operationId: downloadTemplateVersion
+      responses:
+        "200":
+          description: The stored archive.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                examples: ['attachment; filename="Lease agreement-v1.docx"']
+            Cache-Control:
+              schema:
+                type: string
+                examples: ["private, max-age=31536000, immutable"]
+          content:
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema:
+                type: string
+                format: binary
+        "206":
+          description: A requested byte range.
+        "400":
+          description: The identifier is not a UUID, or the version is not a positive integer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /v1/documents:
     get:
       tags: [Documents]
@@ -519,6 +568,14 @@ components:
       schema:
         type: string
         format: uuid
+    VersionNumber:
+      name: version
+      in: path
+      required: true
+      description: Template version number, counting from 1.
+      schema:
+        type: integer
+        minimum: 1
 
   responses:
     BadRequest:

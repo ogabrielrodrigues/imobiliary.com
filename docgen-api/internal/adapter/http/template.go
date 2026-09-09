@@ -3,6 +3,7 @@ package http
 import (
 	"mime/multipart"
 	"net/http"
+	"strconv"
 	"time"
 
 	"docgen/internal/domain"
@@ -146,6 +147,51 @@ func (s *Server) handleDeleteTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleDownloadTemplateVersion streams the stored .docx of one version.
+//
+// It exists so a client can work with the template's content, not just its
+// metadata: rendering a preview, or reopening a template that was authored in
+// an editor, whose source travels inside the archive as an extra part.
+func (s *Server) handleDownloadTemplateVersion(w http.ResponseWriter, r *http.Request) {
+	templateID, ok := pathID(r, "id")
+	if !ok {
+		writeFailure(w, s.logger, http.StatusBadRequest, codeBadRequest, "invalid template identifier")
+		return
+	}
+
+	version, ok := pathVersion(r, "version")
+	if !ok {
+		writeFailure(w, s.logger, http.StatusBadRequest, codeBadRequest, "invalid version number")
+		return
+	}
+
+	file, err := s.templates.OpenVersion(r.Context(), userFrom(r.Context()).ID, templateID, &version)
+	if err != nil {
+		writeError(w, s.logger, err)
+		return
+	}
+	defer file.Content.Close()
+
+	w.Header().Set("Content-Type", docxMediaType)
+	// The name is built from the template's own name and passed through the
+	// same sanitiser as a generated document, so it cannot break out of the
+	// quoted header value.
+	w.Header().Set("Content-Disposition", `attachment; filename="`+file.Filename+`"`)
+	// A published version is immutable, so it can be cached indefinitely.
+	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+
+	http.ServeContent(w, r, file.Filename, file.Version.CreatedAt, file.Content)
+}
+
+// pathVersion reads a positive version number from a path wildcard.
+func pathVersion(r *http.Request, name string) (int, bool) {
+	version, err := strconv.Atoi(r.PathValue(name))
+	if err != nil || version < 1 {
+		return 0, false
+	}
+	return version, true
 }
 
 // openUpload pulls the DOCX out of a multipart request.

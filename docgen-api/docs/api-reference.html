@@ -526,6 +526,7 @@
       <a href="#list-templates"><span class="verb verb-get">GET</span><code>/templates</code></a>
       <a href="#get-template"><span class="verb verb-get">GET</span><code>/templates/{id}</code></a>
       <a href="#add-version"><span class="verb verb-post">POST</span><code>/versions</code></a>
+      <a href="#template-file"><span class="verb verb-get">GET</span><code>/versions/{n}/file</code></a>
       <a href="#delete-template"><span class="verb verb-delete">DEL</span><code>/templates/{id}</code></a>
     </div>
 
@@ -918,6 +919,37 @@ Your plan is {{.plan}} at {{.amount}} per month.</code></pre>
           Publishes a new version from an uploaded <code>file</code> part. The version number
           is allocated by the server, so simultaneous uploads cannot collide. Earlier versions
           remain usable.
+        </p>
+      </div>
+
+      <div class="endpoint" id="template-file">
+        <div class="sig">
+          <span class="chip chip-get">GET</span>
+          <span class="path">/v1/templates/<em>{id}</em>/versions/<em>{version}</em>/file</span>
+        </div>
+        <p>
+          Streams the stored <code>.docx</code> of one version. This is what lets you work
+          with a template's content rather than only its metadata — showing a preview of it,
+          or reopening one that was authored in an editor.
+        </p>
+        <div class="note">
+          <div class="note-title">You get the normalised archive, not your upload</div>
+          <p>
+            The bytes returned are the ones the service stored after pulling each split
+            placeholder back into a single run. Everything else is byte-for-byte what you
+            sent: parts the service does not template are copied through untouched, so an
+            authoring client can embed its own source inside the archive and find it here
+            unchanged.
+          </p>
+        </div>
+        <p>
+          Every published version stays reachable, which is what keeps a document generated
+          months ago reproducible today. Versions never change, so the response is marked
+          immutable.
+        </p>
+        <p>
+          <span class="status">400</span> if the version is not a positive integer;
+          <span class="status">404</span> if that version does not exist.
         </p>
       </div>
 

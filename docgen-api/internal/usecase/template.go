@@ -149,6 +149,57 @@ func (s *Templates) Delete(ctx context.Context, ownerID, templateID uuid.UUID) e
 	return s.repo.SoftDelete(ctx, ownerID, templateID, s.now().UTC())
 }
 
+// TemplateFile is a stored template version together with a readable handle on
+// the archive itself.
+type TemplateFile struct {
+	Template *domain.Template
+	Version  *domain.TemplateVersion
+	Filename string
+	Content  io.ReadSeekCloser
+}
+
+// OpenVersion returns the stored .docx of one template version. Pass a nil
+// version to get the latest.
+//
+// Reading the archive back is what lets a client show the template's content
+// rather than only its metadata, and what lets a template authored in an editor
+// be reopened: the editor's own source travels inside the archive as an extra
+// part, which this service copies through untouched.
+//
+// The caller closes Content.
+func (s *Templates) OpenVersion(ctx context.Context, ownerID, templateID uuid.UUID, version *int) (*TemplateFile, error) {
+	tmpl, err := s.repo.ByID(ctx, ownerID, templateID)
+	if err != nil {
+		return nil, err
+	}
+
+	stored, err := s.resolveVersion(ctx, ownerID, templateID, version)
+	if err != nil {
+		return nil, err
+	}
+
+	content, err := s.blobs.Open(stored.BlobHash)
+	if err != nil {
+		return nil, fmt.Errorf("open template version %s: %w", stored.ID, err)
+	}
+
+	return &TemplateFile{
+		Template: tmpl,
+		Version:  stored,
+		Filename: sanitizeFilename(fmt.Sprintf("%s-v%d", tmpl.Name, stored.Version)),
+		Content:  content,
+	}, nil
+}
+
+// resolveVersion picks the version a request refers to, defaulting to the
+// latest.
+func (s *Templates) resolveVersion(ctx context.Context, ownerID, templateID uuid.UUID, version *int) (*domain.TemplateVersion, error) {
+	if version == nil {
+		return s.repo.LatestVersion(ctx, ownerID, templateID)
+	}
+	return s.repo.Version(ctx, ownerID, templateID, *version)
+}
+
 // preparedTemplate is the result of validating and storing an upload.
 type preparedTemplate struct {
 	hash         string

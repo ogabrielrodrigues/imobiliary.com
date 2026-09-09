@@ -50,6 +50,11 @@
       "key": "document_id",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "template_version",
+      "value": "1",
+      "type": "string"
     }
   ],
   "item": [
@@ -370,6 +375,29 @@
               ]
             },
             "description": "Earlier versions stay usable, so documents generated from them remain reproducible."
+          },
+          "response": []
+        },
+        {
+          "name": "Download template version",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/templates/{{template_id}}/versions/{{template_version}}/file",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "templates",
+                "{{template_id}}",
+                "versions",
+                "{{template_version}}",
+                "file"
+              ]
+            },
+            "description": "Streams the stored .docx of one version. What comes back is the normalised archive, with split placeholders reassembled, and any extra parts an authoring client embedded copied through untouched. Older versions stay reachable."
           },
           "response": []
         },

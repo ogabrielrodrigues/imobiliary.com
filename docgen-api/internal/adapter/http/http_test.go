@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -668,4 +669,205 @@ func TestTemplateVersioningOverHTTP(t *testing.T) {
 		"version":     one,
 		"data":        map[string]string{"alpha": "old"},
 	}), http.StatusCreated)
+}
+
+// withExtraPart rebuilds an archive with one additional entry. It stands in for
+// the source an authoring client embeds inside the templates it creates.
+func withExtraPart(t *testing.T, archive []byte, name, content string) []byte {
+	t.Helper()
+
+	zr, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+	if err != nil {
+		t.Fatalf("open archive: %v", err)
+	}
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for _, f := range zr.File {
+		if err := zw.Copy(f); err != nil {
+			t.Fatalf("copy entry %q: %v", f.Name, err)
+		}
+	}
+
+	w, err := zw.Create(name)
+	if err != nil {
+		t.Fatalf("create entry %q: %v", name, err)
+	}
+	if _, err := io.WriteString(w, content); err != nil {
+		t.Fatalf("write entry %q: %v", name, err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close archive: %v", err)
+	}
+	return buf.Bytes()
+}
+
+// archivePart returns one entry of an archive and whether it was present.
+func archivePart(t *testing.T, archive []byte, name string) (string, bool) {
+	t.Helper()
+
+	zr, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+	if err != nil {
+		t.Fatalf("the downloaded file is not a valid archive: %v", err)
+	}
+	for _, f := range zr.File {
+		if f.Name != name {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatalf("open entry %q: %v", name, err)
+		}
+		defer rc.Close()
+
+		data, err := io.ReadAll(rc)
+		if err != nil {
+			t.Fatalf("read entry %q: %v", name, err)
+		}
+		return string(data), true
+	}
+	return "", false
+}
+
+// downloadTemplateVersion fetches the stored archive of one template version.
+func (s *testServer) downloadTemplateVersion(templateID string, version int, accessToken string) *http.Response {
+	s.t.Helper()
+	return s.get("/v1/templates/"+templateID+"/versions/"+strconv.Itoa(version)+"/file", accessToken)
+}
+
+// TestDownloadTemplateVersion covers the endpoint a client needs in order to
+// work with a template's content rather than only its metadata.
+func TestDownloadTemplateVersion(t *testing.T) {
+	server := newTestServer(t, defaultServerOptions())
+	session := server.registerAndLogin("templatefile@example.com")
+
+	var created templateBody
+	decode(t, server.uploadTemplate("/v1/templates", session.AccessToken, "Lease agreement",
+		buildDOCX(t, "Client {{", ".customer", "_name}}")), http.StatusCreated, &created)
+
+	resp := server.downloadTemplateVersion(created.ID, 1, session.AccessToken)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 200; body: %s", resp.StatusCode, body)
+	}
+	if contentType := resp.Header.Get("Content-Type"); !strings.Contains(contentType, "wordprocessingml") {
+		t.Errorf("Content-Type = %q", contentType)
+	}
+	if disposition := resp.Header.Get("Content-Disposition"); !strings.Contains(disposition, "Lease agreement-v1.docx") {
+		t.Errorf("Content-Disposition = %q, want it to name the template and version", disposition)
+	}
+
+	downloaded, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+
+	// What comes back is the normalised archive, so the placeholder that was
+	// split across runs on upload is now whole.
+	document, ok := archivePart(t, downloaded, "word/document.xml")
+	if !ok {
+		t.Fatal("the downloaded archive has no word/document.xml")
+	}
+	if !strings.Contains(document, "{{.customer_name}}") {
+		t.Errorf("the stored template is not the normalised one:\n%s", document)
+	}
+}
+
+// TestDownloadTemplateVersionPreservesExtraParts is the property an authoring
+// client depends on: a part it embeds in its own archive survives the upload
+// and comes back intact, which is what makes a template reopenable for editing.
+func TestDownloadTemplateVersionPreservesExtraParts(t *testing.T) {
+	server := newTestServer(t, defaultServerOptions())
+	session := server.registerAndLogin("extraparts@example.com")
+
+	const source = `{"blocks":[{"type":"paragraph","text":"Client {{.customer_name}}"}]}`
+	archive := withExtraPart(t,
+		buildDOCX(t, "Client {{.customer_name}}"),
+		"imobiliary/source.json", source,
+	)
+
+	var created templateBody
+	decode(t, server.uploadTemplate("/v1/templates", session.AccessToken, "Authored", archive),
+		http.StatusCreated, &created)
+
+	resp := server.downloadTemplateVersion(created.ID, 1, session.AccessToken)
+	defer resp.Body.Close()
+
+	downloaded, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+
+	got, ok := archivePart(t, downloaded, "imobiliary/source.json")
+	if !ok {
+		t.Fatal("the embedded source did not survive the round trip")
+	}
+	if got != source {
+		t.Errorf("the embedded source came back changed:\ngot:  %s\nwant: %s", got, source)
+	}
+}
+
+// TestDownloadTemplateVersionKeepsOlderVersionsReachable is what makes an
+// existing document reproducible after its template has moved on.
+func TestDownloadTemplateVersionKeepsOlderVersionsReachable(t *testing.T) {
+	server := newTestServer(t, defaultServerOptions())
+	session := server.registerAndLogin("oldversions@example.com")
+
+	var first templateBody
+	decode(t, server.uploadTemplate("/v1/templates", session.AccessToken, "Evolving",
+		buildDOCX(t, "Version one {{.alpha}}")), http.StatusCreated, &first)
+
+	expectStatus(t, server.uploadTemplate("/v1/templates/"+first.ID+"/versions", session.AccessToken, "",
+		buildDOCX(t, "Version two {{.beta}}")), http.StatusCreated)
+
+	for _, tc := range []struct {
+		version int
+		want    string
+	}{
+		{1, "{{.alpha}}"},
+		{2, "{{.beta}}"},
+	} {
+		resp := server.downloadTemplateVersion(first.ID, tc.version, session.AccessToken)
+		downloaded, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			t.Fatalf("read version %d: %v", tc.version, err)
+		}
+
+		document, ok := archivePart(t, downloaded, "word/document.xml")
+		if !ok {
+			t.Fatalf("version %d has no document part", tc.version)
+		}
+		if !strings.Contains(document, tc.want) {
+			t.Errorf("version %d does not contain %q", tc.version, tc.want)
+		}
+	}
+}
+
+func TestDownloadTemplateVersionRejectsBadRequests(t *testing.T) {
+	server := newTestServer(t, defaultServerOptions())
+	owner := server.registerAndLogin("fileowner@example.com")
+	stranger := server.registerAndLogin("filestranger@example.com")
+
+	var created templateBody
+	decode(t, server.uploadTemplate("/v1/templates", owner.AccessToken, "Private",
+		buildDOCX(t, "Secret {{.value}}")), http.StatusCreated, &created)
+
+	t.Run("another account cannot read it", func(t *testing.T) {
+		expectStatus(t, server.downloadTemplateVersion(created.ID, 1, stranger.AccessToken), http.StatusNotFound)
+	})
+
+	t.Run("a version that does not exist", func(t *testing.T) {
+		expectStatus(t, server.downloadTemplateVersion(created.ID, 99, owner.AccessToken), http.StatusNotFound)
+	})
+
+	t.Run("a version that is not a number", func(t *testing.T) {
+		expectStatus(t, server.get("/v1/templates/"+created.ID+"/versions/abc/file", owner.AccessToken), http.StatusBadRequest)
+	})
+
+	t.Run("without credentials", func(t *testing.T) {
+		expectStatus(t, server.downloadTemplateVersion(created.ID, 1, ""), http.StatusUnauthorized)
+	})
 }

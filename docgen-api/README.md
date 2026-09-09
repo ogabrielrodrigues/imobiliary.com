@@ -97,6 +97,7 @@ The table below is a map; the specification has the detail.
 | `GET` | `/v1/templates` | access | List templates |
 | `GET` | `/v1/templates/{id}` | access | Template and its placeholder schema |
 | `POST` | `/v1/templates/{id}/versions` | access | Publish a new version |
+| `GET` | `/v1/templates/{id}/versions/{version}/file` | access | Download a version's `.docx` |
 | `DELETE` | `/v1/templates/{id}` | access | Remove a template |
 | `POST` | `/v1/documents` | access | Generate a document |
 | `GET` | `/v1/documents` | access | List documents |

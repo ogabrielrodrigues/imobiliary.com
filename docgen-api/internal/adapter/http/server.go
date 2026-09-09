@@ -117,6 +117,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /v1/templates", read(s.handleListTemplates))
 	mux.Handle("GET /v1/templates/{id}", read(s.handleGetTemplate))
 	mux.Handle("POST /v1/templates/{id}/versions", write(s.handleAddTemplateVersion, uploadLimit))
+	mux.Handle("GET /v1/templates/{id}/versions/{version}/file", read(s.handleDownloadTemplateVersion))
 	mux.Handle("DELETE /v1/templates/{id}", read(s.handleDeleteTemplate))
 
 	mux.Handle("POST /v1/documents", write(s.handleGenerateDocument, s.maxRequestBytes))
