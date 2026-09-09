@@ -14,9 +14,14 @@
 
     The dark ground is deliberate. A bare amber glyph would disappear against a
     light tab bar; the square keeps the contrast the same everywhere.
+
+    The amber is written as a hex rather than as the design token's
+    oklch(0.78 0.14 85), which is the same colour in sRGB. A favicon is drawn
+    by a far more constrained renderer than the page, and a colour it cannot
+    parse falls back to black — which on this ground means an invisible mark.
   -->
   <rect width="32" height="32" rx="7" fill="#0b0d10"/>
-  <g transform="translate(8.1 25.66) scale(0.0281 -0.0281)" fill="oklch(0.78 0.14 85)">
+  <g transform="translate(8.1 25.66) scale(0.0281 -0.0281)" fill="#e0af3b">
     <path d="M260 -12Q192 -12 141.5 20.5Q91 53 62.5 112Q34 171 34 250Q34 330 62.5 388.5Q91 447 141.5 479.5Q192 512 260 512Q312 512 352 489.5Q392 467 418 426L418 700L529 700L529 0L423 0L419 76Q394 34 353.5 11Q313 -12 260 -12ZM288 90Q325 90 354 109.5Q383 129 399.5 163.5Q416 198 418 243L418 257Q416 302 399.5 336.5Q383 371 354 390Q325 409 287 409Q247 409 215.5 389Q184 369 166.5 333Q149 297 149 250Q149 203 167 167Q185 131 216.5 110.5Q248 90 288 90Z"/>
   </g>
 </svg>
