@@ -14,6 +14,8 @@ import {
   validateTemplateUpload,
   type Template,
 } from "../domain/template.ts";
+import type { Block } from "../domain/block.ts";
+import { parseDocx } from "../infrastructure/docx/parse.ts";
 import { assertSameOrigin, callContext, docgen, sessions } from "./runtime.ts";
 
 export const listTemplates = createServerFn({ method: "GET" }).handler(
@@ -61,6 +63,55 @@ export const createTemplate = createServerFn({ method: "POST" })
           docgen().templates.create(ctx, input),
         );
       }),
+  );
+
+/**
+ * A template together with a readable rendering of its content.
+ *
+ * The blocks are for showing the document, never for rewriting it: they model
+ * paragraphs, heading level and emphasis, and nothing else. Generation still
+ * happens in the API against the original archive, so what this leaves out
+ * cannot reach the file a user downloads.
+ */
+export interface TemplateContent {
+  readonly template: Template;
+  readonly blocks: readonly Block[];
+  /** True when the content could not be read; the form still works without it. */
+  readonly previewUnavailable: boolean;
+}
+
+export const getTemplateContent = createServerFn({ method: "GET" })
+  .inputValidator((id: string) => id)
+  .handler(
+    async ({ data }): Promise<Result<TemplateContent>> =>
+      attempt(() =>
+        sessions().authorize(callContext(), async (ctx) => {
+          const template = await docgen().templates.get(ctx, data);
+
+          if (template.version === undefined) {
+            return { template, blocks: [], previewUnavailable: true };
+          }
+
+          try {
+            const archive = await docgen().templates.downloadVersion(
+              ctx,
+              template.id,
+              template.version.version,
+            );
+            return {
+              template,
+              blocks: parseDocx(archive),
+              previewUnavailable: false,
+            };
+          } catch (error) {
+            // A document this reader cannot make sense of must not cost the
+            // user the ability to generate: the API renders from the original
+            // archive regardless of what the preview managed to show.
+            console.error("could not read template content for preview", error);
+            return { template, blocks: [], previewUnavailable: true };
+          }
+        }),
+      ),
   );
 
 export const getTemplate = createServerFn({ method: "GET" })

@@ -292,7 +292,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-09 — the core loop is closed end to end
+**Last updated:** 2026-09-09 — live preview done; the editor is what remains
 
 ### Done
 
@@ -358,20 +358,37 @@ _Update this section as work proceeds. It is what a fresh session reads first._
      accent survived as UTF-8, and `Acme & Filhos <Ltda>` came out as
      `&amp;` / `&lt;` / `&gt;`. Without that escaping Word refuses the file.
 
+9. **The documents table** names the template behind each row, links to it and
+   downloads again. The join happens in the server function — the API returns
+   only an identifier, and an identifier tells a person nothing.
+
+10. **The live preview — direction 1b, done.** `/templates/$templateId` shows
+    the document with each placeholder editable where it sits.
+    - `infrastructure/docx/zip.ts` — a ZIP reader *and* writer over
+      `node:zlib`, no dependency. The writer already exists because the editor
+      will need it, and because it makes the reader testable by round trip.
+    - `infrastructure/docx/parse.ts` — WordprocessingML → blocks.
+    - `domain/block.ts` — the block model lives in the domain, because three
+      places share it: the reader, the preview, and the writer to come. The
+      layer check caught the first attempt, which had the component importing
+      it from `infrastructure`.
+    - The preview degrades rather than breaks: a document this reader cannot
+      make sense of falls back to the plain grouped form, and generation is
+      unaffected either way because the API renders from the original archive.
+
 ### Next step
 
-Pick up whichever the user asks for; nothing is half-finished.
+Nothing is half-finished; pick up whichever the user asks for.
 
-- **The live document preview (direction 1b).** The biggest remaining piece,
-  and the reason the template file endpoint exists. Needs the docx `parse`
-  module: `word/document.xml` → the same block tree the editor will use.
-  Re-read "The UI direction" above before starting.
-- **The block editor**, which needs the docx `build` module first — write the
-  OOXML writer and open its output in Word *before* building any interface
-  around it.
-- Smaller, real gaps: a template has no delete in the interface, documents
-  cannot be downloaded from `/documentos`, and there is no way to publish a
-  new version of an existing template.
+- **The block editor**, the last piece of the original plan. It needs the docx
+  `build` module: blocks → `word/document.xml` → `writeZip`. Write the writer
+  and **open its output in Word before building any interface around it** —
+  that is the step that decides whether the whole idea works. Store the block
+  tree as `imobiliary/source.json` inside the archive so the template can be
+  reopened; the API preserves unknown parts byte for byte, which is proven by
+  a test on its side.
+- Smaller, real gaps: no delete in the interface, and no way to publish a new
+  version of an existing template.
 
 Add components with `shadcn add dialog table tabs toast progress` as screens
 need them — **never `shadcn init` again**, which would overwrite the theme.
