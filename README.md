@@ -58,6 +58,11 @@ pnpm typecheck && pnpm test
 
 ## A note on names
 
-The API is still called `docgen` in code. The product name is *Imobiliary Docs*;
-renaming the Go module is a cosmetic change worth doing on its own, not mixed
-into feature work.
+`docgen` is the internal name and stays that way — the Go module, its packages,
+the directory, the configuration prefix. *Imobiliary Docs* is the product name,
+and it belongs only to what people see: the platform's interface, its page
+titles, its copy.
+
+The two are deliberately not the same thing. A product name answers to
+marketing and may change; import paths should never have to follow it. There is
+no pending rename here.
