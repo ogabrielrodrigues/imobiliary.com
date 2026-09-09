@@ -57,6 +57,13 @@ consumer.
   for byte — proven by `TestDownloadTemplateVersionPreservesExtraParts`.
 - **Substituted values are XML-escaped.** Skipping that produces files Word
   refuses to open.
+- **A run that gains outer whitespace needs `xml:space="preserve"`.** Word
+  silently discards leading and trailing whitespace in a `<w:t>` without it.
+  Pulling a split placeholder into one run moves text into the next one, which
+  can leave it starting with a space it did not have — and Word then rendered
+  "{{.day}} de setembro" as "09de setembro". `redistribute` now rewrites the
+  start tag when that happens. The symptom appears **only in Word**: the XML
+  looks right, and every reader that ignores `xml:space` shows the space.
 - **Password minimum is 12**, not 8. The design system says 8; the design is
   wrong and its copy should be corrected.
 - **Generation is synchronous.** A document is created or the request fails.

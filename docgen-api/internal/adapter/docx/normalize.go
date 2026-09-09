@@ -22,18 +22,24 @@ const (
 )
 
 // textSegment is the character data of one <w:t> element, together with the
-// byte range it occupies in the source XML.
+// byte ranges it and its start tag occupy in the source XML.
 type textSegment struct {
-	start int // first byte of the character data
-	end   int // one past its last byte
-	text  string
+	tagStart int // first byte of the <w:t …> start tag
+	start    int // first byte of the character data
+	end      int // one past its last byte
+	text     string
 }
 
-// edit replaces a byte range of the source with new, unescaped text.
+// edit replaces a byte range of the source.
+//
+// When tag is non-empty it is written before the text, and start points at the
+// original start tag rather than at the character data — that is how a run
+// gains xml:space="preserve" along with its new contents.
 type edit struct {
 	start int
 	end   int
 	text  string
+	tag   string
 }
 
 // coalesceRuns rewrites a WordprocessingML part so that every template action
@@ -85,7 +91,11 @@ func coalesceRuns(src []byte) ([]byte, error) {
 					inText = true
 					content.Reset()
 					offset := int(dec.InputOffset())
-					current = textSegment{start: offset, end: offset}
+					current = textSegment{
+						tagStart: startTagAt(src, offset),
+						start:    offset,
+						end:      offset,
+					}
 				}
 			}
 
@@ -110,7 +120,7 @@ func coalesceRuns(src []byte) ([]byte, error) {
 			case "p":
 				if len(paragraphs) > 0 {
 					top := len(paragraphs) - 1
-					edits = append(edits, redistribute(paragraphs[top])...)
+					edits = append(edits, redistribute(src, paragraphs[top])...)
 					paragraphs = paragraphs[:top]
 				}
 			}
@@ -122,7 +132,7 @@ func coalesceRuns(src []byte) ([]byte, error) {
 
 // redistribute returns the edits that pull every template action of one
 // paragraph into a single text segment.
-func redistribute(segments []textSegment) []edit {
+func redistribute(src []byte, segments []textSegment) []edit {
 	// A lone segment cannot have an action split across it.
 	if len(segments) < 2 {
 		return nil
@@ -169,11 +179,65 @@ func redistribute(segments []textSegment) []edit {
 
 	var edits []edit
 	for i, s := range segments {
-		if got := outputs[i].String(); got != s.text {
-			edits = append(edits, edit{start: s.start, end: s.end, text: got})
+		got := outputs[i].String()
+		if got == s.text {
+			continue
 		}
+
+		// Moving text between runs can leave one starting or ending with a
+		// space it did not have before. Word discards such a space unless the
+		// element says to keep it, which is how "{{.day}} de setembro" comes
+		// out of Word as "09de setembro". The tag is rewritten to say so.
+		if needsSpacePreserved(got) {
+			tag := string(src[s.tagStart:s.start])
+			if !hasSpacePreserved(tag) {
+				edits = append(edits, edit{
+					start: s.tagStart,
+					end:   s.end,
+					text:  got,
+					tag:   withSpacePreserved(tag),
+				})
+				continue
+			}
+		}
+
+		edits = append(edits, edit{start: s.start, end: s.end, text: got})
 	}
 	return edits
+}
+
+// startTagAt finds the "<" that opens the element whose content begins at
+// contentStart.
+//
+// XML forbids a raw "<" inside an attribute value, so the nearest one looking
+// backwards is always the start of this tag.
+func startTagAt(src []byte, contentStart int) int {
+	for at := contentStart - 1; at >= 0; at-- {
+		if src[at] == '<' {
+			return at
+		}
+	}
+	return contentStart
+}
+
+// needsSpacePreserved reports whether text would lose whitespace in a <w:t>
+// that does not ask for it to be kept.
+func needsSpacePreserved(text string) bool {
+	return text != strings.TrimSpace(text)
+}
+
+func hasSpacePreserved(tag string) bool {
+	return strings.Contains(tag, `xml:space="preserve"`) ||
+		strings.Contains(tag, `xml:space='preserve'`)
+}
+
+// withSpacePreserved returns the tag with xml:space="preserve" added.
+func withSpacePreserved(tag string) string {
+	if !strings.HasSuffix(tag, ">") {
+		return tag
+	}
+	// Self-closing tags hold no character data, so they never reach this.
+	return strings.TrimSuffix(tag, ">") + ` xml:space="preserve">`
 }
 
 // span is a half-open byte range.
@@ -223,6 +287,9 @@ func applyEdits(src []byte, edits []edit) ([]byte, error) {
 			return nil, errors.New("docx: overlapping edits")
 		}
 		buf.Write(src[prev:e.start])
+		if e.tag != "" {
+			buf.WriteString(e.tag)
+		}
 		if err := xml.EscapeText(&buf, []byte(e.text)); err != nil {
 			return nil, fmt.Errorf("docx: escape text: %w", err)
 		}

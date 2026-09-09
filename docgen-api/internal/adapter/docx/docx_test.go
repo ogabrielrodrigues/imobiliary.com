@@ -381,3 +381,67 @@ func parsesAsXML(s string) error {
 		}
 	}
 }
+
+// TestNormalizeKeepsWhitespaceThatMovesBetweenRuns is the regression for a
+// document that reached Word reading "09de setembro" instead of
+// "09 de setembro".
+//
+// Pulling a split placeholder into one run moves the text after it into the
+// next run, which can leave that run starting with a space it did not have
+// before. Word discards leading and trailing whitespace in a <w:t> that does
+// not ask for it to be kept, so the element has to start saying so.
+func TestNormalizeKeepsWhitespaceThatMovesBetweenRuns(t *testing.T) {
+	// The second run's text has no leading space, so a well-behaved writer
+	// would not have marked it — until normalisation gives it one.
+	source := buildDOCX(t, map[string]string{
+		"word/document.xml": documentWith(
+			`<w:p>` +
+				`<w:r><w:t xml:space="preserve">Data: {{</w:t></w:r>` +
+				`<w:r><w:rPr><w:b/></w:rPr><w:t>.day}} de setembro</w:t></w:r>` +
+				`</w:p>`,
+		),
+	})
+
+	normalized, err := Normalize(source)
+	if err != nil {
+		t.Fatalf("normalize: %v", err)
+	}
+
+	part := partOf(t, normalized, "word/document.xml")
+	if !strings.Contains(part, `<w:t xml:space="preserve"> de setembro</w:t>`) {
+		t.Errorf("the run that gained a leading space was not marked to keep it:\n%s", part)
+	}
+
+	out := render(t, source, map[string]string{"day": "09"})
+	rendered := partOf(t, out, "word/document.xml")
+
+	if !strings.Contains(rendered, `<w:t xml:space="preserve"> de setembro</w:t>`) {
+		t.Errorf("the rendered document would lose the space in Word:\n%s", rendered)
+	}
+}
+
+// TestNormalizeLeavesUnmarkedRunsAloneWhenNoSpaceMoves keeps the fix narrow:
+// only a run that actually gains outer whitespace is rewritten.
+func TestNormalizeLeavesUnmarkedRunsAloneWhenNoSpaceMoves(t *testing.T) {
+	source := buildDOCX(t, map[string]string{
+		"word/document.xml": documentWith(
+			`<w:p>` +
+				`<w:r><w:t>Nome:{{</w:t></w:r>` +
+				`<w:r><w:t>.nome}}fim</w:t></w:r>` +
+				`</w:p>`,
+		),
+	})
+
+	normalized, err := Normalize(source)
+	if err != nil {
+		t.Fatalf("normalize: %v", err)
+	}
+
+	part := partOf(t, normalized, "word/document.xml")
+	if strings.Contains(part, `<w:t xml:space="preserve">fim</w:t>`) {
+		t.Errorf("a run with no outer whitespace was rewritten needlessly:\n%s", part)
+	}
+	if !strings.Contains(part, "{{.nome}}") {
+		t.Errorf("the placeholder was not reassembled:\n%s", part)
+	}
+}

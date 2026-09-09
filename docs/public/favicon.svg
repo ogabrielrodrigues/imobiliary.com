@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Imobiliary Docs">
+  <!--
+    The "d" of docs, in the subapplication amber.
+
+    Drawn as geometry rather than as a <text> element: a favicon renders
+    without the page's fonts, so Figtree would silently fall back to whatever
+    the system offers and the mark would differ from machine to machine.
+
+    The dark ground is deliberate. A bare amber glyph would disappear against a
+    light tab bar; the square keeps the contrast the same everywhere.
+  -->
+  <rect width="32" height="32" rx="7" fill="#0b0d10"/>
+  <g fill="none" stroke="oklch(0.78 0.14 85)" stroke-width="3.6">
+    <circle cx="13.4" cy="20.4" r="5.4"/>
+  </g>
+  <rect x="17" y="4.6" width="3.6" height="23.1" rx="1.8" fill="oklch(0.78 0.14 85)"/>
+</svg>

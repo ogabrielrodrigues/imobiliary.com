@@ -23,6 +23,10 @@ export const Route = createRootRoute({
       { name: "theme-color", content: "#0b0d10" },
     ],
     links: [
+      // An SVG icon stays sharp at every size a browser asks for, and its
+      // colours come from the design system rather than from a re-exported
+      // bitmap that would drift from them.
+      { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
       { rel: "stylesheet", href: appCss },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       {
