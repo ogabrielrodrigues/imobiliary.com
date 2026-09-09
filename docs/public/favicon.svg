@@ -2,16 +2,21 @@
   <!--
     The "d" of docs, in the subapplication amber.
 
-    Drawn as geometry rather than as a <text> element: a favicon renders
-    without the page's fonts, so Figtree would silently fall back to whatever
-    the system offers and the mark would differ from machine to machine.
+    The outline is the real Figtree glyph at weight 600 — the same weight the
+    wordmark uses — taken from the variable font (SIL Open Font License) and
+    converted to a path. It is a path rather than a <text> element because a
+    favicon renders without the page's fonts: Figtree would silently fall back
+    to whatever each machine happens to have, and the mark would differ from
+    one computer to the next.
+
+    Glyph units are 1000 per em with the baseline at y=0 and y pointing up, so
+    the transform flips the axis and scales the em to fit the square.
 
     The dark ground is deliberate. A bare amber glyph would disappear against a
     light tab bar; the square keeps the contrast the same everywhere.
   -->
   <rect width="32" height="32" rx="7" fill="#0b0d10"/>
-  <g fill="none" stroke="oklch(0.78 0.14 85)" stroke-width="3.6">
-    <circle cx="13.4" cy="20.4" r="5.4"/>
+  <g transform="translate(8.1 25.66) scale(0.0281 -0.0281)" fill="oklch(0.78 0.14 85)">
+    <path d="M260 -12Q192 -12 141.5 20.5Q91 53 62.5 112Q34 171 34 250Q34 330 62.5 388.5Q91 447 141.5 479.5Q192 512 260 512Q312 512 352 489.5Q392 467 418 426L418 700L529 700L529 0L423 0L419 76Q394 34 353.5 11Q313 -12 260 -12ZM288 90Q325 90 354 109.5Q383 129 399.5 163.5Q416 198 418 243L418 257Q416 302 399.5 336.5Q383 371 354 390Q325 409 287 409Q247 409 215.5 389Q184 369 166.5 333Q149 297 149 250Q149 203 167 167Q185 131 216.5 110.5Q248 90 288 90Z"/>
   </g>
-  <rect x="17" y="4.6" width="3.6" height="23.1" rx="1.8" fill="oklch(0.78 0.14 85)"/>
 </svg>
