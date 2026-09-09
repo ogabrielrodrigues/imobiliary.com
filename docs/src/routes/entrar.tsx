@@ -1,0 +1,89 @@
+import { useState } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+
+import { messageFor, summaryOf, type Failure } from "@/application/result";
+import { AuthLayout } from "@/components/auth-layout";
+import { FormField } from "@/components/form-field";
+import { Button } from "@/components/ui/button";
+import { login } from "@/server/auth";
+
+export const Route = createFileRoute("/entrar")({
+  head: () => ({
+    meta: [
+      { title: "Entrar — Imobiliary Docs" },
+      {
+        name: "description",
+        content: "Acesse sua conta para gerar documentos a partir dos seus modelos.",
+      },
+    ],
+  }),
+  component: SignInPage,
+});
+
+function SignInPage() {
+  const navigate = useNavigate();
+  const [failure, setFailure] = useState<Failure | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+
+    setPending(true);
+    setFailure(null);
+
+    try {
+      const result = await login({
+        data: {
+          email: String(form.get("email") ?? ""),
+          password: String(form.get("password") ?? ""),
+        },
+      });
+
+      if (result.ok) {
+        await navigate({ to: "/templates" });
+        return;
+      }
+      setFailure(result.failure);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <AuthLayout
+      title="Entrar"
+      subtitle="Use a conta que você criou para acessar seus modelos."
+      summary={summaryOf(failure)}
+      footer={
+        <>
+          Ainda não tem conta?{" "}
+          <Link to="/criar-conta" className="font-medium text-primary">
+            Criar conta
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={onSubmit} noValidate className="flex flex-col gap-5">
+        <FormField
+          name="email"
+          label="E-mail"
+          type="email"
+          autoComplete="email"
+          autoFocus
+          error={messageFor(failure, "email")}
+        />
+        <FormField
+          name="password"
+          label="Senha"
+          type="password"
+          autoComplete="current-password"
+          error={messageFor(failure, "password")}
+        />
+        <Button type="submit" disabled={pending} className="mt-1 h-[38px]">
+          {pending ? "Entrando…" : "Entrar"}
+        </Button>
+      </form>
+    </AuthLayout>
+  );
+}

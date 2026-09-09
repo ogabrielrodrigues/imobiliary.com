@@ -25,7 +25,7 @@ function LandingPage() {
         >
           <Brand />
           <Link
-            to="/"
+            to="/entrar"
             className="ml-auto rounded-md px-3 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
           >
             Entrar
@@ -54,7 +54,7 @@ function LandingPage() {
             intacta.
           </p>
           <Link
-            to="/"
+            to="/criar-conta"
             className="rounded-md bg-primary px-4 py-[9px] text-[13.5px] font-semibold text-primary-foreground"
           >
             Criar conta

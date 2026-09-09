@@ -99,6 +99,13 @@ component base (not Radix), `-t start` the framework template.
   so the `dark:` variants shadcn's components are written with resolve as their
   authors intended rather than falling through to a light branch. **Re-running
   `shadcn init` would clobber this again** — only run `shadcn add`.
+- **Vite needs `resolve.dedupe: ["react", "react-dom"]`.** There is only one
+  React on disk, but dependency pre-bundling still handed out a second module
+  instance: every hook failed with "Invalid hook call … more than one copy of
+  React". Deduping pins every importer, Base UI included, to one instance. If
+  hooks start failing after a dependency change, clear `node_modules/.vite`
+  **and restart the dev server** — clearing it under a running server leaves it
+  serving 504s for stale modules.
 - Dependencies it pulled in: `@base-ui/react` (the point of `-b base`),
   `class-variance-authority`, `cn`, `lucide-react`, `tw-animate-css`, and
   `shadcn` itself for `shadcn/tailwind.css`. `@fontsource-variable/geist` was
@@ -271,7 +278,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-09 — core layers done, interface not started
+**Last updated:** 2026-09-09 — auth and shell working; template upload is next
 
 ### Done
 
@@ -304,26 +311,39 @@ _Update this section as work proceeds. It is what a fresh session reads first._
      process-wide `RefreshCoordinator`, the `Origin` check, and the client-IP
      forwarding; `auth.ts` has register, login, logout and currentUser.
 
+6. Auth screens, the app shell and the guard, verified end to end against a
+   running API: register → 201, login → 200, templates → 200, logout → 204,
+   and a signed-out visit to `/templates` redirects to `/entrar`.
+   - Routes: `/` (landing), `/entrar`, `/criar-conta`, and the pathless `_app`
+     layout holding `/templates` and `/documentos`.
+   - `application/result.ts` — expected failures are **returned**, not thrown.
+     A thrown error crosses the RPC boundary as plain data, so the class is
+     gone by the time the browser sees it and `instanceof` would always be
+     false. Server functions answer `Result<T>`.
+   - `components/ui/input.tsx` and `label.tsx` were edited away from the
+     shadcn defaults to the design's field: 38px tall, 8px radius, solid
+     `--color-input`. Editing generated components is the point of shadcn.
+
 ### Next step
 
-**Routes and the app shell.** Nothing of the interface exists yet beyond the
-placeholder landing page at `/`.
+**Uploading a template**, which is the first thing a new account has no way to
+do yet — the "Enviar modelo" buttons on `/templates` are inert.
 
-1. `/entrar` and `/criar-conta`, wired to the `login` / `register` server
-   functions, rendering `ValidationError.fields` against the right inputs.
-2. The authenticated shell from the design: 208px sidebar on `--color-raised`,
-   nav items with the 6px dot, user block pinned to the bottom, topbar with
-   search and the primary action.
-3. A route guard that sends a signed-out visitor to `/entrar`, and `noindex`
-   on everything under the app.
+1. `server/templates.ts` gains `createTemplate`, taking the multipart file
+   through `sessions().authorize`.
+2. The dropzone from the design (one of the two bespoke components): dashed
+   `--color-border-hover`, the `docx` badge, drag-and-drop plus a file input,
+   validated with `validateTemplateFile` before it is sent.
+3. The upload result already carries the discovered placeholders — show them
+   as chips, grouped with `groupPlaceholders`.
 
-Then `shadcn add input dialog table tabs toast progress` as each screen needs
-them — **never `shadcn init` again**, which would overwrite the theme.
+Then `shadcn add dialog table tabs toast progress` as each screen needs them —
+**never `shadcn init` again**, which would overwrite the theme.
 
 ### After that
 
-6. Templates and documents: list, upload, preview, generate, download.
-7. The docx `parse`/`build` module, then the block editor and the live preview.
+7. The template detail screen, then generation and download.
+8. The docx `parse`/`build` module, then the block editor and the live preview.
 
 ### Running it
 
@@ -337,6 +357,15 @@ start. `DOCGEN_API_URL` defaults to `http://localhost:8080`.
 
 ### Open items
 
+- **`X-Forwarded-For` forwarding is written but never verified.** The API's
+  access log records method, path and status but not the client address, so
+  there is no way to confirm from the outside that the real IP arrives. Adding
+  the address to that log line would be worth doing on its own — an API whose
+  rate limit is per-IP should say which IP it charged.
+- The browser automation's synthetic clicks do not reach Base UI's button: a
+  `left_click` on it fires no `click` event at all, while `form.requestSubmit()`
+  runs the same handler correctly. Drive forms that way when verifying; it is a
+  harness artifact, not a product bug.
 - `go test -race` still unrun (no C compiler here).
 - The design system's "mínimo de 8 caracteres" copy contradicts the API's 12.
 - The published API reference lives at
