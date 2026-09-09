@@ -278,7 +278,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-09 — auth and shell working; template upload is next
+**Last updated:** 2026-09-09 — upload works; generating a document is next
 
 ### Done
 
@@ -324,18 +324,29 @@ _Update this section as work proceeds. It is what a fresh session reads first._
      shadcn defaults to the design's field: 38px tall, 8px radius, solid
      `--color-input`. Editing generated components is the point of shadcn.
 
+7. Template upload, verified end to end with a fixture whose placeholder is
+   split across three runs: the API reassembled it, and the grouping rule held
+   on real data — `imovel_*` and `locatario_*` grouped, while `data_inicio`
+   and `valor_aluguel` correctly stayed loose rather than inventing
+   one-member hierarchies.
+   - `/templates/novo`, `createTemplate` taking FormData straight through, and
+     the two bespoke components: `dropzone.tsx` and `placeholder-chips.tsx`.
+   - The button's default size now matches the design (38px, 8px radius,
+     13.5px semibold). Every caller had been overriding it, which is how you
+     know a default is wrong. **Base UI uses a `render` prop, not Radix's
+     `asChild`** — that is how a Button becomes a Link.
+
 ### Next step
 
-**Uploading a template**, which is the first thing a new account has no way to
-do yet — the "Enviar modelo" buttons on `/templates` are inert.
+**Generating a document**, which is the last gap in the core loop: a template
+can be uploaded but not yet used.
 
-1. `server/templates.ts` gains `createTemplate`, taking the multipart file
-   through `sessions().authorize`.
-2. The dropzone from the design (one of the two bespoke components): dashed
-   `--color-border-hover`, the `docx` badge, drag-and-drop plus a file input,
-   validated with `validateTemplateFile` before it is sent.
-3. The upload result already carries the discovered placeholders — show them
-   as chips, grouped with `groupPlaceholders`.
+1. A template detail route, `/templates/$templateId`, loading `getTemplate`
+   for the placeholder schema.
+2. A form built from that schema, grouped with `groupPlaceholders`, validated
+   with `validateDocumentData` before sending.
+3. `server/documents.ts` gains `generateDocument`, and a download that streams
+   the bytes back through a server function.
 
 Then `shadcn add dialog table tabs toast progress` as each screen needs them —
 **never `shadcn init` again**, which would overwrite the theme.
