@@ -336,6 +336,10 @@ para o navegador baixar sem cabeçalho `Authorization`.
 
 ### Onde está cada coisa
 
+A API agora vive em `docgen-api/`, uma pasta do workspace do Imobiliary. Todos
+os caminhos e comandos desta seção são relativos a ela; da raiz do repositório,
+os scripts `pnpm api:*` fazem o equivalente.
+
 | Arquivo | O que é |
 |---|---|
 | `README.md` | Ponto de entrada: como rodar, configurar e testar |

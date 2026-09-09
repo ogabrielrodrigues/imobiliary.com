@@ -1,11 +1,25 @@
-# Runtime state: the SQLite database and the generated documents.
-/data/
-
-# Build output.
-/docgen
-/docgen.exe
-
-# Local secrets. DOCGEN_JWT_SECRET belongs here, never in the repository.
+# --- Secrets -----------------------------------------------------------------
+# DOCGEN_JWT_SECRET and friends live here, never in the repository.
 .env
 .env.*
 !.env.example
+
+# --- docgen-api (Go) ---------------------------------------------------------
+# Runtime state: the SQLite database and the stored documents.
+docgen-api/data/
+# Build output.
+docgen-api/docgen
+docgen-api/docgen.exe
+
+# --- docs (TanStack Start) ---------------------------------------------------
+node_modules/
+docs/dist/
+docs/.output/
+docs/.nitro/
+docs/.tanstack/
+docs/.vite/
+docs/src/routeTree.gen.ts
+
+# --- Editors and OS ----------------------------------------------------------
+.DS_Store
+Thumbs.db

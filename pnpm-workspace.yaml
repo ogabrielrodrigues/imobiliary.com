@@ -1,0 +1,5 @@
+packages:
+  # The web platform served at docs.imobiliary.com.
+  - docs
+
+# docgen-api is a Go module and deliberately not a workspace package.
