@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 
 import {
   DocxIcon,
@@ -13,7 +13,7 @@ import type { Template } from "@/domain/template";
 import { relativeDate } from "@/lib/format";
 import { listTemplates } from "@/server/templates";
 
-export const Route = createFileRoute("/_app/templates")({
+export const Route = createFileRoute("/_app/templates/")({
   head: () => ({ meta: [{ title: "Templates — Imobiliary Docs" }] }),
   loader: () => listTemplates(),
   component: TemplatesPage,
@@ -27,9 +27,7 @@ function TemplatesPage() {
       <PageHeader
         title="Templates"
         actions={
-          <Button type="button" className="h-[38px]">
-            Enviar modelo
-          </Button>
+          <Button render={<Link to="/templates/novo" />}>Enviar modelo</Button>
         }
       />
       <PageBody>
@@ -40,9 +38,7 @@ function TemplatesPage() {
             title="Nenhum template ainda"
             description="Envie um .docx com campos no formato {{.campo}} para começar. A plataforma descobre os campos sozinha."
             action={
-              <Button type="button" className="h-[34px] text-[13px]">
-                Enviar modelo
-              </Button>
+              <Button size="sm" render={<Link to="/templates/novo" />}>Enviar modelo</Button>
             }
           />
         ) : (

@@ -23,3 +23,6 @@ docs/src/routeTree.gen.ts
 # --- Editors and OS ----------------------------------------------------------
 .DS_Store
 Thumbs.db
+
+# Generated code map (graphify). Regenerable, and ~2 MB of artefacts.
+graphify-out/

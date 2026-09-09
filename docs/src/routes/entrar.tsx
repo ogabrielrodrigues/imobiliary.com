@@ -80,7 +80,7 @@ function SignInPage() {
           autoComplete="current-password"
           error={messageFor(failure, "password")}
         />
-        <Button type="submit" disabled={pending} className="mt-1 h-[38px]">
+        <Button type="submit" disabled={pending} className="mt-1">
           {pending ? "Entrando…" : "Entrar"}
         </Button>
       </form>
