@@ -1,15 +1,19 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
 
+import { summaryOf, type Failure } from "@/application/result";
+import type { DocumentListItem } from "@/application/views";
 import {
   EmptyState,
   LoadFailure,
   PageBody,
   PageHeader,
-  StatusPill,
 } from "@/components/page";
+import { Button } from "@/components/ui/button";
 import { formatBytes } from "@/domain/template";
+import { saveFile } from "@/lib/download";
 import { shortDateTime } from "@/lib/format";
-import { listDocuments } from "@/server/documents";
+import { downloadDocument, listDocuments } from "@/server/documents";
 
 export const Route = createFileRoute("/_app/documentos")({
   head: () => ({ meta: [{ title: "Documentos — Imobiliary Docs" }] }),
@@ -20,62 +24,94 @@ export const Route = createFileRoute("/_app/documentos")({
 function DocumentsPage() {
   const result = Route.useLoaderData();
 
+  // Tracks which row is being fetched, so only that button says so.
+  const [saving, setSaving] = useState<string | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
+
+  async function onDownload(id: string) {
+    setSaving(id);
+    setFailure(null);
+
+    try {
+      const downloaded = await downloadDocument({ data: id });
+      if (downloaded.ok) {
+        saveFile(
+          downloaded.value.filename,
+          downloaded.value.contentType,
+          downloaded.value.bytes,
+        );
+        return;
+      }
+      setFailure(downloaded.failure);
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  const summary = summaryOf(failure);
+
   return (
     <>
       <PageHeader title="Documentos" />
       <PageBody>
+        {summary != null && (
+          <p
+            role="alert"
+            className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-[13px] text-destructive"
+          >
+            {summary}
+          </p>
+        )}
+
         {!result.ok ? (
           <LoadFailure failure={result.failure} />
         ) : result.value.length === 0 ? (
           <EmptyState
             title="Nenhum documento gerado"
-            description="Abra um template e preencha os campos para gerar seu primeiro documento."
+            description="Abra um modelo e preencha os campos para gerar seu primeiro documento."
+            action={
+              <Button
+                size="sm"
+                nativeButton={false}
+                render={<Link to="/templates" />}
+              >
+                Ver modelos
+              </Button>
+            }
           />
         ) : (
           <div className="overflow-x-auto rounded-lg border border-border bg-card">
             <table className="w-full border-collapse text-left">
+              <caption className="sr-only">
+                Documentos gerados, do mais recente ao mais antigo
+              </caption>
               <thead>
                 <tr className="border-b border-border bg-raised">
-                  {["Documento", "Versão", "Tamanho", "Gerado em", "Status"].map(
-                    (heading) => (
+                  {["Documento", "Modelo", "Gerado em", "Tamanho", ""].map(
+                    (heading, index) => (
                       <th
-                        key={heading}
+                        key={heading || `actions-${index}`}
                         scope="col"
                         className="px-5 py-3 font-mono text-[11px] font-medium tracking-[0.08em] whitespace-nowrap text-faint uppercase"
                       >
-                        {heading}
+                        {heading === "" ? (
+                          <span className="sr-only">Ações</span>
+                        ) : (
+                          heading
+                        )}
                       </th>
                     ),
                   )}
                 </tr>
               </thead>
               <tbody>
-                {result.value.map((document) => (
-                  <tr
-                    key={document.id}
-                    className="border-b border-muted transition-colors last:border-b-0 hover:bg-row-hover"
-                  >
-                    <td className="px-5 py-3.5 text-[13.5px]">
-                      {document.filename}
-                    </td>
-                    <td className="px-5 py-3.5 font-mono text-[12.5px] text-muted-foreground">
-                      v{document.templateVersion}
-                    </td>
-                    <td className="px-5 py-3.5 font-mono text-[12.5px] tabular-nums text-muted-foreground">
-                      {formatBytes(document.size)}
-                    </td>
-                    <td className="px-5 py-3.5 text-[13px] whitespace-nowrap text-muted-foreground">
-                      {shortDateTime(document.createdAt)}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      {/*
-                        Always ready: generation is synchronous, so a row only
-                        exists once the document does. There is no pending or
-                        failed state to render.
-                      */}
-                      <StatusPill tone="success">Pronto</StatusPill>
-                    </td>
-                  </tr>
+                {result.value.map((item) => (
+                  <DocumentRow
+                    key={item.document.id}
+                    item={item}
+                    saving={saving === item.document.id}
+                    onDownload={onDownload}
+                  />
                 ))}
               </tbody>
             </table>
@@ -83,5 +119,64 @@ function DocumentsPage() {
         )}
       </PageBody>
     </>
+  );
+}
+
+function DocumentRow({
+  item,
+  saving,
+  onDownload,
+}: {
+  readonly item: DocumentListItem;
+  readonly saving: boolean;
+  readonly onDownload: (id: string) => void;
+}) {
+  const { document, templateName } = item;
+
+  return (
+    <tr className="border-b border-muted transition-colors last:border-b-0 hover:bg-row-hover">
+      <td className="px-5 py-3.5 text-[13.5px]">{document.filename}</td>
+
+      <td className="px-5 py-3.5 text-[13px] text-muted-foreground">
+        {templateName === null ? (
+          // The template was deleted, or sits beyond the page fetched to
+          // resolve names. Saying so beats printing a bare identifier.
+          <span className="text-faint italic">modelo indisponível</span>
+        ) : (
+          <Link
+            to="/templates/$templateId"
+            params={{ templateId: document.templateId }}
+            className="hover:text-foreground hover:underline"
+          >
+            {templateName}
+          </Link>
+        )}
+        <span className="ml-2 font-mono text-[11.5px] text-faint">
+          v{document.templateVersion}
+        </span>
+      </td>
+
+      <td className="px-5 py-3.5 text-[13px] whitespace-nowrap text-muted-foreground">
+        <time dateTime={document.createdAt.toISOString()}>
+          {shortDateTime(document.createdAt)}
+        </time>
+      </td>
+
+      <td className="px-5 py-3.5 font-mono text-[12.5px] tabular-nums whitespace-nowrap text-muted-foreground">
+        {formatBytes(document.size)}
+      </td>
+
+      <td className="px-5 py-3.5 text-right whitespace-nowrap">
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={saving}
+          onClick={() => onDownload(document.id)}
+        >
+          {saving ? "Preparando…" : "Baixar"}
+        </Button>
+      </td>
+    </tr>
   );
 }

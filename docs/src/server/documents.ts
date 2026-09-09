@@ -6,6 +6,7 @@ import { createServerFn } from "@tanstack/react-start";
 
 import type { FileContent } from "../application/ports.ts";
 import { attempt, type Result } from "../application/result.ts";
+import type { DocumentListItem } from "../application/views.ts";
 import {
   validateDocumentData,
   type GeneratedDocument,
@@ -13,12 +14,36 @@ import {
 } from "../domain/document.ts";
 import { assertSameOrigin, callContext, docgen, sessions } from "./runtime.ts";
 
+/**
+ * How many templates are fetched to resolve names. The API caps a page at 100,
+ * and a document whose template falls outside that page simply shows no name —
+ * which the interface states plainly rather than papering over.
+ */
+const TEMPLATE_NAME_LOOKUP_LIMIT = 100;
+
+/**
+ * Lists generated documents, each with the name of the template behind it.
+ *
+ * The API returns only the template's identifier, and an identifier tells a
+ * person nothing. The join happens here, in one extra call, rather than as one
+ * call per row from the browser.
+ */
 export const listDocuments = createServerFn({ method: "GET" }).handler(
-  async (): Promise<Result<GeneratedDocument[]>> =>
+  async (): Promise<Result<DocumentListItem[]>> =>
     attempt(() =>
-      sessions().authorize(callContext(), (ctx) =>
-        docgen().documents.list(ctx),
-      ),
+      sessions().authorize(callContext(), async (ctx) => {
+        const [documents, templates] = await Promise.all([
+          docgen().documents.list(ctx),
+          docgen().templates.list(ctx, { limit: TEMPLATE_NAME_LOOKUP_LIMIT }),
+        ]);
+
+        const names = new Map(templates.map((t) => [t.id, t.name]));
+
+        return documents.map((document) => ({
+          document,
+          templateName: names.get(document.templateId) ?? null,
+        }));
+      }),
     ),
 );
 

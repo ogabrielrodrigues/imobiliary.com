@@ -20,14 +20,21 @@ export function relativeDate(value: Date, now = new Date()): string {
   const elapsed = now.getTime() - value.getTime();
 
   if (elapsed < MINUTE) return "agora mesmo";
-  if (elapsed < HOUR) return RELATIVE.format(-Math.floor(elapsed / MINUTE), "minute");
+  if (elapsed < HOUR)
+    return RELATIVE.format(-Math.floor(elapsed / MINUTE), "minute");
   if (elapsed < DAY) return RELATIVE.format(-Math.floor(elapsed / HOUR), "hour");
-  if (elapsed < 30 * DAY) return RELATIVE.format(-Math.floor(elapsed / DAY), "day");
+  if (elapsed < 30 * DAY)
+    return RELATIVE.format(-Math.floor(elapsed / DAY), "day");
 
   return ABSOLUTE.format(value);
 }
 
-/** "08/09, 14:22" — the form the design's table uses. */
+/**
+ * "09/09, 14:12".
+ *
+ * The pt-BR locale already puts the comma in, so nothing is added here — an
+ * earlier version inserted one and produced "09/09,, 14:12".
+ */
 export function shortDateTime(value: Date): string {
-  return ABSOLUTE.format(value).replace(" ", ", ");
+  return ABSOLUTE.format(value);
 }
