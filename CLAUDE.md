@@ -109,21 +109,45 @@ component base (not Radix), `-t start` the framework template.
 
 ```
 docs/src/
-├── domain/          entities and rules; zero framework imports
+├── domain/          entities and rules; imports nothing else of ours
 ├── application/     use cases + the ports they consume
-├── infrastructure/  api client, session cookie, docx parse/build
-├── server/          TanStack Start server functions — the only API boundary
-├── ui/              components; ui/components/ui is shadcn output
+├── infrastructure/  api client, session cookie, config, docx parse/build
+├── server/          server functions — the only place that reaches the API
+├── components/      shadcn output lives in components/ui
 └── routes/          file-based routes
 ```
 
-Same dependency rule as the Go side, verified by a script rather than trusted.
+`pnpm check:layers` enforces this, the counterpart of `go list -deps` on the
+API side. It has been proved to fail on a planted violation, so it is a real
+check and not one that always passes.
+
+### Verification
+
+```bash
+cd docs && pnpm check   # typecheck + layer rule + tests
+```
+
+Tests run on Node's own runner over the TypeScript directly — no Vitest, no
+Jest, no test dependency at all. Note `node --test` needs a glob:
+`node --test "src/**/*.test.ts"`. Passing a bare directory fails.
+
+Layer imports use explicit `.ts` extensions so Node can run them unbundled;
+`allowImportingTsExtensions` is on for that reason. Components and routes may
+keep using the `@/` alias.
 
 ### Decisions and why
 
 **BFF, not a browser client.** Access and refresh tokens live in one httpOnly,
-`Secure`, `SameSite=Lax` cookie encrypted with AES-GCM (`node:crypto`). Page
-JavaScript never sees a token, so an XSS cannot steal a session.
+`SameSite=Lax` cookie, sealed with the framework's own `useSession` from
+`@tanstack/react-start/server` — it encrypts and signs the contents, so the
+hand-rolled AES-GCM the plan called for was dropped as redundant. Page
+JavaScript never sees a token, so an XSS cannot steal a session. `Secure` is on
+only in production, since the dev server speaks plain HTTP and the browser
+would otherwise refuse to store the cookie at all.
+
+Other framework primitives worth not reinventing:
+`getRequestIP({ xForwardedFor })`, `getCookie`/`setCookie`/`deleteCookie`,
+`getRequestHost`, `getRequestHeader` — all from the same entry point.
 
 **Refresh needs single-flight.** The API revokes the entire chain when a
 consumed refresh token is replayed. Two concurrent requests expiring together
@@ -247,7 +271,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-09
+**Last updated:** 2026-09-09 — core layers done, interface not started
 
 ### Done
 
@@ -263,28 +287,53 @@ _Update this section as work proceeds. It is what a fresh session reads first._
    confirmed rendering in the browser. A placeholder landing page exists at `/`.
    `pnpm build` and `pnpm typecheck` are clean.
 
+5. Core written and green: 37 tests, typecheck clean, layer rule holding.
+   - `domain/` — entities, errors, and the rules mirroring the API's.
+     `placeholder.ts` holds the grouping rule that answers the design's
+     `{{.locatario.nome}}` without touching the API: a prefix becomes a group
+     only when **two or more** names share it, so `valor_aluguel` alone stays
+     one field instead of a fake hierarchy.
+   - `application/` — the ports, plus `SessionManager` and
+     `RefreshCoordinator`. The coordinator is the security-critical piece and
+     is covered: two concurrent calls with an expired token exchange the
+     refresh secret exactly once.
+   - `infrastructure/` — `transport.ts` (HTTP, and the one place a status
+     becomes a domain error), `docgen-client.ts` (three gateways over one
+     transport), `config.ts`, `session/cookie-session-store.ts`.
+   - `server/` — `runtime.ts` is the composition root and holds the
+     process-wide `RefreshCoordinator`, the `Origin` check, and the client-IP
+     forwarding; `auth.ts` has register, login, logout and currentUser.
+
 ### Next step
 
-**The core, in `docs/src/`, in this order:**
+**Routes and the app shell.** Nothing of the interface exists yet beyond the
+placeholder landing page at `/`.
 
-1. `domain/` — `User`, `Template`, `TemplateVersion`, `Document`, plus the
-   validation rules that mirror the API's (password ≥ 12, placeholder names
-   `^[a-z][a-z0-9_]*$`). No framework imports.
-2. `application/ports.ts` — the interfaces the use cases consume.
-3. `infrastructure/api/` — a typed docgen client. The contract is
-   `docgen-api/openapi.yaml`; read it rather than guessing field names.
-4. `infrastructure/session/` — the AES-GCM cookie.
-5. `server/` — auth server functions. **Single-flight the refresh**, and
-   forward `X-Forwarded-For`.
+1. `/entrar` and `/criar-conta`, wired to the `login` / `register` server
+   functions, rendering `ValidationError.fields` against the right inputs.
+2. The authenticated shell from the design: 208px sidebar on `--color-raised`,
+   nav items with the 6px dot, user block pinned to the bottom, topbar with
+   search and the primary action.
+3. A route guard that sends a signed-out visitor to `/entrar`, and `noindex`
+   on everything under the app.
 
-Start the dev server with `pnpm dev` from the root; the API needs
-`pnpm api:dev` alongside it.
+Then `shadcn add input dialog table tabs toast progress` as each screen needs
+them — **never `shadcn init` again**, which would overwrite the theme.
 
 ### After that
 
-5. Routes and the app shell, semantic HTML, SEO (`noindex` on app routes).
 6. Templates and documents: list, upload, preview, generate, download.
-7. The docx `parse`/`build` module, then the block editor and live preview.
+7. The docx `parse`/`build` module, then the block editor and the live preview.
+
+### Running it
+
+```bash
+pnpm api:dev    # the Go API on :8080
+pnpm dev        # the platform on :3000
+```
+
+`docs/.env` needs `SESSION_SECRET` (32+ chars) or the platform refuses to
+start. `DOCGEN_API_URL` defaults to `http://localhost:8080`.
 
 ### Open items
 

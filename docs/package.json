@@ -7,7 +7,9 @@
     "build": "vite build",
     "start": "node .output/server/index.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --test src"
+    "test": "node --test \"src/**/*.test.ts\"",
+    "check:layers": "node scripts/check-layers.mjs",
+    "check": "pnpm typecheck && pnpm check:layers && pnpm test"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
