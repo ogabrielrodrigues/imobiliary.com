@@ -303,7 +303,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-10 — password change and recovery done; the editor is what remains
+**Last updated:** 2026-09-10 — SEO discovery layer done; the editor is what remains
 
 ### Done
 
@@ -479,6 +479,25 @@ _Update this section as work proceeds. It is what a fresh session reads first._
     - Resend is now a declared processor and an international transfer in the
       privacy policy (bumped to 1.1). A DPA with them is an open item.
 
+16. **SEO, the discovery half.** The semantic half was already right; none of
+    the rest existed.
+    - `robots.txt` and `sitemap.xml` are **route handlers**, not files in
+      `public/`. The API is `server: { handlers: { GET } }` on an ordinary
+      file route, and the filename escapes the dot: `robots[.]txt.ts`.
+      `createServerFileRoute` does **not** exist in this version.
+    - **A route with a `server` handler must not have a `component`.** With
+      one, the handler is allowed to defer and a missing return falls
+      through to SSR instead of erroring.
+    - Tags are built once in `src/lib/seo.ts`. Adding a public route means
+      calling `pageSeo` — writing the meta by hand is how a page ends up
+      without a canonical.
+    - `SITE_URL` is a build-time constant (`VITE_SITE_URL`), not server
+      config: canonical and Open Graph have to reach the browser.
+    - **No `og:image` on purpose.** A card without one still renders; one
+      pointing at a missing file shows a broken frame. Needs a 1200×630 PNG.
+    - The JSON-LD omits `publisher` while the controller identity is still
+      placeholders, so no `[RAZÃO SOCIAL]` can reach a search engine.
+
 ### Next step
 
 **The block editor**, the last piece of the original plan. It needs the docx
@@ -541,6 +560,16 @@ start. `DOCGEN_API_URL` defaults to `http://localhost:8080`.
 - `GET /v1/templates/{id}/versions` is paged and the platform asks for 100.
   A template with more versions than that would silently lose the oldest from
   the picker. Nothing shows that it truncated.
+- **`docs` cannot be started from a production build.** `pnpm start` runs
+  `node .output/server/index.mjs`, a Nitro-era path that no longer exists —
+  `vite build` produces `dist/client` and `dist/server`. Running
+  `dist/server/server.js` directly with `PORT` set produces no output and
+  never listens, so it likely needs a host adapter that is not installed.
+  **Nothing has ever been deployed from this repository.** Resolve before
+  planning a launch; it is a deployment question, not a code bug to guess at.
+- **An Open Graph image is missing** — 1200×630 PNG, the one SEO item that
+  is design work rather than code. Add it to `public/` and give `pageSeo` an
+  `og:image`/`twitter:image` pair pointing at it.
 - **No DPA with Resend yet.** They receive an email address and a first name
   when a security message goes out, which is a declared international
   transfer. Sign the processing contract, under the ANPD standard clauses,
