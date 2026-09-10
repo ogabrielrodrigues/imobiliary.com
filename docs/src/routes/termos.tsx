@@ -7,19 +7,17 @@ import {
   P,
 } from "@/components/legal-page";
 import { CONTROLLER, TERMS_OF_USE } from "@/domain/legal";
+import { pageSeo } from "@/lib/seo";
 
 export const Route = createFileRoute("/termos")({
-  head: () => ({
-    meta: [
-      { title: "Termos de Uso — Imobiliary Docs" },
-      {
-        name: "description",
-        content:
-          "As regras de uso do Imobiliary Docs, incluindo as obrigações de " +
-          "tratamento de dados pessoais entre você e a plataforma.",
-      },
-    ],
-  }),
+  head: () =>
+    pageSeo({
+      title: "Termos de Uso — Imobiliary Docs",
+      description:
+        "As regras de uso do Imobiliary Docs, incluindo as obrigações de " +
+        "tratamento de dados pessoais entre você e a plataforma.",
+      path: "/termos",
+    }),
   component: TermsOfUsePage,
 });
 

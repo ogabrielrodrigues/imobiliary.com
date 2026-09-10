@@ -13,6 +13,7 @@ import { AuthLayout } from "@/components/auth-layout";
 import { FormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
 import { currentUser, register } from "@/server/auth";
+import { pageSeo } from "@/lib/seo";
 
 export const Route = createFileRoute("/criar-conta")({
   /**
@@ -28,16 +29,13 @@ export const Route = createFileRoute("/criar-conta")({
       throw redirect({ to: "/templates" });
     }
   },
-  head: () => ({
-    meta: [
-      { title: "Criar conta — Imobiliary Docs" },
-      {
-        name: "description",
-        content:
-          "Crie sua conta para enviar modelos do Word e gerar documentos preenchidos.",
-      },
-    ],
-  }),
+  head: () =>
+    pageSeo({
+      title: "Criar conta — Imobiliary Docs",
+      description:
+        "Crie sua conta para enviar modelos do Word e gerar documentos preenchidos.",
+      path: "/criar-conta",
+    }),
   component: SignUpPage,
 });
 

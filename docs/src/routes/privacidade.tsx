@@ -7,19 +7,17 @@ import {
   P,
 } from "@/components/legal-page";
 import { CONTROLLER, PRIVACY_POLICY } from "@/domain/legal";
+import { pageSeo } from "@/lib/seo";
 
 export const Route = createFileRoute("/privacidade")({
-  head: () => ({
-    meta: [
-      { title: "Política de Privacidade — Imobiliary Docs" },
-      {
-        name: "description",
-        content:
-          "Como o Imobiliary Docs trata dados pessoais: o que guardamos, por " +
-          "quanto tempo, com quem compartilhamos e como exercer seus direitos.",
-      },
-    ],
-  }),
+  head: () =>
+    pageSeo({
+      title: "Política de Privacidade — Imobiliary Docs",
+      description:
+        "Como o Imobiliary Docs trata dados pessoais: o que guardamos, por " +
+        "quanto tempo, com quem compartilhamos e como exercer seus direitos.",
+      path: "/privacidade",
+    }),
   component: PrivacyPolicyPage,
 });
 

@@ -3,6 +3,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Brand } from "@/components/brand";
 import { LegalFooter } from "@/components/legal-page";
 import { currentUser } from "@/server/auth";
+import { CONTROLLER, unfilledLegalFields } from "@/domain/legal";
+import { absoluteUrl, pageSeo } from "@/lib/seo";
 
 export const Route = createFileRoute("/")({
   /**
@@ -20,18 +22,58 @@ export const Route = createFileRoute("/")({
    */
   loader: () => currentUser(),
   head: () => ({
-    meta: [
-      { title: "Imobiliary Docs — contratos a partir dos seus modelos" },
+    ...pageSeo({
+      title: "Imobiliary Docs — contratos a partir dos seus modelos",
+      description:
+        "Envie um modelo do Word com campos marcados. A plataforma descobre " +
+        "os campos sozinha e gera o documento preenchido, pronto para baixar.",
+      path: "/",
+    }),
+    // Structured data, so a result can carry more than a blue link.
+    scripts: [
       {
-        name: "description",
-        content:
-          "Envie um modelo do Word com campos marcados. A plataforma descobre " +
-          "os campos sozinha e gera o documento preenchido, pronto para baixar.",
+        type: "application/ld+json",
+        children: JSON.stringify(softwareApplication()),
       },
     ],
   }),
   component: LandingPage,
 });
+
+/**
+ * What the product is, in the vocabulary a search engine reads.
+ *
+ * Only claims that are true and checkable. The publisher is included solely
+ * once the controller identity has been filled in — emitting a literal
+ * [RAZÃO SOCIAL] as an organisation name would be worse than saying nothing,
+ * and structured data that contradicts the page is a penalty rather than a
+ * help.
+ */
+function softwareApplication() {
+  const identified = unfilledLegalFields().length === 0;
+
+  return {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: CONTROLLER.tradeName,
+    url: absoluteUrl("/"),
+    applicationCategory: "BusinessApplication",
+    operatingSystem: "Web",
+    inLanguage: "pt-BR",
+    description:
+      "Gera contratos, recibos e distratos a partir de modelos .docx do " +
+      "Word, preenchendo automaticamente os campos marcados.",
+    ...(identified
+      ? {
+          publisher: {
+            "@type": "Organization",
+            name: CONTROLLER.legalName,
+            email: CONTROLLER.privacyEmail,
+          },
+        }
+      : {}),
+  };
+}
 
 function LandingPage() {
   const user = Route.useLoaderData();

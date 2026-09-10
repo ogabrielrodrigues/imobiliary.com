@@ -11,6 +11,7 @@ import { AuthLayout } from "@/components/auth-layout";
 import { FormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
 import { currentUser, login } from "@/server/auth";
+import { pageSeo } from "@/lib/seo";
 
 export const Route = createFileRoute("/entrar")({
   /**
@@ -26,15 +27,16 @@ export const Route = createFileRoute("/entrar")({
       throw redirect({ to: "/templates" });
     }
   },
-  head: () => ({
-    meta: [
-      { title: "Entrar — Imobiliary Docs" },
-      {
-        name: "description",
-        content: "Acesse sua conta para gerar documentos a partir dos seus modelos.",
-      },
-    ],
-  }),
+  head: () =>
+    pageSeo({
+      title: "Entrar — Imobiliary Docs",
+      description:
+        "Acesse sua conta para gerar documentos a partir dos seus modelos.",
+      path: "/entrar",
+      // A sign-in form has nothing to offer someone arriving from a
+      // search, and indexing it competes with the page that does.
+      noindex: true,
+    }),
   component: SignInPage,
 });
 
