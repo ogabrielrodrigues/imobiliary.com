@@ -122,9 +122,13 @@ component base (not Radix), `-t start` the framework template.
   cost a blank screen once.
 - Dependencies it pulled in: `@base-ui/react` (the point of `-b base`),
   `class-variance-authority`, `cn`, `lucide-react`, `tw-animate-css`, and
-  `shadcn` itself for `shadcn/tailwind.css`. `@fontsource-variable/geist` was
-  removed — the design calls for Figtree, loaded from Google Fonts in
-  `__root.tsx`.
+  `shadcn` itself for `shadcn/tailwind.css`.
+- **The fonts are self-hosted**, via `@fontsource-variable/figtree` and
+  `@fontsource-variable/jetbrains-mono`, imported in `src/styles/app.css`. They
+  were on Google Fonts until the LGPD pass: that sent every visitor's address to
+  a third party and was the only external host the browser touched. Putting one
+  back would break `default-src 'self'` in the CSP and reopen the
+  international-transfer section of the privacy policy.
 
 ### Architecture
 
