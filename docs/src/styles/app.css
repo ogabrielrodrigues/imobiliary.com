@@ -2,6 +2,21 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/*
+  The fonts are served from this origin rather than from Google Fonts.
+
+  A remote stylesheet would send every visitor's IP address and user agent to
+  a third party before they had been told anything, which under the LGPD is a
+  transfer to be justified rather than a detail. Serving the files ourselves
+  removes the only external host the browser contacted, which is also what
+  lets the Content-Security-Policy stay at default-src 'self'.
+
+  Variable fonts: one file covers every weight the design uses, so this costs
+  fewer requests than the four static cuts it replaces.
+*/
+@import "@fontsource-variable/figtree";
+@import "@fontsource-variable/jetbrains-mono";
+
 @custom-variant dark (&:is(.dark *));
 
 /*

@@ -27,21 +27,11 @@ export const Route = createRootRoute({
       // colours come from the design system rather than from a re-exported
       // bitmap that would drift from them.
       { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+      // The fonts arrive with this stylesheet, from this origin. Loading them
+      // from Google would hand every visitor's address and user agent to a
+      // third party before the page had told them anything — and it was the
+      // only external host the browser contacted.
       { rel: "stylesheet", href: appCss },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      {
-        rel: "preconnect",
-        href: "https://fonts.gstatic.com",
-        crossOrigin: "anonymous",
-      },
-      {
-        rel: "stylesheet",
-        href:
-          "https://fonts.googleapis.com/css2" +
-          "?family=Figtree:wght@400;500;600;700" +
-          "&family=JetBrains+Mono:wght@400;500" +
-          "&display=swap",
-      },
     ],
   }),
   component: RootComponent,
