@@ -1,13 +1,31 @@
 import { useState } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  redirect,
+  useNavigate,
+} from "@tanstack/react-router";
 
 import { messageFor, summaryOf, type Failure } from "@/application/result";
 import { AuthLayout } from "@/components/auth-layout";
 import { FormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
-import { login } from "@/server/auth";
+import { currentUser, login } from "@/server/auth";
 
 export const Route = createFileRoute("/entrar")({
+  /**
+   * The mirror of the guard on `_app`: someone who already has a session has
+   * no business on a credential screen, and signing in over a live session
+   * would replace it for no reason.
+   *
+   * No loop with that guard — both read the same cookie, so they cannot
+   * disagree about whether a session exists.
+   */
+  beforeLoad: async () => {
+    if ((await currentUser()) !== null) {
+      throw redirect({ to: "/templates" });
+    }
+  },
   head: () => ({
     meta: [
       { title: "Entrar — Imobiliary Docs" },

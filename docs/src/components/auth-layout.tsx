@@ -20,7 +20,8 @@ export function AuthLayout({
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center gap-8 px-6 py-16">
       <header className="flex flex-col gap-3">
-        <Brand className="text-[22px]" />
+        {/* Nobody is signed in on these screens, so home is the landing page. */}
+        <Brand to="/" className="text-[22px]" />
         <div className="flex flex-col gap-1.5">
           <h1 className="text-balance text-2xl font-semibold tracking-[-0.015em]">
             {title}

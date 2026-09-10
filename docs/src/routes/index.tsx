@@ -1,6 +1,23 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 
+import { Brand } from "@/components/brand";
+import { currentUser } from "@/server/auth";
+
 export const Route = createFileRoute("/")({
+  /**
+   * Who is looking, so the page can offer the right next step.
+   *
+   * A loader rather than a `beforeLoad`: there is no redirect to decide here,
+   * only a fact to render. `currentUser` reads the session cookie and answers
+   * `null` for a visitor without one — an ordinary answer, never a failure — so
+   * nothing here can throw a signed-out visitor off the landing page.
+   *
+   * The page does become a per-visitor response because of this. A crawler
+   * arrives without a cookie and still gets exactly the HTML it got before, so
+   * search is unaffected; a shared cache in front of this would have to vary on
+   * the session cookie.
+   */
+  loader: () => currentUser(),
   head: () => ({
     meta: [
       { title: "Imobiliary Docs — contratos a partir dos seus modelos" },
@@ -16,6 +33,9 @@ export const Route = createFileRoute("/")({
 });
 
 function LandingPage() {
+  const user = Route.useLoaderData();
+  const signedIn = user !== null;
+
   return (
     <div className="min-h-dvh">
       <header className="border-b border-border">
@@ -23,12 +43,16 @@ function LandingPage() {
           aria-label="Principal"
           className="mx-auto flex max-w-5xl items-center gap-6 px-6 py-4"
         >
-          <Brand />
+          <Brand to="/" className="text-[18px]" />
+          {/*
+            Someone already signed in has no use for a sign-in link, and
+            offering one invites them to authenticate over their own session.
+          */}
           <Link
-            to="/entrar"
+            to={signedIn ? "/templates" : "/entrar"}
             className="ml-auto rounded-md px-3 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
           >
-            Entrar
+            {signedIn ? "Ir para meus modelos" : "Entrar"}
           </Link>
         </nav>
       </header>
@@ -53,11 +77,16 @@ function LandingPage() {
             formulário e devolve o documento pronto — com a formatação do Word
             intacta.
           </p>
+          {/*
+            The pitch above stays as it is: it describes the product, which
+            reads correctly whether or not the visitor already has an account.
+            Only the call to action has to know.
+          */}
           <Link
-            to="/criar-conta"
+            to={signedIn ? "/templates" : "/criar-conta"}
             className="rounded-md bg-primary px-4 py-[9px] text-[13.5px] font-semibold text-primary-foreground"
           >
-            Criar conta
+            {signedIn ? "Abrir meus modelos" : "Criar conta"}
           </Link>
         </section>
       </main>
@@ -68,17 +97,5 @@ function LandingPage() {
         </div>
       </footer>
     </div>
-  );
-}
-
-/**
- * The wordmark is always lowercase, and "docs" always carries the subapplication
- * colour — it never appears on its own.
- */
-function Brand() {
-  return (
-    <span className="text-[18px] font-semibold tracking-[-0.02em]">
-      imobiliary <span className="text-docs">docs</span>
-    </span>
   );
 }

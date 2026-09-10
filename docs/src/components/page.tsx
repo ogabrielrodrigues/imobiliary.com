@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Link } from "@tanstack/react-router";
 
 import { summaryOf, type Failure } from "@/application/result";
 
@@ -45,9 +46,22 @@ export function LoadFailure({ failure }: { readonly failure: Failure }) {
   return (
     <div
       role="alert"
-      className="rounded-lg border border-border bg-card px-5 py-6 text-sm text-muted-foreground"
+      className="flex flex-col items-start gap-3 rounded-lg border border-border bg-card px-5 py-6 text-sm text-muted-foreground"
     >
       {summaryOf(failure) ?? "Não foi possível carregar."}
+      {/*
+        A session that expired mid-visit is the one failure the user can act on,
+        and without a way out this card is a dead end: the cookie is cleared by
+        the time it renders, so nothing on screen leads back to signing in.
+      */}
+      {failure.kind === "authentication" && (
+        <Link
+          to="/entrar"
+          className="rounded-md text-[13px] font-semibold text-primary hover:underline"
+        >
+          Entrar novamente
+        </Link>
+      )}
     </div>
   );
 }

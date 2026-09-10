@@ -76,7 +76,8 @@ function Sidebar({ user }: { readonly user: User }) {
     // mt-auto still behaves — an auto margin absorbs free space when there is
     // any and collapses to nothing when the content overflows.
     <aside className="flex w-52 shrink-0 flex-col gap-6 overflow-y-auto border-r border-border bg-raised px-3.5 py-5">
-      <Brand className="px-2 text-base" />
+      {/* Inside the app, home is the model list, not the landing page. */}
+      <Brand to="/templates" className="px-2 text-base" />
 
       <nav aria-label="Seções" className="flex flex-col gap-0.5">
         {NAV.map((item) => {

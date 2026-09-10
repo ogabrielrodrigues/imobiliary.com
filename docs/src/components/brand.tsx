@@ -1,38 +1,47 @@
+import { Link } from "@tanstack/react-router";
 import { cn } from "cn";
+
+/** Where the wordmark leads. A route the router knows, never a bare string. */
+type BrandDestination = "/" | "/templates";
 
 /**
  * The wordmark.
  *
  * Always lowercase. "imobiliary" inherits the surrounding text colour, and
  * "docs" always carries the subapplication colour — it never appears alone.
+ *
+ * Give it `to` and it becomes the way back to wherever "home" is for the
+ * surface it sits on: the model list inside the app, the landing page outside
+ * it. A `Link` rather than an anchor, so navigation stays client-side and the
+ * router checks the destination at compile time.
  */
 export function Brand({
-  variant = "horizontal",
+  to,
   className,
 }: {
-  /** `stacked` is for the narrow sidebar; `horizontal` everywhere else. */
-  readonly variant?: "horizontal" | "stacked";
+  /** Omit to render plain text, for the places the mark is decoration only. */
+  readonly to?: BrandDestination;
   readonly className?: string;
 }) {
-  if (variant === "stacked") {
-    return (
-      <span
-        className={cn(
-          "flex flex-col text-[20px] leading-[1.05] font-semibold tracking-[-0.02em]",
-          className,
-        )}
-      >
-        <span>imobiliary</span>
-        <span className="tracking-[0.02em] text-docs">docs</span>
-      </span>
-    );
+  const wordmark = (
+    <>
+      imobiliary <span className="text-docs">docs</span>
+    </>
+  );
+
+  const classes = cn("font-semibold tracking-[-0.02em]", className);
+
+  if (to === undefined) {
+    return <span className={classes}>{wordmark}</span>;
   }
 
   return (
-    <span
-      className={cn("font-semibold tracking-[-0.02em]", className)}
+    <Link
+      to={to}
+      aria-label="Imobiliary Docs — início"
+      className={cn(classes, "rounded-md transition-opacity hover:opacity-80")}
     >
-      imobiliary <span className="text-docs">docs</span>
-    </span>
+      {wordmark}
+    </Link>
   );
 }
