@@ -36,6 +36,7 @@ type Options struct {
 	Identity  *usecase.Identity
 	Templates *usecase.Templates
 	Documents *usecase.Documents
+	Privacy   *usecase.Privacy
 	Limiters  Limiters
 	Logger    *slog.Logger
 	// Health reports whether dependencies are reachable.
@@ -51,6 +52,7 @@ type Server struct {
 	identity  *usecase.Identity
 	templates *usecase.Templates
 	documents *usecase.Documents
+	privacy   *usecase.Privacy
 	limiters  Limiters
 	logger    *slog.Logger
 	health    func(context.Context) error
@@ -66,6 +68,7 @@ func NewServer(opts Options) *Server {
 		identity:          opts.Identity,
 		templates:         opts.Templates,
 		documents:         opts.Documents,
+		privacy:           opts.Privacy,
 		limiters:          opts.Limiters,
 		logger:            opts.Logger,
 		health:            opts.Health,
@@ -111,6 +114,11 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /v1/auth/logout", credentials(s.handleLogout))
 
 	mux.Handle("GET /v1/me", read(s.handleMe))
+	// The data-subject rights of article 18. Erasure is a mutation and is
+	// charged to the write budget; the export is a read, but an expensive one,
+	// so it is charged too.
+	mux.Handle("GET /v1/me/export", write(s.handleExportAccount, s.maxRequestBytes))
+	mux.Handle("DELETE /v1/me", write(s.handleDeleteAccount, s.maxRequestBytes))
 
 	uploadLimit := s.maxUploadBytes + uploadOverhead
 	mux.Handle("POST /v1/templates", write(s.handleCreateTemplate, uploadLimit))
@@ -127,6 +135,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /v1/documents", read(s.handleListDocuments))
 	mux.Handle("GET /v1/documents/{id}", read(s.handleGetDocument))
 	mux.Handle("GET /v1/documents/{id}/download", read(s.handleDownloadDocument))
+	mux.Handle("DELETE /v1/documents/{id}", write(s.handleDeleteDocument, s.maxRequestBytes))
 
 	// Outermost first: a panic anywhere below is caught, every request is
 	// logged, and the global per-IP limit is charged before any work is done.

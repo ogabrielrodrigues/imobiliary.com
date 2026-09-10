@@ -148,6 +148,27 @@ func (s *Documents) Open(ctx context.Context, ownerID, id uuid.UUID) (*domain.Do
 	return doc, content, nil
 }
 
+// Delete erases one generated document, and the stored file with it when no
+// other row refers to those bytes.
+//
+// A real delete, not a flag: the values a user typed live in this row, and a
+// document they asked to remove has to actually go.
+func (s *Documents) Delete(ctx context.Context, ownerID, id uuid.UUID) error {
+	orphaned, err := s.documents.Delete(ctx, ownerID, id)
+	if err != nil {
+		return err
+	}
+	// Empty means deduplication left the bytes as the body of another
+	// document, possibly one belonging to a different account.
+	if orphaned == "" {
+		return nil
+	}
+	if err := s.blobs.Delete(orphaned); err != nil {
+		return fmt.Errorf("delete document body: %w", err)
+	}
+	return nil
+}
+
 // resolveVersion picks the template version a request refers to.
 func (s *Documents) resolveVersion(ctx context.Context, req GenerateRequest) (*domain.TemplateVersion, error) {
 	if req.Version == nil {

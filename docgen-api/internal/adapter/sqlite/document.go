@@ -121,3 +121,43 @@ func scanDocumentRow(row rowScanner) (*domain.Document, error) {
 	}
 	return &d, nil
 }
+
+// Delete removes one generated document, reporting its blob hash when no other
+// row refers to it any more.
+//
+// An empty hash means the file must stay: deduplication can leave it as the
+// body of another document, possibly one belonging to a different account.
+func (r *DocumentRepository) Delete(ctx context.Context, ownerID, id uuid.UUID) (string, error) {
+	const read = `SELECT blob_hash FROM documents WHERE id = ? AND owner_id = ?`
+	const remove = `DELETE FROM documents WHERE id = ? AND owner_id = ?`
+
+	var orphaned string
+
+	err := r.db.withTx(ctx, func(tx *sql.Tx) error {
+		var hash string
+		err := tx.QueryRowContext(ctx, read, idOf(id), idOf(ownerID)).Scan(&hash)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("document: %w", domain.ErrNotFound)
+		}
+		if err != nil {
+			return fmt.Errorf("sqlite: read document: %w", err)
+		}
+
+		if _, err := tx.ExecContext(ctx, remove, idOf(id), idOf(ownerID)); err != nil {
+			return fmt.Errorf("sqlite: delete document: %w", err)
+		}
+
+		unreferenced, err := unreferencedHashes(ctx, tx, []string{hash})
+		if err != nil {
+			return err
+		}
+		if len(unreferenced) == 1 {
+			orphaned = unreferenced[0]
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return orphaned, nil
+}

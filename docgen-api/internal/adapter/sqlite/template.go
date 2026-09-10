@@ -23,8 +23,13 @@ func NewTemplateRepository(db *DB) *TemplateRepository {
 }
 
 const (
-	templateColumns = "id, owner_id, name, description, latest_version, created_at, updated_at"
-	versionColumns  = "id, template_id, version, blob_hash, size, placeholders, created_at"
+	// templateColumns is the read projection. It carries deleted_at because one
+	// caller — the export — needs to know what a soft delete hid; every other
+	// read filters those rows out and sees nil.
+	templateColumns = "id, owner_id, name, description, latest_version, created_at, updated_at, deleted_at"
+	// insertTemplateColumns omits deleted_at, which a new row never sets.
+	insertTemplateColumns = "id, owner_id, name, description, latest_version, created_at, updated_at"
+	versionColumns        = "id, template_id, version, blob_hash, size, placeholders, created_at"
 )
 
 // Create stores a new template together with its first version.
@@ -32,7 +37,7 @@ const (
 // Both rows are written in one transaction: a template whose latest_version
 // pointed at a version that was never inserted would be unusable.
 func (r *TemplateRepository) Create(ctx context.Context, t *domain.Template, v *domain.TemplateVersion) error {
-	const insertTemplate = `INSERT INTO templates (` + templateColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?)`
+	const insertTemplate = `INSERT INTO templates (` + insertTemplateColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?)`
 
 	placeholders, err := json.Marshal(v.Placeholders)
 	if err != nil {
@@ -217,9 +222,10 @@ func scanTemplateRow(row rowScanner) (*domain.Template, error) {
 		t                    domain.Template
 		rawID, rawOwnerID    []byte
 		createdAt, updatedAt string
+		deletedAt            *string
 	)
 
-	err := row.Scan(&rawID, &rawOwnerID, &t.Name, &t.Description, &t.LatestVersion, &createdAt, &updatedAt)
+	err := row.Scan(&rawID, &rawOwnerID, &t.Name, &t.Description, &t.LatestVersion, &createdAt, &updatedAt, &deletedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("template: %w", domain.ErrNotFound)
 	}
@@ -238,6 +244,13 @@ func scanTemplateRow(row rowScanner) (*domain.Template, error) {
 	}
 	if t.UpdatedAt, err = parseTime(updatedAt); err != nil {
 		return nil, fmt.Errorf("sqlite: parse template updated_at: %w", err)
+	}
+	if deletedAt != nil {
+		at, err := parseTime(*deletedAt)
+		if err != nil {
+			return nil, fmt.Errorf("sqlite: parse template deleted_at: %w", err)
+		}
+		t.DeletedAt = &at
 	}
 	return &t, nil
 }
@@ -270,4 +283,63 @@ func scanVersion(row rowScanner) (*domain.TemplateVersion, error) {
 		return nil, fmt.Errorf("sqlite: parse template version created_at: %w", err)
 	}
 	return &v, nil
+}
+
+// AllForOwner returns every template an account holds, including those hidden
+// by a soft delete.
+//
+// The soft-deleted ones matter here and nowhere else: an access request under
+// article 18 asks what is still held, and a template that merely stopped being
+// listed is still held. Every other read deliberately hides them.
+func (r *TemplateRepository) AllForOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.Template, error) {
+	const query = `SELECT ` + templateColumns + ` FROM templates
+		WHERE owner_id = ? ORDER BY id DESC`
+
+	rows, err := r.db.read.QueryContext(ctx, query, idOf(ownerID))
+	if err != nil {
+		return nil, fmt.Errorf("sqlite: list all templates: %w", err)
+	}
+	defer rows.Close()
+
+	var out []domain.Template
+	for rows.Next() {
+		t, err := scanTemplateRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("sqlite: list all templates: %w", err)
+	}
+	return out, nil
+}
+
+// VersionsOf returns every version of a template, ignoring the soft delete, for
+// the same reason AllForOwner does.
+func (r *TemplateRepository) VersionsOf(ctx context.Context, ownerID, templateID uuid.UUID) ([]domain.TemplateVersion, error) {
+	const query = `SELECT v.id, v.template_id, v.version, v.blob_hash, v.size, v.placeholders, v.created_at
+		FROM template_versions v
+		JOIN templates t ON t.id = v.template_id
+		WHERE v.template_id = ? AND t.owner_id = ?
+		ORDER BY v.version DESC`
+
+	rows, err := r.db.read.QueryContext(ctx, query, idOf(templateID), idOf(ownerID))
+	if err != nil {
+		return nil, fmt.Errorf("sqlite: list all template versions: %w", err)
+	}
+	defer rows.Close()
+
+	var out []domain.TemplateVersion
+	for rows.Next() {
+		v, err := scanVersion(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *v)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("sqlite: list all template versions: %w", err)
+	}
+	return out, nil
 }

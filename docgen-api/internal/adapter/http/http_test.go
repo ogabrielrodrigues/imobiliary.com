@@ -7,10 +7,12 @@ import (
 	"bytes"
 	json "encoding/json/v2"
 	"io"
+	"io/fs"
 	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -35,11 +37,43 @@ var jwtSecret = []byte("an-integration-test-secret-of-32b!!!")
 type testServer struct {
 	*httptest.Server
 	t *testing.T
+	// blobDir lets a test confirm that erasure reached the filesystem, which
+	// is the half of it a database assertion cannot see.
+	blobDir string
+}
+
+// storedBlobs counts the files under the blob directory.
+func (s *testServer) storedBlobs() int {
+	s.t.Helper()
+
+	count := 0
+	err := filepath.WalkDir(s.blobDir, func(_ string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !entry.IsDir() {
+			count++
+		}
+		return nil
+	})
+	if err != nil {
+		s.t.Fatalf("walk blob directory: %v", err)
+	}
+	return count
 }
 
 type serverOptions struct {
 	globalRate, authRate, writeRate    float64
 	globalBurst, authBurst, writeBurst int
+}
+
+// testLogger stays silent unless DOCGEN_TEST_LOG is set, which is how a
+// failing handler can be made to explain itself.
+func testLogger() *slog.Logger {
+	if os.Getenv("DOCGEN_TEST_LOG") != "" {
+		return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	}
+	return slog.New(slog.DiscardHandler)
 }
 
 func defaultServerOptions() serverOptions {
@@ -89,6 +123,14 @@ func newTestServer(t *testing.T, opts serverOptions) *testServer {
 		Cache:     cache,
 	})
 
+	privacy := usecase.NewPrivacy(usecase.PrivacyConfig{
+		Users:     sqlite.NewUserRepository(db),
+		Templates: templatesRepo,
+		Documents: sqlite.NewDocumentRepository(db),
+		Blobs:     blobs,
+		Logger:    testLogger(),
+	})
+
 	limiters := adapterhttp.Limiters{
 		Global: ratelimit.New(opts.globalRate, opts.globalBurst),
 		Auth:   ratelimit.New(opts.authRate, opts.authBurst),
@@ -104,8 +146,9 @@ func newTestServer(t *testing.T, opts serverOptions) *testServer {
 		Identity:        identity,
 		Templates:       templates,
 		Documents:       documents,
+		Privacy:         privacy,
 		Limiters:        limiters,
-		Logger:          slog.New(slog.DiscardHandler),
+		Logger:          testLogger(),
 		Health:          db.Ping,
 		MaxRequestBytes: 1 << 20,
 		MaxUploadBytes:  10 << 20,
@@ -114,7 +157,7 @@ func newTestServer(t *testing.T, opts serverOptions) *testServer {
 	httpServer := httptest.NewServer(server.Handler())
 	t.Cleanup(httpServer.Close)
 
-	return &testServer{Server: httpServer, t: t}
+	return &testServer{Server: httpServer, t: t, blobDir: filepath.Join(dir, "blobs")}
 }
 
 // do sends a request and returns the response.
@@ -979,4 +1022,165 @@ func TestDownloadTemplateVersionRejectsBadRequests(t *testing.T) {
 	t.Run("without credentials", func(t *testing.T) {
 		expectStatus(t, server.downloadTemplateVersion(created.ID, 1, ""), http.StatusUnauthorized)
 	})
+}
+
+// TestExportCarriesEverythingHeld covers the access and portability rights:
+// what comes back has to be the whole of it, including what a soft delete
+// merely hid.
+func TestExportCarriesEverythingHeld(t *testing.T) {
+	server := newTestServer(t, defaultServerOptions())
+	session := server.registerAndLogin("export@example.com")
+
+	var kept templateBody
+	decode(t, server.uploadTemplate("/v1/templates", session.AccessToken, "Mantido",
+		buildDOCX(t, "Locatario {{.locatario_cpf}}")), http.StatusCreated, &kept)
+
+	var hidden templateBody
+	decode(t, server.uploadTemplate("/v1/templates", session.AccessToken, "Escondido",
+		buildDOCX(t, "Outro {{.valor}}")), http.StatusCreated, &hidden)
+
+	expectStatus(t, server.postJSON("/v1/documents", session.AccessToken, map[string]any{
+		"template_id": kept.ID,
+		"data":        map[string]string{"locatario_cpf": "123.456.789-00"},
+	}), http.StatusCreated)
+
+	// "Deleting" a template only hides it, so the export must still list it.
+	expectStatus(t, server.delete("/v1/templates/"+hidden.ID, session.AccessToken), http.StatusNoContent)
+
+	resp := server.get("/v1/me/export", session.AccessToken)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("export answered %d, want 200", resp.StatusCode)
+	}
+	if disposition := resp.Header.Get("Content-Disposition"); !strings.Contains(disposition, "attachment") {
+		t.Errorf("Content-Disposition = %q, want an attachment", disposition)
+	}
+	if cache := resp.Header.Get("Cache-Control"); cache != "no-store" {
+		t.Errorf("Cache-Control = %q, want no-store", cache)
+	}
+
+	var export struct {
+		Account struct {
+			Email string `json:"email"`
+		} `json:"account"`
+		Templates []struct {
+			Name    string `json:"name"`
+			Deleted bool   `json:"deleted"`
+		} `json:"templates"`
+		Documents []struct {
+			Data map[string]string `json:"data"`
+		} `json:"documents"`
+	}
+	decode(t, resp, http.StatusOK, &export)
+
+	if export.Account.Email != "export@example.com" {
+		t.Errorf("export names account %q", export.Account.Email)
+	}
+
+	// The value the user typed is the substance of the export.
+	if len(export.Documents) != 1 || export.Documents[0].Data["locatario_cpf"] != "123.456.789-00" {
+		t.Errorf("export documents = %+v, want the filled value", export.Documents)
+	}
+
+	byName := map[string]bool{}
+	for _, tmpl := range export.Templates {
+		byName[tmpl.Name] = tmpl.Deleted
+	}
+	if len(export.Templates) != 2 {
+		t.Fatalf("export listed %d templates, want both", len(export.Templates))
+	}
+	if byName["Mantido"] {
+		t.Error("a live template is reported as deleted")
+	}
+	if !byName["Escondido"] {
+		t.Error("a soft-deleted template is missing or unmarked; the export must say what is still held")
+	}
+}
+
+// TestDeleteAccountErasesRowsAndFiles is the assertion the whole erasure right
+// rests on: the database rows go, and so do the stored files — except one whose
+// bytes another account still needs.
+func TestDeleteAccountErasesRowsAndFiles(t *testing.T) {
+	server := newTestServer(t, defaultServerOptions())
+	leaving := server.registerAndLogin("leaving@example.com")
+	staying := server.registerAndLogin("staying@example.com")
+
+	// Byte-identical uploads, so the content-addressed store keeps one file
+	// that both accounts depend on.
+	shared := buildDOCX(t, "Compartilhado {{.nome}}")
+
+	var mine templateBody
+	decode(t, server.uploadTemplate("/v1/templates", leaving.AccessToken, "Meu",
+		shared), http.StatusCreated, &mine)
+	var theirs templateBody
+	decode(t, server.uploadTemplate("/v1/templates", staying.AccessToken, "Deles",
+		shared), http.StatusCreated, &theirs)
+
+	// And one template only the leaving account has.
+	var only templateBody
+	decode(t, server.uploadTemplate("/v1/templates", leaving.AccessToken, "Só meu",
+		buildDOCX(t, "Exclusivo {{.cpf}}")), http.StatusCreated, &only)
+
+	var document documentBody
+	decode(t, server.postJSON("/v1/documents", leaving.AccessToken, map[string]any{
+		"template_id": only.ID,
+		"data":        map[string]string{"cpf": "123.456.789-00"},
+	}), http.StatusCreated, &document)
+
+	// Two template bodies plus one rendered document: the shared upload counts
+	// once, which is the deduplication this test exists to respect.
+	if got := server.storedBlobs(); got != 3 {
+		t.Fatalf("stored %d files before deletion, want 3", got)
+	}
+
+	expectStatus(t, server.delete("/v1/me", leaving.AccessToken), http.StatusNoContent)
+
+	// The account is gone: its token no longer names anybody.
+	expectStatus(t, server.get("/v1/me", leaving.AccessToken), http.StatusUnauthorized)
+	expectStatus(t, server.get("/v1/templates/"+only.ID, leaving.AccessToken), http.StatusUnauthorized)
+
+	// Only the shared upload survives on disk.
+	if got := server.storedBlobs(); got != 1 {
+		t.Errorf("stored %d files after deletion, want only the shared one", got)
+	}
+
+	// And the other account is untouched, body included.
+	var stillThere templateBody
+	decode(t, server.get("/v1/templates/"+theirs.ID, staying.AccessToken), http.StatusOK, &stillThere)
+	if stillThere.Name != "Deles" {
+		t.Errorf("the surviving template reads %q", stillThere.Name)
+	}
+	expectStatus(t, server.get("/v1/templates/"+theirs.ID+"/versions/1/file", staying.AccessToken), http.StatusOK)
+}
+
+// TestDeleteDocumentRemovesTheValuesTyped covers erasure of a single document,
+// which is what a user reaches for when one contract was a mistake.
+func TestDeleteDocumentRemovesTheValuesTyped(t *testing.T) {
+	server := newTestServer(t, defaultServerOptions())
+	session := server.registerAndLogin("one-document@example.com")
+
+	var created templateBody
+	decode(t, server.uploadTemplate("/v1/templates", session.AccessToken, "Contrato",
+		buildDOCX(t, "CPF {{.cpf}}")), http.StatusCreated, &created)
+
+	var document documentBody
+	decode(t, server.postJSON("/v1/documents", session.AccessToken, map[string]any{
+		"template_id": created.ID,
+		"data":        map[string]string{"cpf": "123.456.789-00"},
+	}), http.StatusCreated, &document)
+
+	before := server.storedBlobs()
+
+	expectStatus(t, server.delete("/v1/documents/"+document.ID, session.AccessToken), http.StatusNoContent)
+
+	expectStatus(t, server.get("/v1/documents/"+document.ID, session.AccessToken), http.StatusNotFound)
+	expectStatus(t, server.get(document.DownloadURL, session.AccessToken), http.StatusNotFound)
+	if got := server.storedBlobs(); got != before-1 {
+		t.Errorf("stored %d files after deleting one document, want %d", got, before-1)
+	}
+
+	// Deleting twice is not a way to discover that something was there.
+	expectStatus(t, server.delete("/v1/documents/"+document.ID, session.AccessToken), http.StatusNotFound)
+
+	// The template is untouched — one document went, not the model behind it.
+	expectStatus(t, server.get("/v1/templates/"+created.ID, session.AccessToken), http.StatusOK)
 }

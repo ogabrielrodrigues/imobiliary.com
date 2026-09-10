@@ -225,3 +225,100 @@ func (r *SessionRepository) DeleteExpired(ctx context.Context, before time.Time)
 	}
 	return result.RowsAffected()
 }
+
+// Delete erases an account and everything that belongs to it, reporting the
+// blob hashes that no surviving row refers to any more.
+//
+// The foreign keys cascade from users to refresh_tokens, templates,
+// template_versions and documents, so one statement clears the database side.
+// The stored files are a different matter: content addressing means one file
+// can be the body of rows belonging to several accounts, so the caller may only
+// erase the hashes reported here, and only after this returns.
+//
+// The whole thing runs in one transaction, which is what makes the reference
+// count trustworthy: no row can appear between counting and deleting.
+func (r *UserRepository) Delete(ctx context.Context, id uuid.UUID) ([]string, error) {
+	// Every hash this account's rows point at, before anything is removed.
+	const mine = `SELECT v.blob_hash FROM template_versions v
+			JOIN templates t ON t.id = v.template_id
+			WHERE t.owner_id = ?
+		UNION
+		SELECT d.blob_hash FROM documents d WHERE d.owner_id = ?`
+
+	const removeUser = `DELETE FROM users WHERE id = ?`
+
+	var orphaned []string
+
+	err := r.db.withTx(ctx, func(tx *sql.Tx) error {
+		owner := idOf(id)
+
+		hashes, err := collectHashes(ctx, tx, mine, owner, owner)
+		if err != nil {
+			return err
+		}
+
+		result, err := tx.ExecContext(ctx, removeUser, owner)
+		if err != nil {
+			return fmt.Errorf("sqlite: delete user: %w", err)
+		}
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("sqlite: delete user: %w", err)
+		}
+		if affected == 0 {
+			return fmt.Errorf("user: %w", domain.ErrNotFound)
+		}
+
+		orphaned, err = unreferencedHashes(ctx, tx, hashes)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return orphaned, nil
+}
+
+// collectHashes runs a query returning a single blob_hash column.
+func collectHashes(ctx context.Context, tx *sql.Tx, query string, args ...any) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("sqlite: collect blob hashes: %w", err)
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var hash string
+		if err := rows.Scan(&hash); err != nil {
+			return nil, fmt.Errorf("sqlite: scan blob hash: %w", err)
+		}
+		out = append(out, hash)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("sqlite: collect blob hashes: %w", err)
+	}
+	return out, nil
+}
+
+// unreferencedHashes returns those of the given hashes that no row points at.
+//
+// Asked one hash at a time rather than with an IN clause built from the slice:
+// the list is short, the query is a two-index lookup, and a fixed statement
+// cannot be malformed by an unusual length.
+func unreferencedHashes(ctx context.Context, tx *sql.Tx, hashes []string) ([]string, error) {
+	const referrers = `SELECT
+		EXISTS (SELECT 1 FROM template_versions WHERE blob_hash = ?)
+		OR EXISTS (SELECT 1 FROM documents WHERE blob_hash = ?)`
+
+	var out []string
+	for _, hash := range hashes {
+		var referenced bool
+		if err := tx.QueryRowContext(ctx, referrers, hash, hash).Scan(&referenced); err != nil {
+			return nil, fmt.Errorf("sqlite: count blob references: %w", err)
+		}
+		if !referenced {
+			out = append(out, hash)
+		}
+	}
+	return out, nil
+}

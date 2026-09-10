@@ -24,6 +24,9 @@ type UserRepository interface {
 	Create(ctx context.Context, u *domain.User) error
 	ByEmail(ctx context.Context, email string) (*domain.User, error)
 	ByID(ctx context.Context, id uuid.UUID) (*domain.User, error)
+	// Delete erases the account and everything cascading from it, reporting
+	// the blob hashes no surviving row refers to any more.
+	Delete(ctx context.Context, id uuid.UUID) ([]string, error)
 }
 
 // SessionRepository stores refresh tokens and the links between them.
@@ -48,6 +51,10 @@ type TemplateRepository interface {
 	LatestVersion(ctx context.Context, ownerID, templateID uuid.UUID) (*domain.TemplateVersion, error)
 	Version(ctx context.Context, ownerID, templateID uuid.UUID, version int) (*domain.TemplateVersion, error)
 	Versions(ctx context.Context, ownerID, templateID uuid.UUID, limit, offset int) ([]domain.TemplateVersion, error)
+	// AllForOwner and VersionsOf ignore the soft delete, because an access
+	// request asks what is still held rather than what is still shown.
+	AllForOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.Template, error)
+	VersionsOf(ctx context.Context, ownerID, templateID uuid.UUID) ([]domain.TemplateVersion, error)
 }
 
 // DocumentRepository stores the metadata of generated documents.
@@ -55,6 +62,9 @@ type DocumentRepository interface {
 	Create(ctx context.Context, d *domain.Document) error
 	ByID(ctx context.Context, ownerID, id uuid.UUID) (*domain.Document, error)
 	List(ctx context.Context, ownerID uuid.UUID, limit, offset int) ([]domain.Document, error)
+	// Delete removes one document, reporting its blob hash when nothing else
+	// refers to it. An empty hash means the file must stay.
+	Delete(ctx context.Context, ownerID, id uuid.UUID) (string, error)
 }
 
 // BlobStore keeps the DOCX bytes, addressed by content hash.
@@ -62,6 +72,10 @@ type BlobStore interface {
 	Put(r io.Reader) (hash string, size int64, err error)
 	ReadAll(hash string) ([]byte, error)
 	Open(hash string) (io.ReadSeekCloser, error)
+	// Delete removes a stored object. The caller must have established that
+	// nothing refers to it: content addressing means one file can be the body
+	// of rows belonging to several accounts.
+	Delete(hash string) error
 }
 
 // PasswordHasher hides the choice of key derivation function.

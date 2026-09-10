@@ -96,6 +96,14 @@ func run(logger *slog.Logger) error {
 		Cache:     cache,
 	})
 
+	privacyService := usecase.NewPrivacy(usecase.PrivacyConfig{
+		Users:     users,
+		Templates: templates,
+		Documents: documents,
+		Blobs:     blobs,
+		Logger:    logger,
+	})
+
 	limiters := adapterhttp.Limiters{
 		Global: newLimiter(cfg.RateLimits.GlobalPerIP),
 		Auth:   newLimiter(cfg.RateLimits.AuthPerIP),
@@ -111,6 +119,7 @@ func run(logger *slog.Logger) error {
 		Identity:          identity,
 		Templates:         templateService,
 		Documents:         documentService,
+		Privacy:           privacyService,
 		Limiters:          limiters,
 		Logger:            logger,
 		Health:            db.Ping,

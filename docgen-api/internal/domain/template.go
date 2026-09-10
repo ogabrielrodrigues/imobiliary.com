@@ -32,6 +32,10 @@ type Template struct {
 	LatestVersion int
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
+	// DeletedAt marks a template hidden by a soft delete. Every ordinary read
+	// filters these out, so it is nil there; it is populated only where the
+	// question is what is still held rather than what is still shown.
+	DeletedAt *time.Time
 }
 
 // TemplateVersion is an immutable snapshot of an uploaded DOCX. Publishing a

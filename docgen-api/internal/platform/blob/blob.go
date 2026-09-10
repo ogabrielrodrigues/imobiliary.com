@@ -118,6 +118,25 @@ func (s *Store) ReadAll(hash string) ([]byte, error) {
 	return io.ReadAll(f)
 }
 
+// Delete removes a stored object.
+//
+// Content addressing means one file can be the body of several rows: two
+// accounts that generate byte-identical documents share it. So the caller
+// must establish that nothing refers to the hash any more before calling
+// this - the store itself has no idea who points at what.
+//
+// An object that is already gone is not an error. Erasure is expressed as an
+// end state, and a retry after a partial failure should be able to finish.
+func (s *Store) Delete(hash string) error {
+	if !hashPattern.MatchString(hash) {
+		return ErrInvalidHash
+	}
+	if err := os.Remove(s.pathFor(hash)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("blob: delete %s: %w", hash, err)
+	}
+	return nil
+}
+
 // pathFor shards objects two levels deep by the leading bytes of the hash, so
 // no single directory ends up holding every object.
 func (s *Store) pathFor(hash string) string {

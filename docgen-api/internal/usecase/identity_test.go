@@ -72,6 +72,21 @@ func (f *fakeUsers) ByID(_ context.Context, id uuid.UUID) (*domain.User, error) 
 	return u, nil
 }
 
+// Delete satisfies UserRepository. Identity never calls it — erasure lives in
+// the Privacy use case — so the fake only has to keep its own map honest.
+func (f *fakeUsers) Delete(_ context.Context, id uuid.UUID) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	u, ok := f.byID[id]
+	if !ok {
+		return nil, fmt.Errorf("user: %w", domain.ErrNotFound)
+	}
+	delete(f.byID, id)
+	delete(f.byEmail, u.Email)
+	return nil, nil
+}
+
 type fakeSessions struct {
 	mu     sync.Mutex
 	byID   map[uuid.UUID]*domain.RefreshToken

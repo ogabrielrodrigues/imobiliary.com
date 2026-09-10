@@ -61,6 +61,11 @@ tags:
     description: Uploaded DOCX models and their immutable versions.
   - name: Documents
     description: Rendered documents.
+  - name: Privacy
+    description: |
+      The rights a data subject has over their own data under the LGPD
+      (Lei 13.709/2018): access and portability through the export, erasure
+      through the deletes.
 
 security:
   - bearerAuth: []
@@ -215,6 +220,55 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/User" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+
+    delete:
+      tags: [Privacy]
+      summary: Erase the account
+      description: |
+        Erases the account and everything belonging to it — templates, every
+        version, generated documents with the values that were filled into
+        them, sessions, and the stored files behind all of it.
+
+        Unlike the delete on a template, this one is not a flag. Nothing
+        survives except a stored file whose exact bytes another account also
+        holds, which content addressing makes one file rather than two.
+
+        This is the erasure right of article 18, VI of the LGPD. It cannot be
+        undone and asks for no confirmation beyond the request itself.
+      operationId: deleteAccount
+      responses:
+        "204":
+          description: The account and its data were erased.
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/me/export:
+    get:
+      tags: [Privacy]
+      summary: Export everything held about the account
+      description: |
+        Returns a single JSON document with the account, every template and
+        version, and every generated document including the values that were
+        filled into it.
+
+        Templates hidden by a soft delete are listed, marked `deleted`: the
+        question an access request asks is what is still held, not what is
+        still shown.
+
+        The uploaded and rendered `.docx` files are not inlined. Download them
+        individually; the export says so in its own `notes` field.
+
+        This serves the access and portability rights of article 18, II and V.
+      operationId: exportAccount
+      responses:
+        "200":
+          description: |
+            The export, offered as an attachment and marked `no-store`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccountExport" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 
   /v1/templates:
     get:
@@ -518,6 +572,24 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+
+    delete:
+      tags: [Privacy]
+      summary: Erase one generated document
+      description: |
+        Removes the document, the values that were filled into it, and the
+        rendered file — unless another document holds byte-identical content,
+        in which case the shared file stays.
+
+        A real delete, not a flag. The template it came from is untouched.
+      operationId: deleteDocument
+      responses:
+        "204":
+          description: The document was erased.
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 
   /v1/documents/{id}/download:
     parameters:
@@ -833,6 +905,43 @@ components:
             customer_name: Acme & Sons <Ltd>
             plan: Premium
             amount: "1500.00"
+
+    AccountExport:
+      type: object
+      description: |
+        Everything the service holds about one account, at one instant.
+      properties:
+        exported_at: { type: string, format: date-time }
+        account: { $ref: "#/components/schemas/User" }
+        templates:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              name: { type: string }
+              description: { type: string }
+              deleted:
+                type: boolean
+                description: |
+                  True for a template hidden by a soft delete and still
+                  stored.
+              created_at: { type: string, format: date-time }
+              updated_at: { type: string, format: date-time }
+              versions:
+                type: array
+                items: { $ref: "#/components/schemas/TemplateVersion" }
+            required: [id, name, description, deleted, created_at, updated_at, versions]
+        documents:
+          type: array
+          items: { $ref: "#/components/schemas/Document" }
+        notes:
+          type: object
+          additionalProperties: { type: string }
+          description: |
+            What the export does not contain, stated in the export itself so
+            a reader is not left to assume it is everything.
+      required: [exported_at, account, templates, documents, notes]
 
     Document:
       type: object
