@@ -11,15 +11,28 @@ export function PageHeader({
   readonly actions?: ReactNode;
 }) {
   return (
-    <header className="flex items-center gap-3 border-b border-border px-5 py-3.5">
+    <header className="flex shrink-0 items-center gap-3 border-b border-border px-5 py-3.5">
       <h1 className="text-lg font-semibold">{title}</h1>
       {actions && <div className="ml-auto flex items-center gap-2">{actions}</div>}
     </header>
   );
 }
 
+/**
+ * The scrolling region of a screen. Every route inside the app shell renders a
+ * PageHeader and a PageBody and nothing else, which is what keeps the header
+ * pinned: as siblings in a column flex container, only this one scrolls.
+ *
+ * min-h-0 is what makes that work. A flex-1 item in a column container has a
+ * vertical main axis, so its default min-height of auto refuses to shrink below
+ * its content — it grows past the shell and overflow-y-auto never engages.
+ */
 export function PageBody({ children }: { readonly children: ReactNode }) {
-  return <div className="flex flex-1 flex-col gap-4 p-5">{children}</div>;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
+      {children}
+    </div>
+  );
 }
 
 /**

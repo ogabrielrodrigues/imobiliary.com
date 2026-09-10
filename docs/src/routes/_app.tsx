@@ -44,9 +44,17 @@ function AppShell() {
   const { user } = Route.useRouteContext();
 
   return (
-    <div className="flex min-h-dvh">
+    // The shell is exactly one viewport tall and never scrolls itself; the
+    // page body inside it does. Anything taller — min-h-dvh, say — lets a long
+    // document stretch the row, and the sidebar is stretched with it, which
+    // pushes the account block below the fold.
+    //
+    // svh rather than dvh: dvh re-measures as mobile browser chrome collapses,
+    // which would resize the shell mid-scroll. With the document no longer
+    // scrolling, the chrome never auto-collapses and the two agree anyway.
+    <div className="flex h-svh overflow-hidden">
       <Sidebar user={user} />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <Outlet />
       </div>
     </div>
@@ -63,7 +71,11 @@ function Sidebar({ user }: { readonly user: User }) {
   }
 
   return (
-    <aside className="flex w-52 shrink-0 flex-col gap-6 border-r border-border bg-raised px-3.5 py-5">
+    // Scrolls on its own: with the shell clipped to one viewport, a short
+    // window would otherwise cut off the account block with no way to reach it.
+    // mt-auto still behaves — an auto margin absorbs free space when there is
+    // any and collapses to nothing when the content overflows.
+    <aside className="flex w-52 shrink-0 flex-col gap-6 overflow-y-auto border-r border-border bg-raised px-3.5 py-5">
       <Brand className="px-2 text-base" />
 
       <nav aria-label="Seções" className="flex flex-col gap-0.5">
