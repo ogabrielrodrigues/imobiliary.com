@@ -299,7 +299,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-10 — template lifecycle and navigation done; the editor is what remains
+**Last updated:** 2026-09-10 — LGPD adequacy done; the editor is what remains
 
 ### Done
 
@@ -431,6 +431,28 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       offers a way back to sign-in on an authentication failure, which turns
       that dead end into a step.
 
+14. **LGPD adequacy.** The survey behind it is `docgen-api/PRIVACIDADE.md`, the
+    article 37 record — it lists the gaps as plainly as the measures. Read it
+    before touching anything that stores data.
+    - **Roles:** controller of the account, **processor** of the document
+      contents. A tenant asking about a contract is referred to the broker; the
+      terms carry the article 39 clause that makes that real.
+    - **Erasure is real.** `DELETE /v1/me` fires the cascades — which nothing
+      had ever fired — and removes the stored files, counting references first
+      because content addressing means one file can belong to several accounts.
+      Rows go before files: a crash in between leaks a file rather than breaking
+      a record.
+    - **The export includes soft-deleted templates**, marked as such. An access
+      request asks what is held, not what is shown.
+    - **Deleting a template is still an `UPDATE`.** Never call that erasure in
+      any text; the policy is careful about it and so should you be.
+    - Fonts are served locally. That removed the last external host, and it is
+      what lets the CSP say `default-src 'self'`. Reintroducing a CDN means
+      reopening the international-transfer section of the policy.
+    - The controller identity lives in `docs/src/domain/legal.ts` and is **still
+      placeholders**. Production refuses to boot while any remain; the test
+      suite deliberately does not fail on them.
+
 ### Next step
 
 **The block editor**, the last piece of the original plan. It needs the docx
@@ -493,6 +515,18 @@ start. `DOCGEN_API_URL` defaults to `http://localhost:8080`.
 - `GET /v1/templates/{id}/versions` is paged and the platform asks for 100.
   A template with more versions than that would silently lose the oldest from
   the picker. Nothing shows that it truncated.
+- **The legal texts need a lawyer.** They were written from the code and are
+  accurate about it, but accuracy is not legal sufficiency.
+- **`docgen-api/data/docgen.db` holds real personal data in the clear** — a CPF,
+  and the owner's own name and city, left from testing. Nothing is encrypted at
+  rest. Discard that database before anything is published.
+- **The API terminates no TLS**; it serves plain HTTP. The privacy policy now
+  promises encryption in transit, so a TLS-terminating proxy is a **deployment
+  requirement**, not an option — and the API must be unreachable from outside
+  whenever `DOCGEN_TRUST_PROXY_HEADERS=true`.
+- Deferred deliberately: encryption at rest for `documents.data` and the blobs,
+  automatic retention and purge, a sweeper for blobs orphaned by a crash
+  mid-erasure, and a written incident-response process (art. 48).
 - **`/` now varies per visitor.** It reads the session cookie, so it can no
   longer be served from a shared cache without varying on that cookie. A
   crawler arrives anonymous and still gets the HTML it always got, so search
