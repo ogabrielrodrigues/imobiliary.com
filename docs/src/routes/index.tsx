@@ -38,7 +38,10 @@ function LandingPage() {
   const signedIn = user !== null;
 
   return (
-    <div className="min-h-dvh">
+    // A column so the footer is pushed to the bottom of the viewport. Without
+    // it, a page shorter than the screen leaves the footer stranded mid-page
+    // with a void beneath it, which reads as one enormous footer.
+    <div className="flex min-h-dvh flex-col">
       <header className="border-b border-border">
         <nav
           aria-label="Principal"
@@ -58,7 +61,7 @@ function LandingPage() {
         </nav>
       </header>
 
-      <main className="mx-auto max-w-5xl px-6">
+      <main className="mx-auto w-full max-w-5xl flex-1 px-6">
         <section
           aria-labelledby="hero-title"
           className="flex flex-col items-start gap-6 py-20"

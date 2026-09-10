@@ -20,7 +20,7 @@ export function LegalPage({
   readonly children: ReactNode;
 }) {
   return (
-    <div className="min-h-dvh">
+    <div className="flex min-h-dvh flex-col">
       <header className="border-b border-border">
         <nav
           aria-label="Principal"
@@ -30,7 +30,7 @@ export function LegalPage({
         </nav>
       </header>
 
-      <main className="mx-auto max-w-3xl px-6">
+      <main className="mx-auto w-full max-w-3xl flex-1 px-6">
         <article className="flex flex-col gap-6 py-16">
           <header className="flex flex-col gap-2">
             <h1 className="text-[30px] font-semibold leading-[1.15] tracking-[-0.02em]">
@@ -96,7 +96,9 @@ export function LegalList({ children }: { readonly children: ReactNode }) {
  */
 export function LegalFooter() {
   return (
-    <footer className="border-t border-border">
+    // The extra bottom padding is the room the cookie notice is occupying, if
+    // any. Without it the notice sits squarely on top of these links.
+    <footer className="border-t border-border pb-[var(--cookie-notice-space,0px)]">
       <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-x-5 gap-y-2 px-6 py-6 text-[13px] text-faint">
         <span>Uma subplataforma do Imobiliary.</span>
         <Link to="/privacidade" className="ml-auto hover:text-foreground">

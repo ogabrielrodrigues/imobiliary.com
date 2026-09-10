@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,16 @@ import { Button } from "@/components/ui/button";
  * server. The privacy policy says it is here.
  */
 const STORAGE_KEY = "imobiliary_docs_cookie_notice";
+
+/**
+ * How much room the notice is taking at the foot of the screen.
+ *
+ * Published as a custom property so the surfaces that put something at the very
+ * bottom — the legal footer, the app sidebar — can hold it clear rather than
+ * disappear behind it. A bar that covers the link to the privacy policy is a
+ * poor way to announce a privacy policy.
+ */
+const SPACE_PROPERTY = "--cookie-notice-space";
 
 /**
  * The cookie notice.
@@ -30,6 +40,7 @@ export function CookieNotice() {
   // visitor has dismissed it, so rendering it during SSR would flash the notice
   // at everyone who already said they had read it.
   const [visible, setVisible] = useState(false);
+  const bar = useRef<HTMLElement>(null);
 
   useEffect(() => {
     try {
@@ -44,6 +55,40 @@ export function CookieNotice() {
     }
   }, []);
 
+  // Republish the height whenever it changes — the text wraps to two or three
+  // lines on a narrow screen, and a fixed guess would be wrong on most of them.
+  useEffect(() => {
+    const element = bar.current;
+    const root = document.documentElement;
+
+    if (!visible || element === null) {
+      root.style.removeProperty(SPACE_PROPERTY);
+      return;
+    }
+
+    const publish = () => {
+      root.style.setProperty(
+        SPACE_PROPERTY,
+        `${element.getBoundingClientRect().height}px`,
+      );
+    };
+
+    // Published straight away rather than waiting on the observer's first
+    // callback, which is one frame late at best and, under React's double
+    // invocation in development, can be undone by the cleanup that follows it.
+    publish();
+
+    // The observer then keeps it right: the text wraps to two or three lines on
+    // a narrow screen, and a height measured once would be wrong on most of them.
+    const observer = new ResizeObserver(publish);
+    observer.observe(element);
+
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty(SPACE_PROPERTY);
+    };
+  }, [visible]);
+
   if (!visible) return null;
 
   function dismiss() {
@@ -57,6 +102,7 @@ export function CookieNotice() {
 
   return (
     <aside
+      ref={bar}
       aria-label="Aviso sobre cookies"
       className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-raised/95 backdrop-blur-sm"
     >

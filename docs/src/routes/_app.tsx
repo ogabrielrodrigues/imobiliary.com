@@ -53,7 +53,7 @@ function AppShell() {
     // svh rather than dvh: dvh re-measures as mobile browser chrome collapses,
     // which would resize the shell mid-scroll. With the document no longer
     // scrolling, the chrome never auto-collapses and the two agree anyway.
-    <div className="flex h-svh overflow-hidden">
+    <div className="flex h-svh overflow-hidden pb-[var(--cookie-notice-space,0px)]">
       <Sidebar user={user} />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <Outlet />
