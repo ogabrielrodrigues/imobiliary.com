@@ -55,7 +55,10 @@ export interface LegalDocument {
 
 export const PRIVACY_POLICY: LegalDocument = {
   title: "Política de Privacidade",
-  version: "1.0",
+  // 1.1 names Resend as a processor and declares the international transfer
+  // that sending a password-reset mail entails. The terms did not change, so
+  // their version did not either.
+  version: "1.1",
   effectiveFrom: "2026-09-10",
 };
 

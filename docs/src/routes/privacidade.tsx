@@ -91,7 +91,14 @@ function PrivacyPolicyPage() {
         <P>
           <strong className="text-foreground">Da sua conta:</strong> nome,
           e-mail e senha. A senha nunca é armazenada — guardamos apenas um hash
-          argon2id, do qual o valor original não pode ser recuperado.
+          argon2id, do qual o valor original não pode ser recuperado. Registramos
+          também quando a senha foi alterada pela última vez, para invalidar
+          acessos emitidos antes disso.
+        </P>
+        <P>
+          Seu e-mail é usado para entrar na conta e para as mensagens de
+          segurança: o link de redefinição de senha e o aviso de que a senha foi
+          alterada. Não enviamos comunicação de marketing.
         </P>
         <P>
           <strong className="text-foreground">Dos seus modelos:</strong> o
@@ -179,18 +186,35 @@ function PrivacyPolicyPage() {
 
       <LegalSection title="6. Com quem compartilhamos">
         <P>
-          <strong className="text-foreground">Com ninguém.</strong> Não vendemos,
-          alugamos nem cedemos dados pessoais. Não há integração com serviços de
-          análise, marketing ou monitoramento.
+          Não vendemos, alugamos nem cedemos dados pessoais, e não há integração
+          com serviços de análise, marketing ou monitoramento. Um único terceiro
+          recebe dado seu, e apenas para uma finalidade:
+        </P>
+        <LegalList>
+          <li>
+            <strong className="text-foreground">Resend</strong> (Resend, Inc.,
+            Estados Unidos), que entrega nossos e-mails de segurança — o link de
+            redefinição de senha e o aviso de que a senha foi alterada. Recebe
+            seu endereço de e-mail e seu primeiro nome, apenas quando uma dessas
+            mensagens precisa ser enviada. Atua como <em>operador</em>, sob
+            nossas instruções, e não pode usar esses dados para finalidade
+            própria.
+          </li>
+        </LegalList>
+        <P>
+          Como o Resend fica nos Estados Unidos, esse envio é uma{" "}
+          <strong className="text-foreground">
+            transferência internacional de dados
+          </strong>{" "}
+          (art. 33). Ela é feita sob cláusulas contratuais padrão, na forma da
+          Resolução CD/ANPD n.º 19/2024, e limitada ao mínimo necessário para a
+          mensagem chegar até você.
         </P>
         <P>
-          Seu navegador, ao abrir esta plataforma, não faz requisição a nenhum
-          servidor de terceiro: as fontes tipográficas são servidas por nós
-          mesmos, justamente para que o seu endereço não chegue a ninguém.{" "}
-          <strong className="text-foreground">
-            Não há transferência internacional de dados
-          </strong>{" "}
-          (art. 33).
+          Fora isso, seu navegador não faz requisição a nenhum servidor de
+          terceiro ao abrir esta plataforma: as fontes tipográficas são servidas
+          por nós mesmos, justamente para que o seu endereço não chegue a
+          ninguém.
         </P>
         <P>
           Compartilharemos dados apenas se formos obrigados por lei, ordem
@@ -210,6 +234,13 @@ function PrivacyPolicyPage() {
           <li>
             <strong className="text-foreground">Sessões:</strong> os registros de
             sessão expiram em 30 dias e são apagados automaticamente.
+          </li>
+          <li>
+            <strong className="text-foreground">
+              Links de redefinição de senha:
+            </strong>{" "}
+            30 minutos, ou até serem usados — o que vier primeiro. Guardamos
+            apenas um resumo criptográfico do link, nunca ele próprio.
           </li>
           <li>
             <strong className="text-foreground">Endereço IP:</strong> até dez

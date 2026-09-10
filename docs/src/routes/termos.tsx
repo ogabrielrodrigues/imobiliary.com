@@ -153,7 +153,9 @@ function TermsOfUsePage() {
           </li>
           <li>
             não subcontratar terceiros para tratar esses dados sem informá-lo
-            previamente;
+            previamente. Hoje há um único subcontratado, o Resend, que entrega
+            nossos e-mails de segurança e recebe apenas o seu endereço e o seu
+            primeiro nome — nunca o conteúdo dos seus documentos;
           </li>
           <li>
             eliminar esses dados quando você encerrar a conta ou solicitar sua

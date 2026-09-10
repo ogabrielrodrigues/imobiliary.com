@@ -303,7 +303,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-10 — LGPD adequacy done; the editor is what remains
+**Last updated:** 2026-09-10 — password change and recovery done; the editor is what remains
 
 ### Done
 
@@ -457,6 +457,28 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       placeholders**. Production refuses to boot while any remain; the test
       suite deliberately does not fail on them.
 
+15. **Password change and recovery.** There was no way to do either, so
+    losing a password meant losing the account.
+    - **Changing one ends every other session immediately.** Revoking was
+      not enough on its own: an access token is stateless and `Authenticate`
+      never read the session table, so a revoked session kept working for up
+      to fifteen minutes. Tokens now carry their issue time and are compared
+      against `users.password_changed_at`.
+    - **That comparison is truncated to the second**, because a JWT issue
+      time carries nothing finer. Without the truncation the replacement
+      token rejects itself. The residue is a one-second window, and the
+      integration test crosses a second boundary on purpose — if it ever
+      looks like a flaky sleep, read the comment before deleting it.
+    - The recovery endpoint always answers 202 and logs its own failures,
+      so it cannot become a directory of who has an account here.
+    - **Mail goes through Resend behind a `Mailer` port**, written against
+      the HTTP API rather than the SDK, so the module still has three
+      dependencies. **With no key configured it logs instead of sending** —
+      that is the default, and it is how the reset link reaches the terminal
+      in development.
+    - Resend is now a declared processor and an international transfer in the
+      privacy policy (bumped to 1.1). A DPA with them is an open item.
+
 ### Next step
 
 **The block editor**, the last piece of the original plan. It needs the docx
@@ -519,6 +541,10 @@ start. `DOCGEN_API_URL` defaults to `http://localhost:8080`.
 - `GET /v1/templates/{id}/versions` is paged and the platform asks for 100.
   A template with more versions than that would silently lose the oldest from
   the picker. Nothing shows that it truncated.
+- **No DPA with Resend yet.** They receive an email address and a first name
+  when a security message goes out, which is a declared international
+  transfer. Sign the processing contract, under the ANPD standard clauses,
+  before operating with real data.
 - **The legal texts need a lawyer.** They were written from the code and are
   accurate about it, but accuracy is not legal sufficiency.
 - **`docgen-api/data/docgen.db` holds real personal data in the clear** — a CPF,
