@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -161,6 +162,20 @@ func (s *testServer) get(path, accessToken string) *http.Response {
 	return s.do(req)
 }
 
+// delete sends an authenticated DELETE.
+func (s *testServer) delete(path, accessToken string) *http.Response {
+	s.t.Helper()
+
+	req, err := http.NewRequest(http.MethodDelete, s.URL+path, nil)
+	if err != nil {
+		s.t.Fatalf("build request: %v", err)
+	}
+	if accessToken != "" {
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+	}
+	return s.do(req)
+}
+
 // uploadTemplate posts a multipart template upload.
 func (s *testServer) uploadTemplate(path, accessToken, name string, archive []byte) *http.Response {
 	s.t.Helper()
@@ -239,6 +254,14 @@ type templateBody struct {
 		Version      int      `json:"version"`
 		Placeholders []string `json:"placeholders"`
 	} `json:"version"`
+}
+
+type versionsBody struct {
+	Items []struct {
+		Version      int      `json:"version"`
+		Size         int64    `json:"size"`
+		Placeholders []string `json:"placeholders"`
+	} `json:"items"`
 }
 
 type documentBody struct {
@@ -544,6 +567,16 @@ func TestAccountsAreIsolated(t *testing.T) {
 		expectStatus(t, server.get(document.DownloadURL, stranger.AccessToken), http.StatusNotFound)
 	})
 
+	t.Run("versions are invisible", func(t *testing.T) {
+		// Not an empty list: an unknown template and someone else's template must
+		// be indistinguishable, and must answer as Get does.
+		expectStatus(t, server.get("/v1/templates/"+created.ID+"/versions", stranger.AccessToken), http.StatusNotFound)
+	})
+
+	t.Run("deleting another account's template is refused", func(t *testing.T) {
+		expectStatus(t, server.delete("/v1/templates/"+created.ID, stranger.AccessToken), http.StatusNotFound)
+	})
+
 	t.Run("generating from another account's template is refused", func(t *testing.T) {
 		expectStatus(t, server.postJSON("/v1/documents", stranger.AccessToken, map[string]any{
 			"template_id": created.ID,
@@ -669,6 +702,82 @@ func TestTemplateVersioningOverHTTP(t *testing.T) {
 		"version":     one,
 		"data":        map[string]string{"alpha": "old"},
 	}), http.StatusCreated)
+
+	// Listing is what lets a client offer that choice: the version numbers are
+	// guessable, but the schema behind each one is not.
+	var listed versionsBody
+	decode(t, server.get("/v1/templates/"+v1.ID+"/versions", session.AccessToken), http.StatusOK, &listed)
+
+	if len(listed.Items) != 2 {
+		t.Fatalf("listed %d versions, want 2", len(listed.Items))
+	}
+	if listed.Items[0].Version != 2 || listed.Items[1].Version != 1 {
+		t.Errorf("versions listed %d then %d, want newest first",
+			listed.Items[0].Version, listed.Items[1].Version)
+	}
+	if !slices.Equal(listed.Items[1].Placeholders, []string{"alpha"}) {
+		t.Errorf("version 1 placeholders = %v, want [alpha]", listed.Items[1].Placeholders)
+	}
+	if !slices.Equal(listed.Items[0].Placeholders, []string{"beta"}) {
+		t.Errorf("version 2 placeholders = %v, want [beta]", listed.Items[0].Placeholders)
+	}
+	if listed.Items[0].Size <= 0 {
+		t.Errorf("version 2 reported size %d", listed.Items[0].Size)
+	}
+
+	expectStatus(t, server.get("/v1/templates/not-a-uuid/versions", session.AccessToken), http.StatusBadRequest)
+}
+
+// TestDeleteTemplateKeepsGeneratedDocuments covers the property the soft delete
+// exists for: the template disappears, and the documents already generated from
+// it stay downloadable, contents intact.
+func TestDeleteTemplateKeepsGeneratedDocuments(t *testing.T) {
+	server := newTestServer(t, defaultServerOptions())
+	session := server.registerAndLogin("deleting@example.com")
+
+	var created templateBody
+	decode(t, server.uploadTemplate("/v1/templates", session.AccessToken, "Doomed",
+		buildDOCX(t, "Payable to {{.customer_name}}")), http.StatusCreated, &created)
+
+	var document documentBody
+	decode(t, server.postJSON("/v1/documents", session.AccessToken, map[string]any{
+		"template_id": created.ID,
+		"data":        map[string]string{"customer_name": "Acme"},
+	}), http.StatusCreated, &document)
+
+	expectStatus(t, server.delete("/v1/templates/"+created.ID, session.AccessToken), http.StatusNoContent)
+
+	// The template is gone from every route that reads one.
+	expectStatus(t, server.get("/v1/templates/"+created.ID, session.AccessToken), http.StatusNotFound)
+	expectStatus(t, server.get("/v1/templates/"+created.ID+"/versions", session.AccessToken), http.StatusNotFound)
+	expectStatus(t, server.get("/v1/templates/"+created.ID+"/versions/1/file", session.AccessToken), http.StatusNotFound)
+
+	var listed struct {
+		Items []templateBody `json:"items"`
+	}
+	decode(t, server.get("/v1/templates", session.AccessToken), http.StatusOK, &listed)
+	for _, item := range listed.Items {
+		if item.ID == created.ID {
+			t.Errorf("the deleted template is still listed")
+		}
+	}
+
+	// Deleting twice is not a way to discover that something was there.
+	expectStatus(t, server.delete("/v1/templates/"+created.ID, session.AccessToken), http.StatusNotFound)
+
+	// And the document survives, still carrying the substituted value.
+	resp := server.get(document.DownloadURL, session.AccessToken)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("downloading a document from a deleted template = %d, want 200", resp.StatusCode)
+	}
+	defer resp.Body.Close()
+	archive, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read downloaded document: %v", err)
+	}
+	if text := documentText(t, archive); !strings.Contains(text, "Payable to Acme") {
+		t.Errorf("the surviving document reads %q", text)
+	}
 }
 
 // withExtraPart rebuilds an archive with one additional entry. It stands in for

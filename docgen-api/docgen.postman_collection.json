@@ -379,6 +379,37 @@
           "response": []
         },
         {
+          "name": "List versions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/templates/{{template_id}}/versions?limit=20&offset=0",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "templates",
+                "{{template_id}}",
+                "versions"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "Newest first. Each entry carries the placeholder schema of that version, which is what lets a client offer a choice of version rather than only the latest. limit is capped at 100."
+          },
+          "response": []
+        },
+        {
           "name": "Download template version",
           "request": {
             "method": "GET",

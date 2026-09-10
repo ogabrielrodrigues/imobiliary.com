@@ -280,10 +280,35 @@ func TestTemplateVersioning(t *testing.T) {
 		t.Errorf("version 1 placeholders = %v", old.Placeholders)
 	}
 
+	// Listing reports both versions newest first, which is the order a client
+	// offers them in.
+	all, err := templates.Versions(ctx, user.ID, tmpl.ID, 20, 0)
+	if err != nil {
+		t.Fatalf("Versions: %v", err)
+	}
+	if len(all) != 2 || all[0].Version != 2 || all[1].Version != 1 {
+		t.Fatalf("Versions returned %d entries, want 2 ordered 2 then 1", len(all))
+	}
+	if !slices.Equal(all[1].Placeholders, []string{"customer_name", "amount"}) {
+		t.Errorf("listed version 1 placeholders = %v", all[1].Placeholders)
+	}
+
+	// Paging is wired rather than decorative: the second page holds version 1.
+	page, err := templates.Versions(ctx, user.ID, tmpl.ID, 1, 1)
+	if err != nil {
+		t.Fatalf("Versions(limit 1, offset 1): %v", err)
+	}
+	if len(page) != 1 || page[0].Version != 1 {
+		t.Errorf("second page = %+v, want only version 1", page)
+	}
+
 	// Another account must not see this template at all.
 	stranger := newTestUser(t, ctx, db)
 	if _, err := templates.ByID(ctx, stranger.ID, tmpl.ID); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("a stranger could read the template: %v", err)
+	}
+	if versions, err := templates.Versions(ctx, stranger.ID, tmpl.ID, 20, 0); err != nil || len(versions) != 0 {
+		t.Errorf("a stranger listed %d versions (err %v), want none", len(versions), err)
 	}
 
 	if err := templates.SoftDelete(ctx, user.ID, tmpl.ID, now); err != nil {
@@ -291,6 +316,11 @@ func TestTemplateVersioning(t *testing.T) {
 	}
 	if _, err := templates.ByID(ctx, user.ID, tmpl.ID); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("template is still visible after deletion: %v", err)
+	}
+	// The versions go with it. They still exist for the documents that refer to
+	// them, but they are no longer reachable through the template.
+	if versions, err := templates.Versions(ctx, user.ID, tmpl.ID, 20, 0); err != nil || len(versions) != 0 {
+		t.Errorf("deleted template listed %d versions (err %v), want none", len(versions), err)
 	}
 }
 

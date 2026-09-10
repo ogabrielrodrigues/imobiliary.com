@@ -526,6 +526,7 @@
       <a href="#list-templates"><span class="verb verb-get">GET</span><code>/templates</code></a>
       <a href="#get-template"><span class="verb verb-get">GET</span><code>/templates/{id}</code></a>
       <a href="#add-version"><span class="verb verb-post">POST</span><code>/versions</code></a>
+      <a href="#list-versions"><span class="verb verb-get">GET</span><code>/versions</code></a>
       <a href="#template-file"><span class="verb verb-get">GET</span><code>/versions/{n}/file</code></a>
       <a href="#delete-template"><span class="verb verb-delete">DEL</span><code>/templates/{id}</code></a>
     </div>
@@ -919,6 +920,20 @@ Your plan is {{.plan}} at {{.amount}} per month.</code></pre>
           Publishes a new version from an uploaded <code>file</code> part. The version number
           is allocated by the server, so simultaneous uploads cannot collide. Earlier versions
           remain usable.
+        </p>
+      </div>
+
+      <div class="endpoint" id="list-versions">
+        <div class="sig">
+          <span class="chip chip-get">GET</span>
+          <span class="path">/v1/templates/<em>{id}</em>/versions</span>
+        </div>
+        <p>
+          Returns <code>{"items": […]}</code>, newest first, taking <code>limit</code>
+          (default 20, clamped to 100) and <code>offset</code>. Version numbers are
+          contiguous and could be guessed; the placeholder schema behind each one could
+          not, which is what lets a client offer a choice of version rather than only the
+          latest.
         </p>
       </div>
 

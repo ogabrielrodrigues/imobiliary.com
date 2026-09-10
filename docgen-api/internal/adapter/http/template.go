@@ -44,15 +44,20 @@ func newTemplateResponse(t *domain.Template, v *domain.TemplateVersion) template
 		UpdatedAt:     t.UpdatedAt,
 	}
 	if v != nil {
-		out.Version = &versionResponse{
-			ID:           v.ID.String(),
-			Version:      v.Version,
-			Size:         v.Size,
-			Placeholders: v.Placeholders,
-			CreatedAt:    v.CreatedAt,
-		}
+		version := newVersionResponse(v)
+		out.Version = &version
 	}
 	return out
+}
+
+func newVersionResponse(v *domain.TemplateVersion) versionResponse {
+	return versionResponse{
+		ID:           v.ID.String(),
+		Version:      v.Version,
+		Size:         v.Size,
+		Placeholders: v.Placeholders,
+		CreatedAt:    v.CreatedAt,
+	}
 }
 
 // listResponse is the envelope every listing endpoint returns. Wrapping the
@@ -133,6 +138,32 @@ func (s *Server) handleListTemplates(w http.ResponseWriter, r *http.Request) {
 		items = append(items, newTemplateResponse(&templates[i], nil))
 	}
 	writeJSON(w, s.logger, http.StatusOK, listResponse[templateResponse]{Items: items})
+}
+
+// handleListTemplateVersions lists the versions of one template, newest first.
+//
+// Version numbers are contiguous, so a client could guess them, but not their
+// placeholder schema or size — which is what it needs in order to offer a
+// choice of version rather than only the latest.
+func (s *Server) handleListTemplateVersions(w http.ResponseWriter, r *http.Request) {
+	templateID, ok := pathID(r, "id")
+	if !ok {
+		writeFailure(w, s.logger, http.StatusBadRequest, codeBadRequest, "invalid template identifier")
+		return
+	}
+	limit, offset := pagination(r)
+
+	versions, err := s.templates.ListVersions(r.Context(), userFrom(r.Context()).ID, templateID, limit, offset)
+	if err != nil {
+		writeError(w, s.logger, err)
+		return
+	}
+
+	items := make([]versionResponse, 0, len(versions))
+	for i := range versions {
+		items = append(items, newVersionResponse(&versions[i]))
+	}
+	writeJSON(w, s.logger, http.StatusOK, listResponse[versionResponse]{Items: items})
 }
 
 func (s *Server) handleDeleteTemplate(w http.ResponseWriter, r *http.Request) {

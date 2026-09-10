@@ -47,6 +47,7 @@ type TemplateRepository interface {
 	SoftDelete(ctx context.Context, ownerID, id uuid.UUID, at time.Time) error
 	LatestVersion(ctx context.Context, ownerID, templateID uuid.UUID) (*domain.TemplateVersion, error)
 	Version(ctx context.Context, ownerID, templateID uuid.UUID, version int) (*domain.TemplateVersion, error)
+	Versions(ctx context.Context, ownerID, templateID uuid.UUID, limit, offset int) ([]domain.TemplateVersion, error)
 }
 
 // DocumentRepository stores the metadata of generated documents.

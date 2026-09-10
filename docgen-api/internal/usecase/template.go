@@ -139,6 +139,18 @@ func (s *Templates) Get(ctx context.Context, ownerID, templateID uuid.UUID) (*Te
 	return &TemplateWithVersion{Template: tmpl, Version: version}, nil
 }
 
+// ListVersions returns a page of a template's versions, newest first.
+//
+// The template is fetched first so that an unknown or foreign id answers "not
+// found" rather than an empty list. Without it the endpoint would leak nothing
+// but would still be dishonest, and it would disagree with Get, which does 404.
+func (s *Templates) ListVersions(ctx context.Context, ownerID, templateID uuid.UUID, limit, offset int) ([]domain.TemplateVersion, error) {
+	if _, err := s.repo.ByID(ctx, ownerID, templateID); err != nil {
+		return nil, err
+	}
+	return s.repo.Versions(ctx, ownerID, templateID, limit, offset)
+}
+
 // List returns a page of the caller's templates.
 func (s *Templates) List(ctx context.Context, ownerID uuid.UUID, limit, offset int) ([]domain.Template, error) {
 	return s.repo.List(ctx, ownerID, limit, offset)

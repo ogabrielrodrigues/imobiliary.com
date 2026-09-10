@@ -321,10 +321,39 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 
   /v1/templates/{id}/versions:
     parameters:
       - $ref: "#/components/parameters/TemplateId"
+    get:
+      tags: [Templates]
+      summary: List a template's versions
+      description: |
+        Newest first. Version numbers are contiguous and could be guessed, but
+        the placeholder schema behind each one could not — which is what a
+        client needs in order to offer a choice of version rather than only the
+        latest.
+      operationId: listTemplateVersions
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: A page of versions.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/TemplateVersion" }
+                required: [items]
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
     post:
       tags: [Templates]
       summary: Publish a new version

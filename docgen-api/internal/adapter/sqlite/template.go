@@ -179,6 +179,34 @@ func (r *TemplateRepository) Version(ctx context.Context, ownerID, templateID uu
 	return scanVersion(r.db.read.QueryRowContext(ctx, query, idOf(templateID), idOf(ownerID), version))
 }
 
+// Versions returns a page of a template's versions, newest first.
+func (r *TemplateRepository) Versions(ctx context.Context, ownerID, templateID uuid.UUID, limit, offset int) ([]domain.TemplateVersion, error) {
+	const query = `SELECT v.id, v.template_id, v.version, v.blob_hash, v.size, v.placeholders, v.created_at
+		FROM template_versions v
+		JOIN templates t ON t.id = v.template_id
+		WHERE v.template_id = ? AND t.owner_id = ? AND t.deleted_at IS NULL
+		ORDER BY v.version DESC LIMIT ? OFFSET ?`
+
+	rows, err := r.db.read.QueryContext(ctx, query, idOf(templateID), idOf(ownerID), limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("sqlite: list template versions: %w", err)
+	}
+	defer rows.Close()
+
+	var out []domain.TemplateVersion
+	for rows.Next() {
+		v, err := scanVersion(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *v)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("sqlite: list template versions: %w", err)
+	}
+	return out, nil
+}
+
 // rowScanner is satisfied by both *sql.Row and *sql.Rows.
 type rowScanner interface {
 	Scan(dest ...any) error
@@ -214,7 +242,7 @@ func scanTemplateRow(row rowScanner) (*domain.Template, error) {
 	return &t, nil
 }
 
-func scanVersion(row *sql.Row) (*domain.TemplateVersion, error) {
+func scanVersion(row rowScanner) (*domain.TemplateVersion, error) {
 	var (
 		v                       domain.TemplateVersion
 		rawID, rawTemplateID    []byte

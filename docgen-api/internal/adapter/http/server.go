@@ -117,8 +117,11 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /v1/templates", read(s.handleListTemplates))
 	mux.Handle("GET /v1/templates/{id}", read(s.handleGetTemplate))
 	mux.Handle("POST /v1/templates/{id}/versions", write(s.handleAddTemplateVersion, uploadLimit))
+	mux.Handle("GET /v1/templates/{id}/versions", read(s.handleListTemplateVersions))
 	mux.Handle("GET /v1/templates/{id}/versions/{version}/file", read(s.handleDownloadTemplateVersion))
-	mux.Handle("DELETE /v1/templates/{id}", read(s.handleDeleteTemplate))
+	// Deleting is a mutation, so it is charged to the per-account write budget
+	// like every other one. The body limit is inert on a request without a body.
+	mux.Handle("DELETE /v1/templates/{id}", write(s.handleDeleteTemplate, s.maxRequestBytes))
 
 	mux.Handle("POST /v1/documents", write(s.handleGenerateDocument, s.maxRequestBytes))
 	mux.Handle("GET /v1/documents", read(s.handleListDocuments))
