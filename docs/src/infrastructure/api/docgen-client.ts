@@ -166,6 +166,19 @@ function createTemplateGateway(http: Transport): TemplateGateway {
       );
     },
 
+    async versions(
+      ctx: CallContext,
+      id: string,
+      page?: Page,
+    ): Promise<TemplateVersion[]> {
+      const body = await http.json<{ items: ApiTemplateVersion[] }>(
+        ctx,
+        "GET",
+        `/v1/templates/${encodeSegment(id)}/versions${pageQuery(page)}`,
+      );
+      return body.items.map(toTemplateVersion);
+    },
+
     async create(
       ctx: CallContext,
       input: TemplateUploadInput,

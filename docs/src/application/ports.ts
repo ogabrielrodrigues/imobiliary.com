@@ -9,7 +9,11 @@
  */
 
 import type { GeneratedDocument, GenerateInput } from "../domain/document.ts";
-import type { Template, TemplateUploadInput } from "../domain/template.ts";
+import type {
+  Template,
+  TemplateUploadInput,
+  TemplateVersion,
+} from "../domain/template.ts";
 import type {
   LoginInput,
   RegistrationInput,
@@ -48,6 +52,14 @@ export interface AuthGateway {
 export interface TemplateGateway {
   list(ctx: CallContext, page?: Page): Promise<Template[]>;
   get(ctx: CallContext, id: string): Promise<Template>;
+  /**
+   * Every version of one template, newest first.
+   *
+   * `get` reports only the latest, so this is the only way to learn what an
+   * earlier version's placeholder schema was — which is what a caller needs in
+   * order to offer a choice of version rather than only the newest.
+   */
+  versions(ctx: CallContext, id: string, page?: Page): Promise<TemplateVersion[]>;
   create(ctx: CallContext, input: TemplateUploadInput): Promise<Template>;
   addVersion(ctx: CallContext, id: string, file: File): Promise<Template>;
   remove(ctx: CallContext, id: string): Promise<void>;

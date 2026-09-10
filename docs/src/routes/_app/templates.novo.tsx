@@ -1,5 +1,10 @@
 import { useState } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  useNavigate,
+  useRouter,
+} from "@tanstack/react-router";
 
 import { messageFor, summaryOf, type Failure } from "@/application/result";
 import { Dropzone } from "@/components/dropzone";
@@ -18,6 +23,7 @@ export const Route = createFileRoute("/_app/templates/novo")({
 
 function NewTemplatePage() {
   const navigate = useNavigate();
+  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [pending, setPending] = useState(false);
@@ -87,7 +93,13 @@ function NewTemplatePage() {
             <div className="flex gap-2">
               <Button
                 type="button"
-                onClick={() => navigate({ to: "/templates" })}
+                onClick={async () => {
+                  // The listing was loaded before this upload existed, and
+                  // its loader result is cached, so without invalidating it
+                  // the template just created would be missing from it.
+                  await router.invalidate();
+                  await navigate({ to: "/templates" });
+                }}
               >
                 Ver meus modelos
               </Button>

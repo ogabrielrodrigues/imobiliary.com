@@ -1,9 +1,16 @@
-import { useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState, type FormEvent } from "react";
+import {
+  createFileRoute,
+  Link,
+  useNavigate,
+  useRouter,
+} from "@tanstack/react-router";
 import { cn } from "cn";
+import { Trash2 } from "lucide-react";
 
 import { messageFor, summaryOf, type Failure } from "@/application/result";
 import { DocumentPreview } from "@/components/document-preview";
+import { Dropzone } from "@/components/dropzone";
 import { FormField } from "@/components/form-field";
 import {
   DocxIcon,
@@ -12,19 +19,65 @@ import {
   PageHeader,
   StatusPill,
 } from "@/components/page";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { placeholdersOf, type Block } from "@/domain/block";
 import { countFilled, suggestFilename } from "@/domain/document";
 import type { GeneratedDocument } from "@/domain/document";
 import { groupPlaceholders, placeholderSyntax } from "@/domain/placeholder";
-import { formatBytes, type Template } from "@/domain/template";
+import {
+  formatBytes,
+  validateTemplateFile,
+  type Template,
+  type TemplateVersion,
+} from "@/domain/template";
 import { saveFile } from "@/lib/download";
 import { relativeDate } from "@/lib/format";
 import { downloadDocument, generateDocument } from "@/server/documents";
-import { getTemplateContent } from "@/server/templates";
+import {
+  deleteTemplate,
+  getTemplateContent,
+  publishTemplateVersion,
+} from "@/server/templates";
+
+/** The search parameters this screen understands. */
+interface TemplateSearch {
+  /** Pins a version. Absent means the latest, which keeps the URL canonical. */
+  readonly versao?: number;
+}
 
 export const Route = createFileRoute("/_app/templates/$templateId")({
-  loader: ({ params }) => getTemplateContent({ data: params.templateId }),
+  /**
+   * The chosen version rides in the URL rather than in component state, so it
+   * survives a reload and can be shared or bookmarked.
+   *
+   * Returning an empty object rather than `{ versao: undefined }` matters: the
+   * router serialises whatever comes back, and the second form would append a
+   * bare `?versao=` to every link on the page.
+   */
+  validateSearch: (search: Record<string, unknown>): TemplateSearch => {
+    const raw = Number(search["versao"]);
+    return Number.isInteger(raw) && raw >= 1 ? { versao: raw } : {};
+  },
+  // Without this the router treats a change of search as the same match and
+  // serves the cached data, so the loader would never see the new version.
+  loaderDeps: ({ search }) => ({ versao: search.versao }),
+  loader: ({ params, deps }) =>
+    getTemplateContent({
+      data: {
+        id: params.templateId,
+        ...(deps.versao === undefined ? {} : { version: deps.versao }),
+      },
+    }),
   head: () => ({ meta: [{ title: "Gerar documento — Imobiliary Docs" }] }),
   component: TemplateDetailPage,
 });
@@ -43,11 +96,19 @@ function TemplateDetailPage() {
     );
   }
 
+  const { template, blocks, versions, previewUnavailable } = result.value;
+  const selected = template.version?.version;
+
   return (
     <GenerateScreen
-      template={result.value.template}
-      blocks={result.value.blocks}
-      previewUnavailable={result.value.previewUnavailable}
+      // Switching version re-runs the loader without unmounting this component,
+      // so without a key the values typed against the previous schema would
+      // survive — and the API would then reject fields no longer on screen.
+      key={selected}
+      template={template}
+      blocks={blocks}
+      versions={versions}
+      previewUnavailable={previewUnavailable}
     />
   );
 }
@@ -55,21 +116,28 @@ function TemplateDetailPage() {
 function GenerateScreen({
   template,
   blocks,
+  versions,
   previewUnavailable,
 }: {
   readonly template: Template;
   readonly blocks: readonly Block[];
+  readonly versions: readonly TemplateVersion[];
   readonly previewUnavailable: boolean;
 }) {
+  const navigate = useNavigate();
+
   // The schema the API published is the authority on what must be sent; the
   // preview's own reading only decides where the fields sit on the page.
   const placeholders = template.version?.placeholders ?? placeholdersOf(blocks);
+  const shown = template.version?.version ?? template.latestVersion;
+  const pinned = shown !== template.latestVersion;
 
   const [values, setValues] = useState<Record<string, string>>({});
   const [failure, setFailure] = useState<Failure | null>(null);
   const [pending, setPending] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generated, setGenerated] = useState<GeneratedDocument | null>(null);
+  const [publishing, setPublishing] = useState(false);
 
   const filled = countFilled(placeholders, values);
   const missing = new Set(
@@ -78,6 +146,17 @@ function GenerateScreen({
 
   function setValue(name: string, value: string) {
     setValues((current) => ({ ...current, [name]: value }));
+  }
+
+  function showVersion(version: number) {
+    // Choosing the latest drops the parameter instead of pinning to a number,
+    // so "current" keeps a clean address and only a real pin shows in the URL.
+    void navigate({
+      to: "/templates/$templateId",
+      params: { templateId: template.id },
+      search: version === template.latestVersion ? {} : { versao: version },
+      replace: true,
+    });
   }
 
   async function onGenerate() {
@@ -91,6 +170,10 @@ function GenerateScreen({
           filename: suggestFilename(template.name),
           data: values,
           placeholders,
+          // Sent only when a version is actually pinned. Passing the latest
+          // number unconditionally would fix it to a value that can go stale
+          // between this page loading and the request arriving.
+          ...(pinned ? { version: shown } : {}),
         },
       });
 
@@ -141,6 +224,22 @@ function GenerateScreen({
         title={template.name}
         actions={
           <>
+            <DeleteTemplate template={template} />
+            {versions.length > 1 && (
+              <VersionPicker
+                versions={versions}
+                shown={shown}
+                latest={template.latestVersion}
+                onChange={showVersion}
+              />
+            )}
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setPublishing((open) => !open)}
+            >
+              Nova versão
+            </Button>
             <Link
               to="/templates"
               className="rounded-md px-3 py-2 text-[13px] text-muted-foreground hover:text-foreground"
@@ -157,9 +256,18 @@ function GenerateScreen({
       <PageBody>
         <div className="flex flex-wrap items-center gap-3 text-[13px] text-muted-foreground">
           <DocxIcon size={28} />
-          <span>Versão {template.latestVersion}</span>
+          <span>Versão {shown}</span>
           <Dot />
-          <span>Atualizado {relativeDate(template.updatedAt)}</span>
+          {/*
+            The version's own date, not the template's. They differ as soon as
+            a newer version exists, and "Versão 1 · atualizado agora mesmo"
+            would describe the wrong thing entirely.
+          */}
+          <span>
+            {template.version
+              ? `Publicada ${relativeDate(template.version.createdAt)}`
+              : `Atualizado ${relativeDate(template.updatedAt)}`}
+          </span>
           {template.version && (
             <>
               <Dot />
@@ -169,6 +277,28 @@ function GenerateScreen({
             </>
           )}
         </div>
+
+        {pinned && (
+          <p className="max-w-3xl rounded-md border border-docs/35 bg-docs/10 px-4 py-3 text-[13px] text-docs">
+            Você está vendo a versão {shown}. A atual é a{" "}
+            {template.latestVersion}, e o documento gerado aqui usará a{" "}
+            {shown}.{" "}
+            <button
+              type="button"
+              onClick={() => showVersion(template.latestVersion)}
+              className="underline underline-offset-2 hover:text-foreground"
+            >
+              Ver a versão atual
+            </button>
+          </p>
+        )}
+
+        {publishing && (
+          <PublishVersion
+            template={template}
+            onDone={() => setPublishing(false)}
+          />
+        )}
 
         {summary != null && (
           <p
@@ -228,6 +358,248 @@ function Dot() {
     <span aria-hidden="true" className="text-border-strong">
       ·
     </span>
+  );
+}
+
+/**
+ * The version selector.
+ *
+ * A native select rather than a styled listbox: it is one control, and the
+ * browser's own is already correct with a keyboard and on a phone.
+ */
+function VersionPicker({
+  versions,
+  shown,
+  latest,
+  onChange,
+}: {
+  readonly versions: readonly TemplateVersion[];
+  readonly shown: number;
+  readonly latest: number;
+  readonly onChange: (version: number) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-[13px] text-muted-foreground">
+      <span className="sr-only">Versão do modelo</span>
+      <select
+        value={shown}
+        onChange={(event) => onChange(Number(event.currentTarget.value))}
+        className="h-[34px] rounded-md border border-border-strong bg-input px-2.5 text-[13px] text-foreground outline-none focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring/20"
+      >
+        {versions.map((version) => (
+          <option key={version.id} value={version.version}>
+            v{version.version}
+            {version.version === latest ? " · atual" : ""} —{" "}
+            {relativeDate(version.createdAt)}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/**
+ * The panel that publishes a new version.
+ *
+ * Editing a template means adding a version, never rewriting the one that is
+ * there: the preview reads a document, it does not model everything Word can
+ * hold, so regenerating a .docx from it would quietly drop formatting.
+ */
+function PublishVersion({
+  template,
+  onDone,
+}: {
+  readonly template: Template;
+  readonly onDone: () => void;
+}) {
+  const router = useRouter();
+  const navigate = useNavigate();
+
+  const [file, setFile] = useState<File | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
+  const [pending, setPending] = useState(false);
+
+  function onPick(chosen: File | null) {
+    setFile(chosen);
+    setFailure(null);
+
+    if (chosen) {
+      const problems = validateTemplateFile(chosen);
+      if (problems.length > 0) {
+        setFailure({ kind: "validation", fields: problems });
+      }
+    }
+  }
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!file) {
+      setFailure({
+        kind: "validation",
+        fields: [{ field: "file", message: "Escolha um arquivo .docx." }],
+      });
+      return;
+    }
+
+    const form = new FormData();
+    form.set("templateId", template.id);
+    form.set("file", file, file.name);
+
+    setPending(true);
+    setFailure(null);
+
+    try {
+      const result = await publishTemplateVersion({ data: form });
+      if (!result.ok) {
+        setFailure(result.failure);
+        return;
+      }
+
+      // Clear any pin first, so the screen lands on the version just published,
+      // then invalidate: navigating to a search that is already empty is a
+      // no-op and would not re-run the loader on its own.
+      await navigate({
+        to: "/templates/$templateId",
+        params: { templateId: template.id },
+        search: {},
+        replace: true,
+      });
+      await router.invalidate();
+      onDone();
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <form
+      onSubmit={onSubmit}
+      className="flex max-w-3xl flex-col gap-4 rounded-lg border border-border bg-card px-5 py-4"
+    >
+      <div className="flex flex-col gap-1">
+        <h2 className="text-sm font-semibold">Publicar nova versão</h2>
+        <p className="text-[12.5px] text-faint">
+          Envie um .docx atualizado. Ele vira a versão{" "}
+          {template.latestVersion + 1}; as anteriores continuam disponíveis e os
+          documentos já gerados não mudam.
+        </p>
+      </div>
+
+      <Dropzone
+        file={file}
+        onSelect={onPick}
+        error={messageFor(failure, "file")}
+      />
+
+      {failure && messageFor(failure, "file") === undefined && (
+        <p role="alert" className="text-[12.5px] text-destructive">
+          {summaryOf(failure)}
+        </p>
+      )}
+
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" disabled={pending}>
+          {pending ? "Publicando…" : "Publicar versão"}
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={onDone}>
+          Cancelar
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * Deleting a template, behind a confirmation that says what is actually lost.
+ *
+ * The API removes it softly, so the documents generated from it stay
+ * downloadable — which is the part a person needs to know before deciding.
+ */
+function DeleteTemplate({ template }: { readonly template: Template }) {
+  const router = useRouter();
+  const navigate = useNavigate();
+
+  const [open, setOpen] = useState(false);
+  // The dialog is mounted only once it has been asked for. Base UI renders
+  // its root through a portal, which does not survive hydration here: the
+  // whole route would fail once on load and be rebuilt by the error boundary.
+  // A modal has nothing to show on the server anyway, so there is nothing to
+  // lose. Mounting stays true afterwards so the closing animation still runs.
+  const [mounted, setMounted] = useState(false);
+  const [failure, setFailure] = useState<Failure | null>(null);
+  const [pending, setPending] = useState(false);
+
+  function ask() {
+    setMounted(true);
+    setOpen(true);
+  }
+
+  async function onConfirm() {
+    setPending(true);
+    setFailure(null);
+
+    try {
+      const result = await deleteTemplate({ data: template.id });
+      if (!result.ok) {
+        setFailure(result.failure);
+        return;
+      }
+
+      // Navigate before invalidating: re-running this route's loader while
+      // still on it would fetch a template the API now answers 404 for, and
+      // flash a failure screen on the way out.
+      await navigate({ to: "/templates" });
+      await router.invalidate();
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Excluir modelo"
+        onClick={ask}
+        className="text-muted-foreground hover:text-destructive"
+      >
+        <Trash2 />
+      </Button>
+
+      {mounted && (
+        <AlertDialog open={open} onOpenChange={setOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Excluir “{template.name}”?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Este modelo sai da sua lista e não poderá mais ser usado para
+                gerar documentos. Os documentos já gerados a partir dele
+                continuam disponíveis para download.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+
+            {failure && (
+              <p role="alert" className="text-[12.5px] text-destructive">
+                {summaryOf(failure)}
+              </p>
+            )}
+
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={pending}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                disabled={pending}
+                onClick={onConfirm}
+              >
+                {pending ? "Excluindo…" : "Excluir modelo"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+    </>
   );
 }
 
