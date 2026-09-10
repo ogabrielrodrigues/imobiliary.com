@@ -6,6 +6,7 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 
+import { CookieNotice } from "@/components/cookie-notice";
 import appCss from "@/styles/app.css?url";
 
 export const Route = createRootRoute({
@@ -56,6 +57,8 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
       </head>
       <body>
         {children}
+        {/* Every surface, signed in or not: the cookie is set either way. */}
+        <CookieNotice />
         <Scripts />
       </body>
     </html>

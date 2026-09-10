@@ -13,6 +13,9 @@ type registerRequest struct {
 	Email    string `json:"email"`
 	Name     string `json:"name"`
 	Password string `json:"password"`
+	// TermsVersion is the version of the terms of use the caller accepted.
+	// Required: the record of that acceptance is the point.
+	TermsVersion string `json:"terms_version"`
 }
 
 // loginRequest is the body of POST /v1/auth/login.
@@ -77,7 +80,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.identity.Register(r.Context(), body.Email, body.Name, body.Password)
+	user, err := s.identity.Register(r.Context(), body.Email, body.Name, body.Password, body.TermsVersion)
 	if err != nil {
 		writeError(w, s.logger, err)
 		return

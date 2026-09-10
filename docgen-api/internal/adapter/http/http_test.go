@@ -329,9 +329,10 @@ func (s *testServer) registerAndLogin(email string) sessionBody {
 	s.t.Helper()
 
 	credentials := map[string]string{
-		"email":    email,
-		"name":     "Test Account",
-		"password": "a-sufficiently-long-password",
+		"email":         email,
+		"name":          "Test Account",
+		"password":      "a-sufficiently-long-password",
+		"terms_version": "1.0",
 	}
 	expectStatus(s.t, s.postJSON("/v1/auth/register", "", credentials), http.StatusCreated)
 
@@ -1183,4 +1184,24 @@ func TestDeleteDocumentRemovesTheValuesTyped(t *testing.T) {
 
 	// The template is untouched — one document went, not the model behind it.
 	expectStatus(t, server.get("/v1/templates/"+created.ID, session.AccessToken), http.StatusOK)
+}
+
+// TestRegistrationRecordsTermsAcceptance covers the evidence side of the terms:
+// a checkbox that leaves no trace proves nothing later.
+func TestRegistrationRecordsTermsAcceptance(t *testing.T) {
+	server := newTestServer(t, defaultServerOptions())
+
+	// Without a version there is nothing to record, so the account is refused.
+	expectStatus(t, server.postJSON("/v1/auth/register", "", map[string]string{
+		"email":    "no-terms@example.com",
+		"name":     "Sem Aceite",
+		"password": "a-sufficiently-long-password",
+	}), http.StatusUnprocessableEntity)
+
+	expectStatus(t, server.postJSON("/v1/auth/register", "", map[string]string{
+		"email":         "with-terms@example.com",
+		"name":          "Com Aceite",
+		"password":      "a-sufficiently-long-password",
+		"terms_version": "1.0",
+	}), http.StatusCreated)
 }

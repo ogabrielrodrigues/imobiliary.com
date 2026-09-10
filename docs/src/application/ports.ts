@@ -41,6 +41,10 @@ export interface Page {
 
 export interface AuthGateway {
   register(ctx: CallContext, input: RegistrationInput): Promise<User>;
+  /** Erases the account and everything belonging to it. Article 18, VI. */
+  deleteAccount(ctx: CallContext): Promise<void>;
+  /** Everything held about the account, as a file. Article 18, II and V. */
+  exportAccount(ctx: CallContext): Promise<FileContent>;
   login(ctx: CallContext, input: LoginInput): Promise<Session>;
   /** Consumes the secret and returns a whole new session. */
   refresh(ctx: CallContext, refreshToken: string): Promise<Session>;

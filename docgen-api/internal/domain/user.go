@@ -26,6 +26,11 @@ type User struct {
 	PasswordHash string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
+	// TermsAcceptedAt and TermsVersion record that this account was shown the
+	// terms and agreed to a particular version of them. Nil on accounts that
+	// predate the requirement, which is the truth about them.
+	TermsAcceptedAt *time.Time
+	TermsVersion    string
 }
 
 // NormalizeEmail lowercases and trims an address so that lookups and the

@@ -238,7 +238,7 @@ const (
 func (f *identityFixture) register(t *testing.T, ctx context.Context) *domain.User {
 	t.Helper()
 
-	user, err := f.identity.Register(ctx, testEmail, testName, testPassword)
+	user, err := f.identity.Register(ctx, testEmail, testName, testPassword, "1.0")
 	if err != nil {
 		t.Fatalf("Register: %v", err)
 	}
@@ -249,7 +249,7 @@ func TestRegisterNormalizesEmailAndHashesPassword(t *testing.T) {
 	ctx := t.Context()
 	f := newIdentityFixture(t)
 
-	user, err := f.identity.Register(ctx, "  ADA@Example.COM ", testName, testPassword)
+	user, err := f.identity.Register(ctx, "  ADA@Example.COM ", testName, testPassword, "1.0")
 	if err != nil {
 		t.Fatalf("Register: %v", err)
 	}
@@ -282,7 +282,7 @@ func TestRegisterRejectsInvalidInput(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newIdentityFixture(t)
-			if _, err := f.identity.Register(ctx, tc.email, tc.fullName, tc.pass); !errors.Is(err, domain.ErrValidation) {
+			if _, err := f.identity.Register(ctx, tc.email, tc.fullName, tc.pass, "1.0"); !errors.Is(err, domain.ErrValidation) {
 				t.Errorf("Register = %v, want a validation error", err)
 			}
 		})
@@ -294,7 +294,7 @@ func TestRegisterRejectsDuplicateEmail(t *testing.T) {
 	f := newIdentityFixture(t)
 	f.register(t, ctx)
 
-	if _, err := f.identity.Register(ctx, testEmail, testName, testPassword); !errors.Is(err, domain.ErrAlreadyExists) {
+	if _, err := f.identity.Register(ctx, testEmail, testName, testPassword, "1.0"); !errors.Is(err, domain.ErrAlreadyExists) {
 		t.Errorf("Register with a taken email = %v, want ErrAlreadyExists", err)
 	}
 }

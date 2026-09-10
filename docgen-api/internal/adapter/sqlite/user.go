@@ -21,16 +21,24 @@ func NewUserRepository(db *DB) *UserRepository {
 	return &UserRepository{db: db}
 }
 
-const userColumns = "id, email, name, password_hash, created_at, updated_at"
+const userColumns = "id, email, name, password_hash, created_at, updated_at, " +
+	"terms_accepted_at, terms_version"
 
 // Create inserts a new account, reporting domain.ErrAlreadyExists when the
 // email is taken.
 func (r *UserRepository) Create(ctx context.Context, u *domain.User) error {
-	const query = `INSERT INTO users (` + userColumns + `) VALUES (?, ?, ?, ?, ?, ?)`
+	const query = `INSERT INTO users (` + userColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+
+	var acceptedAt *string
+	if u.TermsAcceptedAt != nil {
+		stamp := formatTime(*u.TermsAcceptedAt)
+		acceptedAt = &stamp
+	}
 
 	_, err := r.db.write.ExecContext(ctx, query,
 		idOf(u.ID), u.Email, u.Name, u.PasswordHash,
 		formatTime(u.CreatedAt), formatTime(u.UpdatedAt),
+		acceptedAt, u.TermsVersion,
 	)
 	if isUniqueViolation(err) {
 		return fmt.Errorf("create user: %w", domain.ErrAlreadyExists)
@@ -58,9 +66,12 @@ func scanUser(row *sql.Row) (*domain.User, error) {
 		u                    domain.User
 		rawID                []byte
 		createdAt, updatedAt string
+		acceptedAt           *string
+		termsVersion         *string
 	)
 
-	err := row.Scan(&rawID, &u.Email, &u.Name, &u.PasswordHash, &createdAt, &updatedAt)
+	err := row.Scan(&rawID, &u.Email, &u.Name, &u.PasswordHash, &createdAt, &updatedAt,
+		&acceptedAt, &termsVersion)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("user: %w", domain.ErrNotFound)
 	}
@@ -76,6 +87,18 @@ func scanUser(row *sql.Row) (*domain.User, error) {
 	}
 	if u.UpdatedAt, err = parseTime(updatedAt); err != nil {
 		return nil, fmt.Errorf("sqlite: parse user updated_at: %w", err)
+	}
+	// Both stay unset on an account that predates the terms requirement, which
+	// is the honest record of one that was never asked.
+	if acceptedAt != nil {
+		at, err := parseTime(*acceptedAt)
+		if err != nil {
+			return nil, fmt.Errorf("sqlite: parse user terms_accepted_at: %w", err)
+		}
+		u.TermsAcceptedAt = &at
+	}
+	if termsVersion != nil {
+		u.TermsVersion = *termsVersion
 	}
 	return &u, nil
 }

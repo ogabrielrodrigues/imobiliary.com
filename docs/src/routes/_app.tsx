@@ -38,6 +38,7 @@ export const Route = createFileRoute("/_app")({
 const NAV = [
   { to: "/templates", label: "Templates" },
   { to: "/documentos", label: "Documentos" },
+  { to: "/meus-dados", label: "Meus dados" },
 ] as const;
 
 function AppShell() {

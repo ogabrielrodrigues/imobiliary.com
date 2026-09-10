@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { Brand } from "@/components/brand";
+import { LegalFooter } from "@/components/legal-page";
 import { currentUser } from "@/server/auth";
 
 export const Route = createFileRoute("/")({
@@ -91,11 +92,7 @@ function LandingPage() {
         </section>
       </main>
 
-      <footer className="border-t border-border">
-        <div className="mx-auto max-w-5xl px-6 py-6 text-[13px] text-faint">
-          Uma subplataforma do Imobiliary.
-        </div>
-      </footer>
+      <LegalFooter />
     </div>
   );
 }

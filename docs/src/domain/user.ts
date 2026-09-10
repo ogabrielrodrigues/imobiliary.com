@@ -50,6 +50,13 @@ export interface RegistrationInput {
   readonly email: string;
   readonly name: string;
   readonly password: string;
+  /**
+   * The version of the terms of use the person accepted.
+   *
+   * Carried explicitly rather than assumed by the server: what was agreed to
+   * is a property of the screen the person actually read.
+   */
+  readonly termsVersion: string;
 }
 
 /**

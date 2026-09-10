@@ -64,10 +64,19 @@ func NewIdentity(cfg IdentityConfig) *Identity {
 }
 
 // Register creates an account.
-func (i *Identity) Register(ctx context.Context, email, name, password string) (*domain.User, error) {
+//
+// termsVersion is the version of the terms the caller says was accepted. It
+// is required: an account created without it would leave no evidence that
+// anyone was ever shown the agreement the service relies on.
+func (i *Identity) Register(ctx context.Context, email, name, password, termsVersion string) (*domain.User, error) {
 	email = domain.NormalizeEmail(email)
 	if err := domain.ValidateRegistration(email, name, password); err != nil {
 		return nil, err
+	}
+	if termsVersion == "" {
+		v := &domain.ValidationError{}
+		v.Add("terms_version", "is required")
+		return nil, v
 	}
 
 	hash, err := i.hasher.Hash(password)
@@ -77,12 +86,14 @@ func (i *Identity) Register(ctx context.Context, email, name, password string) (
 
 	now := i.now().UTC()
 	user := &domain.User{
-		ID:           uuid.NewV7(),
-		Email:        email,
-		Name:         name,
-		PasswordHash: hash,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		ID:              uuid.NewV7(),
+		Email:           email,
+		Name:            name,
+		PasswordHash:    hash,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+		TermsAcceptedAt: &now,
+		TermsVersion:    termsVersion,
 	}
 	if err := i.users.Create(ctx, user); err != nil {
 		return nil, err

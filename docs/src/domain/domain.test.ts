@@ -32,6 +32,7 @@ describe("registration", () => {
     email: "ada@example.com",
     name: "Ada Lovelace",
     password: "uma-senha-bem-longa",
+    termsVersion: "1.0",
   };
 
   it("accepts valid input", () => {
@@ -43,6 +44,7 @@ describe("registration", () => {
       email: "",
       name: "  ",
       password: "",
+      termsVersion: "1.0",
     });
 
     assert.ok(invalid instanceof ValidationError);

@@ -10,7 +10,9 @@
 
 import { createServerFn } from "@tanstack/react-start";
 
+import type { FileContent } from "../application/ports.ts";
 import { attempt, type Result } from "../application/result.ts";
+import { fieldError } from "../domain/errors.ts";
 import type { User } from "../domain/user.ts";
 import {
   validateLogin,
@@ -18,7 +20,11 @@ import {
   type LoginInput,
   type RegistrationInput,
 } from "../domain/user.ts";
+import { createCookieSessionStore } from "../infrastructure/session/cookie-session-store.ts";
 import { assertSameOrigin, callContext, docgen, sessions } from "./runtime.ts";
+
+/** What a person types to confirm they mean it. */
+export const ACCOUNT_DELETION_CONFIRMATION = "EXCLUIR";
 
 /**
  * Creates an account.
@@ -91,3 +97,55 @@ export const currentUser = createServerFn({ method: "GET" }).handler(
     return session?.user ?? null;
   },
 );
+
+/**
+ * Everything held about the account, as a file.
+ *
+ * A GET like the other reads, but it answers with bytes rather than a record:
+ * the export is meant to be kept, and handing it over as a download is what
+ * makes portability something a person can actually act on.
+ */
+export const exportAccount = createServerFn({ method: "GET" }).handler(
+  async (): Promise<Result<FileContent>> =>
+    attempt(() =>
+      sessions().authorize(callContext(), (ctx) =>
+        docgen().auth.exportAccount(ctx),
+      ),
+    ),
+);
+
+/**
+ * Erases the account and everything belonging to it.
+ *
+ * The session cookie is cleared afterwards whatever happens at the API: once
+ * the account is gone the cookie names nobody, and leaving it in place would
+ * send the browser back to a dashboard that can only fail.
+ */
+export const deleteAccount = createServerFn({ method: "POST" })
+  .inputValidator((confirmation: string) => confirmation)
+  .handler(
+    async ({ data }): Promise<Result<null>> =>
+      attempt(async () => {
+        assertSameOrigin();
+
+        // Typed by hand on the screen. It is not a security control — the
+        // session already authorised this — but a deliberate pause in front of
+        // the one action here that cannot be undone.
+        if (data !== ACCOUNT_DELETION_CONFIRMATION) {
+          throw fieldError(
+            "confirmation",
+            `Digite ${ACCOUNT_DELETION_CONFIRMATION} para confirmar.`,
+          );
+        }
+
+        await sessions().authorize(callContext(), (ctx) =>
+          docgen().auth.deleteAccount(ctx),
+        );
+		// The cookie is cleared directly rather than through signOut, which would
+		// first ask the API to end a session belonging to an account that no
+		// longer exists — a failure that would be reported as if the deletion had
+		// gone wrong when it had just succeeded.
+		await createCookieSessionStore().clear();
+        return null;
+      }),
+  );

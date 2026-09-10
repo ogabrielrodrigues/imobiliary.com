@@ -115,6 +115,19 @@ function createAuthGateway(http: Transport): AuthGateway {
       );
     },
 
+    async deleteAccount(ctx: CallContext): Promise<void> {
+      await http.send(ctx, "DELETE", "/v1/me");
+    },
+
+    async exportAccount(ctx: CallContext): Promise<FileContent> {
+      const response = await http.send(ctx, "GET", "/v1/me/export");
+      return {
+        filename: filenameFrom(response.headers.get("content-disposition")),
+        contentType: response.headers.get("content-type") ?? "application/json",
+        bytes: new Uint8Array(await response.arrayBuffer()),
+      };
+    },
+
     async login(ctx: CallContext, input: LoginInput): Promise<Session> {
       return toSession(
         await http.json<ApiSession>(ctx, "POST", "/v1/auth/login", {

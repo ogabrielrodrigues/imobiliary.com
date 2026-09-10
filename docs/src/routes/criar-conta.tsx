@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-router";
 
 import { messageFor, summaryOf, type Failure } from "@/application/result";
+import { CURRENT_TERMS_VERSION } from "@/domain/legal";
 import { MIN_PASSWORD_LENGTH } from "@/domain/user";
 import { AuthLayout } from "@/components/auth-layout";
 import { FormField } from "@/components/form-field";
@@ -58,6 +59,9 @@ function SignUpPage() {
           email: String(form.get("email") ?? ""),
           name: String(form.get("name") ?? ""),
           password: String(form.get("password") ?? ""),
+          // Recorded with the account: which text was agreed to matters as
+          // much as the fact that something was.
+          termsVersion: CURRENT_TERMS_VERSION,
         },
       });
 
@@ -110,6 +114,31 @@ function SignUpPage() {
           hint={`Pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`}
           error={messageFor(failure, "password")}
         />
+        {/*
+          A real checkbox, required, so the browser refuses the form before
+          any request is made and a screen reader announces it as a choice.
+          The acceptance is recorded server-side with its version.
+        */}
+        <label className="flex items-start gap-2.5 text-[13px] leading-relaxed text-muted-foreground">
+          <input
+            type="checkbox"
+            name="terms"
+            required
+            className="mt-0.5 size-4 shrink-0 rounded-[4px] border border-border-strong bg-input accent-primary"
+          />
+          <span>
+            Li e aceito os{" "}
+            <Link to="/termos" className="font-medium text-primary hover:underline">
+              Termos de Uso
+            </Link>{" "}
+            e a{" "}
+            <Link to="/privacidade" className="font-medium text-primary hover:underline">
+              Política de Privacidade
+            </Link>
+            .
+          </span>
+        </label>
+
         <Button type="submit" disabled={pending} className="mt-1">
           {pending ? "Criando…" : "Criar conta"}
         </Button>

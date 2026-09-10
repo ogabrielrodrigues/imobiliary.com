@@ -764,11 +764,18 @@ components:
           description: |
             Length is the only rule. Composition requirements are deliberately
             absent, following current NIST guidance.
-      required: [email, name, password]
+        terms_version:
+          type: string
+          description: |
+            The version of the terms of use the account accepted. Required:
+            the acceptance is recorded with its version and instant, because
+            consent to one version is not consent to the next.
+      required: [email, name, password, terms_version]
       examples:
         - email: someone@example.com
           name: Ada Lovelace
           password: a-sufficiently-long-password
+          terms_version: "1.0"
 
     LoginRequest:
       type: object
