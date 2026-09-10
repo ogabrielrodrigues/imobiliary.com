@@ -299,7 +299,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-10 — template lifecycle complete; the editor is what remains
+**Last updated:** 2026-09-10 — template lifecycle and navigation done; the editor is what remains
 
 ### Done
 
@@ -413,6 +413,24 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       into a form that no longer shows those fields, and the API would reject
       keys the user cannot see.
 
+13. **The wordmark leads home, and the landing page sees the session.** Two
+    reported defects, one root: nothing outside `_app` knew whether a session
+    existed.
+    - `Brand` takes an optional destination and renders a router `Link`.
+      **The landing page had a private duplicate of it** shadowing the shared
+      component — which is why the mark there had drifted to a fixed 18px.
+      Deleted; if a wordmark ever looks wrong on one screen only, check for
+      another copy before editing the shared one.
+    - `/` loads `currentUser` and swaps its calls to action. A **loader**, not
+      a `beforeLoad`: no redirect to decide, only a fact to render. The pitch
+      itself is unchanged — only the calls to action had to know.
+    - `/entrar` and `/criar-conta` mirror the `_app` guard, inverted. No loop:
+      both sides read the same cookie and cannot disagree.
+    - `currentUser` reads **only the cookie**, so a cookie whose tokens are
+      already dead now bounces someone to a screen that fails. `LoadFailure`
+      offers a way back to sign-in on an authentication failure, which turns
+      that dead end into a step.
+
 ### Next step
 
 **The block editor**, the last piece of the original plan. It needs the docx
@@ -475,6 +493,12 @@ start. `DOCGEN_API_URL` defaults to `http://localhost:8080`.
 - `GET /v1/templates/{id}/versions` is paged and the platform asks for 100.
   A template with more versions than that would silently lose the oldest from
   the picker. Nothing shows that it truncated.
+- **`/` now varies per visitor.** It reads the session cookie, so it can no
+  longer be served from a shared cache without varying on that cookie. A
+  crawler arrives anonymous and still gets the HTML it always got, so search
+  is unaffected — but this matters the day a CDN goes in front of it.
+- `docgen-api/docs/api-reference.html` changed when the versions endpoint was
+  added, and the published artifact below still carries the older text.
 - The published API reference lives at
   `https://claude.ai/code/artifact/e3eaf9ee-95d7-46a0-bd7f-d596a95345ee`.
   Update it by republishing `docgen-api/docs/api-reference.html` **with that
