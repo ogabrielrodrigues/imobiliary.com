@@ -299,7 +299,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-09 — live preview done; the editor is what remains
+**Last updated:** 2026-09-10 — template lifecycle complete; the editor is what remains
 
 ### Done
 
@@ -383,27 +383,67 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       make sense of falls back to the plain grouped form, and generation is
       unaffected either way because the API renders from the original archive.
 
+11. **The app shell holds one viewport.** It was `min-h-dvh` — a minimum — so a
+    long page stretched the row and the sidebar with it, pushing the account
+    block below the fold. `PageBody` is now the scroll container, which pins the
+    header for free. **`min-h-0` on `PageBody` is the load-bearing line:** a
+    `flex-1` item in a column has a vertical main axis, so its default
+    `min-height: auto` refuses to shrink below its content and `overflow-y-auto`
+    never engages. `scrollRestoration: true` is now a silent no-op — it restores
+    *window* scroll, which no longer moves.
+
+12. **The template lifecycle is complete.** Versioning and deletion, both
+    verified end to end in the browser: published a v2 with a different schema,
+    switched back to v1, generated from v1 (the card reported "versão 1", not
+    the latest), deleted the template, and found the document still listed and
+    downloadable.
+    - `GET /v1/templates/{id}/versions` added to the API. **It fetches the
+      template first**, so an unknown or foreign id answers 404 rather than an
+      empty list, matching `Get`.
+    - `DELETE` moved from the `read` middleware to `write`. It was the only
+      mutation not charged to the per-account limiter.
+    - The version rides in the URL as `?versao=N`. **`loaderDeps` is what makes
+      the loader re-run** on that change; without it the router treats it as the
+      same match and serves the cache.
+    - `getTemplateContent` returns the template with `version` **replaced by the
+      chosen one**, so every reader downstream keeps asking for
+      `template.version` and gets the schema that applies.
+    - The screen is keyed on the version. Switching re-runs the loader without
+      unmounting, so values typed against the old schema would otherwise survive
+      into a form that no longer shows those fields, and the API would reject
+      keys the user cannot see.
+
 ### Next step
 
-Nothing is half-finished; pick up whichever the user asks for.
+**The block editor**, the last piece of the original plan. It needs the docx
+`build` module: blocks → `word/document.xml` → `writeZip`. Write the writer and
+**open its output in Word before building any interface around it** — that is
+the step that decides whether the whole idea works. Store the block tree as
+`imobiliary/source.json` inside the archive so the template can be reopened; the
+API preserves unknown parts byte for byte, which is proven by a test on its
+side.
 
-- **The block editor**, the last piece of the original plan. It needs the docx
-  `build` module: blocks → `word/document.xml` → `writeZip`. Write the writer
-  and **open its output in Word before building any interface around it** —
-  that is the step that decides whether the whole idea works. Store the block
-  tree as `imobiliary/source.json` inside the archive so the template can be
-  reopened; the API preserves unknown parts byte for byte, which is proven by
-  a test on its side.
-- Smaller, real gaps: no delete in the interface, and no way to publish a new
-  version of an existing template.
+Deferred deliberately, for a later conversation: **batch generation from a
+`.csv`**, mainly exports from Google Forms.
 
-Add components with `shadcn add dialog table tabs toast progress` as screens
-need them — **never `shadcn init` again**, which would overwrite the theme.
+Add components with `shadcn add table tabs toast progress` as screens need them
+— **never `shadcn init` again**, which would overwrite the theme.
 
-### After that
+### Adding a shadcn component, in practice
 
-7. The template detail screen, then generation and download.
-8. The docx `parse`/`build` module, then the block editor and the live preview.
+`shadcn add <name>` **prompts to overwrite `button.tsx`** and ignores `-y` for
+that question, so it blocks in a non-interactive shell. Pipe refusals into it —
+`printf 'n\nn\n' | pnpm dlx shadcn@latest add <name>` — and never accept: that
+file is tuned to the design. `-b base` is an `init` flag only; `add` reads the
+`base-nova` style already recorded in `components.json`.
+
+A new Base UI subpath makes Vite re-optimise dependencies, which can leave the
+open page holding modules from two generations and failing every hook. Stop the
+dev server, delete `node_modules/.vite`, start it again — in that order.
+
+**Base UI dialogs cannot be server-rendered here.** Mount one only once it has
+been asked for; a modal has nothing to show on the server, and rendering its
+root during hydration fails the whole route into the error boundary.
 
 ### Running it
 
@@ -428,6 +468,13 @@ start. `DOCGEN_API_URL` defaults to `http://localhost:8080`.
   harness artifact, not a product bug.
 - `go test -race` still unrun (no C compiler here).
 - The design system's "mínimo de 8 caracteres" copy contradicts the API's 12.
+- **`summaryOf` in `application/result.ts` speaks only about authentication.**
+  A 401 after a failed refresh renders "E-mail ou senha incorretos." wherever
+  it happens — including inside the delete dialog. The copy needs a context,
+  or the auth screens need to override those two strings locally.
+- `GET /v1/templates/{id}/versions` is paged and the platform asks for 100.
+  A template with more versions than that would silently lose the oldest from
+  the picker. Nothing shows that it truncated.
 - The published API reference lives at
   `https://claude.ai/code/artifact/e3eaf9ee-95d7-46a0-bd7f-d596a95345ee`.
   Update it by republishing `docgen-api/docs/api-reference.html` **with that
