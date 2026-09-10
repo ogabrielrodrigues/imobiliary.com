@@ -111,6 +111,10 @@ function createAuthGateway(http: Transport): AuthGateway {
           email: input.email,
           name: input.name,
           password: input.password,
+          // Required by the API since acceptance began being recorded. Leaving
+          // it out fails the whole registration with a 422 naming a field the
+          // form does not show, which is how this was missed.
+          terms_version: input.termsVersion,
         }),
       );
     },
