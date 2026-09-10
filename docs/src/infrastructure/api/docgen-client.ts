@@ -26,6 +26,7 @@ import type {
 } from "../../domain/template.ts";
 import type {
   LoginInput,
+  PasswordChangeInput,
   RegistrationInput,
   Session,
   User,
@@ -158,6 +159,39 @@ function createAuthGateway(http: Transport): AuthGateway {
 
     async currentUser(ctx: CallContext): Promise<User> {
       return toUser(await http.json<ApiUser>(ctx, "GET", "/v1/me"));
+    },
+
+    async changePassword(
+      ctx: CallContext,
+      input: PasswordChangeInput,
+    ): Promise<Session> {
+      return toSession(
+        await http.json<ApiSession>(ctx, "POST", "/v1/me/password", {
+          current_password: input.currentPassword,
+          new_password: input.newPassword,
+        }),
+      );
+    },
+
+    async requestPasswordReset(
+      ctx: CallContext,
+      email: string,
+    ): Promise<void> {
+      await http.send(ctx, "POST", "/v1/auth/password/forgot", {
+        body: JSON.stringify({ email }),
+        contentType: "application/json",
+      });
+    },
+
+    async resetPassword(
+      ctx: CallContext,
+      token: string,
+      password: string,
+    ): Promise<void> {
+      await http.send(ctx, "POST", "/v1/auth/password/reset", {
+        body: JSON.stringify({ token, new_password: password }),
+        contentType: "application/json",
+      });
     },
   };
 }

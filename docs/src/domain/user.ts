@@ -46,6 +46,11 @@ function looksLikeEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+export interface PasswordChangeInput {
+  readonly currentPassword: string;
+  readonly newPassword: string;
+}
+
 export interface RegistrationInput {
   readonly email: string;
   readonly name: string;
@@ -152,4 +157,73 @@ export function validateLogin(input: LoginInput): ValidationError | null {
   }
 
   return fields.length > 0 ? new ValidationError(fields) : null;
+}
+
+/**
+ * Checks a password change before it is sent.
+ *
+ * Mirrors the API's rule rather than relaxing it: the API validates
+ * independently and remains the authority, and this only spares a round trip.
+ * The "different from the current one" check is here too because the answer is
+ * knowable without asking, and a form that says so immediately is kinder than
+ * one that waits for a rejection.
+ */
+export function validatePasswordChange(
+  input: PasswordChangeInput,
+): ValidationError | null {
+  const fields: FieldError[] = [];
+
+  if (input.currentPassword === "") {
+    fields.push({ field: "currentPassword", message: "Informe sua senha atual." });
+  }
+
+  const length = [...input.newPassword].length;
+  if (input.newPassword === "") {
+    fields.push({ field: "newPassword", message: "Escolha uma nova senha." });
+  } else if (length < MIN_PASSWORD_LENGTH) {
+    fields.push({
+      field: "newPassword",
+      message: `A senha deve ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`,
+    });
+  } else if (length > MAX_PASSWORD_LENGTH) {
+    fields.push({
+      field: "newPassword",
+      message: `A senha deve ter no máximo ${MAX_PASSWORD_LENGTH} caracteres.`,
+    });
+  } else if (input.newPassword === input.currentPassword) {
+    fields.push({
+      field: "newPassword",
+      message: "A nova senha precisa ser diferente da atual.",
+    });
+  }
+
+  return fields.length > 0 ? new ValidationError(fields) : null;
+}
+
+/** Checks a new password chosen from a reset link, where there is no old one. */
+export function validateNewPassword(password: string): ValidationError | null {
+  const length = [...password].length;
+
+  if (password === "") {
+    return new ValidationError([
+      { field: "password", message: "Escolha uma nova senha." },
+    ]);
+  }
+  if (length < MIN_PASSWORD_LENGTH) {
+    return new ValidationError([
+      {
+        field: "password",
+        message: `A senha deve ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`,
+      },
+    ]);
+  }
+  if (length > MAX_PASSWORD_LENGTH) {
+    return new ValidationError([
+      {
+        field: "password",
+        message: `A senha deve ter no máximo ${MAX_PASSWORD_LENGTH} caracteres.`,
+      },
+    ]);
+  }
+  return null;
 }

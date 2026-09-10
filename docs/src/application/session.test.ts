@@ -52,8 +52,13 @@ class FakeStore implements SessionStore {
 
 /** Records what was asked of the API and lets a test choose the answers. */
 class FakeAuth implements AuthGateway {
-  // Present to satisfy the port. SessionManager never reaches for either.
+  // Present to satisfy the port. SessionManager never reaches for any of them.
   async deleteAccount(): Promise<void> {}
+  async changePassword(): Promise<never> {
+    throw new Error("not used by these tests");
+  }
+  async requestPasswordReset(): Promise<void> {}
+  async resetPassword(): Promise<void> {}
   async exportAccount(): Promise<never> {
     throw new Error("not used by these tests");
   }

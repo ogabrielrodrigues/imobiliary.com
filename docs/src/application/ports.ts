@@ -16,6 +16,7 @@ import type {
 } from "../domain/template.ts";
 import type {
   LoginInput,
+  PasswordChangeInput,
   RegistrationInput,
   Session,
   User,
@@ -51,6 +52,21 @@ export interface AuthGateway {
   /** Always succeeds, whether or not the secret matched a live session. */
   logout(ctx: CallContext, refreshToken: string): Promise<void>;
   currentUser(ctx: CallContext): Promise<User>;
+  /**
+   * Replaces the password and returns a whole new session.
+   *
+   * A session comes back because the change ends every session of the
+   * account, this one included: without the replacement the caller would be
+   * signed out by its own successful request.
+   */
+  changePassword(
+    ctx: CallContext,
+    input: PasswordChangeInput,
+  ): Promise<Session>;
+  /** Always succeeds, whether or not the address belongs to anyone. */
+  requestPasswordReset(ctx: CallContext, email: string): Promise<void>;
+  /** Consumes a one-time token. Ends every session of the account. */
+  resetPassword(ctx: CallContext, token: string, password: string): Promise<void>;
 }
 
 export interface TemplateGateway {

@@ -98,6 +98,16 @@ function SignInPage() {
           autoComplete="current-password"
           error={messageFor(failure, "password")}
         />
+        {/*
+          Placed under the password rather than in the footer: this is where
+          someone is standing when they discover they cannot remember it.
+        */}
+        <Link
+          to="/esqueci-senha"
+          className="-mt-2 self-start text-[13px] text-muted-foreground hover:text-foreground"
+        >
+          Esqueci minha senha
+        </Link>
         <Button type="submit" disabled={pending} className="mt-1">
           {pending ? "Entrando…" : "Entrar"}
         </Button>

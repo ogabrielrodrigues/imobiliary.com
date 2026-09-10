@@ -15,9 +15,13 @@ import { attempt, type Result } from "../application/result.ts";
 import { fieldError } from "../domain/errors.ts";
 import type { User } from "../domain/user.ts";
 import {
+  normalizeEmail,
   validateLogin,
+  validateNewPassword,
+  validatePasswordChange,
   validateRegistration,
   type LoginInput,
+  type PasswordChangeInput,
   type RegistrationInput,
 } from "../domain/user.ts";
 import { createCookieSessionStore } from "../infrastructure/session/cookie-session-store.ts";
@@ -146,6 +150,82 @@ export const deleteAccount = createServerFn({ method: "POST" })
 		// longer exists — a failure that would be reported as if the deletion had
 		// gone wrong when it had just succeeded.
 		await createCookieSessionStore().clear();
+        return null;
+      }),
+  );
+
+/**
+ * Replaces the password of the signed-in account.
+ *
+ * The API answers with a whole new session, and it has to: changing a password
+ * ends every session of the account, this one included, so without the
+ * replacement the browser would be signed out by its own successful request.
+ * Writing it to the cookie is what makes the change feel like nothing happened
+ * here while ending it everywhere else.
+ */
+export const changePassword = createServerFn({ method: "POST" })
+  .inputValidator((input: PasswordChangeInput) => input)
+  .handler(
+    async ({ data }): Promise<Result<null>> =>
+      attempt(async () => {
+        assertSameOrigin();
+
+        const invalid = validatePasswordChange(data);
+        if (invalid) throw invalid;
+
+        const session = await sessions().authorize(callContext(), (ctx) =>
+          docgen().auth.changePassword(ctx, data),
+        );
+        await sessions().signIn(session);
+        return null;
+      }),
+  );
+
+/**
+ * Asks for a reset link.
+ *
+ * Answers the same whether or not the address belongs to anyone — the API is
+ * built that way, and repeating the guarantee here means the interface cannot
+ * accidentally undo it by reporting a failure the API deliberately swallowed.
+ */
+export const requestPasswordReset = createServerFn({ method: "POST" })
+  .inputValidator((email: string) => email)
+  .handler(
+    async ({ data }): Promise<Result<null>> =>
+      attempt(async () => {
+        assertSameOrigin();
+
+        if (normalizeEmail(data) === "") {
+          throw fieldError("email", "Informe seu e-mail.");
+        }
+
+        await docgen().auth.requestPasswordReset(callContext(), data);
+        return null;
+      }),
+  );
+
+/**
+ * Sets a new password from a reset link.
+ *
+ * No session is opened afterwards. A reset assumes the account may already be
+ * in someone else's hands, so it leaves nobody signed in — including whoever
+ * followed the link — and the screen sends them to sign in with what they just
+ * chose.
+ */
+export const resetPassword = createServerFn({ method: "POST" })
+  .inputValidator((input: { token: string; password: string }) => input)
+  .handler(
+    async ({ data }): Promise<Result<null>> =>
+      attempt(async () => {
+        assertSameOrigin();
+
+        if (data.token === "") {
+          throw fieldError("password", "Link inválido ou incompleto.");
+        }
+        const invalid = validateNewPassword(data.password);
+        if (invalid) throw invalid;
+
+        await docgen().auth.resetPassword(callContext(), data.token, data.password);
         return null;
       }),
   );
