@@ -30,12 +30,17 @@ func TestIssueAndParseAccessRoundTrip(t *testing.T) {
 		t.Errorf("expiry = %v, want %v", expiresAt, want)
 	}
 
-	got, err := issuer.ParseAccess(raw)
+	got, issuedAt, err := issuer.ParseAccess(raw)
 	if err != nil {
 		t.Fatalf("ParseAccess: %v", err)
 	}
 	if got != userID {
 		t.Errorf("ParseAccess returned %s, want %s", got, userID)
+	}
+	// The issue time is what a password change is later compared against, so a
+	// token that does not carry one is useless for that check.
+	if issuedAt.IsZero() {
+		t.Error("ParseAccess returned no issued-at instant")
 	}
 }
 
@@ -50,7 +55,7 @@ func TestParseAccessRejectsExpiredToken(t *testing.T) {
 	}
 
 	current = now.Add(16 * time.Minute)
-	if _, err := issuer.ParseAccess(raw); !errors.Is(err, ErrInvalidToken) {
+	if _, _, err := issuer.ParseAccess(raw); !errors.Is(err, ErrInvalidToken) {
 		t.Errorf("ParseAccess on an expired token = %v, want ErrInvalidToken", err)
 	}
 }
@@ -65,7 +70,7 @@ func TestParseAccessRejectsForeignSignature(t *testing.T) {
 		t.Fatalf("IssueAccess: %v", err)
 	}
 
-	if _, err := verify.ParseAccess(raw); !errors.Is(err, ErrInvalidToken) {
+	if _, _, err := verify.ParseAccess(raw); !errors.Is(err, ErrInvalidToken) {
 		t.Errorf("ParseAccess with the wrong key = %v, want ErrInvalidToken", err)
 	}
 }
@@ -89,7 +94,7 @@ func TestParseAccessRejectsUnsignedToken(t *testing.T) {
 	encode := base64.RawURLEncoding.EncodeToString
 	forged := encode([]byte(`{"alg":"none","typ":"JWT"}`)) + "." + parts[1] + "."
 
-	if _, err := issuer.ParseAccess(forged); !errors.Is(err, ErrInvalidToken) {
+	if _, _, err := issuer.ParseAccess(forged); !errors.Is(err, ErrInvalidToken) {
 		t.Errorf("ParseAccess on an unsigned token = %v, want ErrInvalidToken", err)
 	}
 }
@@ -98,7 +103,7 @@ func TestParseAccessRejectsGarbage(t *testing.T) {
 	issuer := NewIssuer(testSecret, time.Hour)
 
 	for _, raw := range []string{"", "not-a-token", "a.b.c", strings.Repeat("x", 500)} {
-		if _, err := issuer.ParseAccess(raw); !errors.Is(err, ErrInvalidToken) {
+		if _, _, err := issuer.ParseAccess(raw); !errors.Is(err, ErrInvalidToken) {
 			t.Errorf("ParseAccess(%q) = %v, want ErrInvalidToken", raw, err)
 		}
 	}

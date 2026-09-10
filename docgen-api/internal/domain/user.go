@@ -31,6 +31,10 @@ type User struct {
 	// predate the requirement, which is the truth about them.
 	TermsAcceptedAt *time.Time
 	TermsVersion    string
+	// PasswordChangedAt is what an access token is checked against: a token
+	// minted before this instant belongs to a credential that no longer
+	// exists. Nil on an account whose password has never changed.
+	PasswordChangedAt *time.Time
 }
 
 // NormalizeEmail lowercases and trims an address so that lookups and the

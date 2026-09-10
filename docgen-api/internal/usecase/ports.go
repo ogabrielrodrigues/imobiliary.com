@@ -27,6 +27,33 @@ type UserRepository interface {
 	// Delete erases the account and everything cascading from it, reporting
 	// the blob hashes no surviving row refers to any more.
 	Delete(ctx context.Context, id uuid.UUID) ([]string, error)
+	// UpdatePassword replaces the stored hash and records when it changed.
+	UpdatePassword(ctx context.Context, id uuid.UUID, hash string, at time.Time) error
+}
+
+// PasswordResetRepository stores the one-time tokens that authorise setting a
+// password without knowing the old one.
+type PasswordResetRepository interface {
+	Create(ctx context.Context, r *domain.PasswordReset) error
+	ByHash(ctx context.Context, hash []byte) (*domain.PasswordReset, error)
+	// Consume marks a token used, reporting domain.ErrNotFound when it was
+	// already spent - the check and the write are one statement, so two
+	// requests racing the same token cannot both succeed.
+	Consume(ctx context.Context, id uuid.UUID, at time.Time) error
+	// InvalidateForUser spends every outstanding token of an account, which is
+	// what a completed reset or a password change does to the ones still in
+	// inboxes.
+	InvalidateForUser(ctx context.Context, userID uuid.UUID, at time.Time) error
+}
+
+// Mailer sends one plain-text message to one address.
+//
+// Plain strings rather than a shared struct: a type would have to live either
+// here or in the adapter, and the first makes the adapter depend on the use
+// case for a record of four fields while the second points the dependency the
+// wrong way entirely.
+type Mailer interface {
+	Send(ctx context.Context, to, subject, body string) error
 }
 
 // SessionRepository stores refresh tokens and the links between them.
@@ -87,7 +114,7 @@ type PasswordHasher interface {
 // TokenIssuer mints and validates access tokens.
 type TokenIssuer interface {
 	IssueAccess(userID uuid.UUID) (string, time.Time, error)
-	ParseAccess(raw string) (uuid.UUID, error)
+	ParseAccess(raw string) (userID uuid.UUID, issuedAt time.Time, err error)
 }
 
 // Clock supplies the current time. Injecting it keeps expiry and rotation

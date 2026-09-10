@@ -87,6 +87,20 @@ func (f *fakeUsers) Delete(_ context.Context, id uuid.UUID) ([]string, error) {
 	return nil, nil
 }
 
+func (f *fakeUsers) UpdatePassword(_ context.Context, id uuid.UUID, hash string, at time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	u, ok := f.byID[id]
+	if !ok {
+		return fmt.Errorf("user: %w", domain.ErrNotFound)
+	}
+	u.PasswordHash = hash
+	stamp := at
+	u.PasswordChangedAt = &stamp
+	return nil
+}
+
 type fakeSessions struct {
 	mu     sync.Mutex
 	byID   map[uuid.UUID]*domain.RefreshToken
@@ -185,19 +199,30 @@ type fakeTokens struct {
 }
 
 func (f fakeTokens) IssueAccess(userID uuid.UUID) (string, time.Time, error) {
-	return "access:" + userID.String(), f.now().Add(f.ttl), nil
+	// The issue time travels inside the token so ParseAccess can report it, the
+	// way the real issuer reads it from the iat claim.
+	stamp := f.now().UTC().Format(time.RFC3339Nano)
+	return "access:" + stamp + "|" + userID.String(), f.now().Add(f.ttl), nil
 }
 
-func (f fakeTokens) ParseAccess(raw string) (uuid.UUID, error) {
+func (f fakeTokens) ParseAccess(raw string) (uuid.UUID, time.Time, error) {
 	rest, found := strings.CutPrefix(raw, "access:")
 	if !found {
-		return uuid.Nil(), fmt.Errorf("%w: bad prefix", token.ErrInvalidToken)
+		return uuid.Nil(), time.Time{}, fmt.Errorf("%w: bad prefix", token.ErrInvalidToken)
 	}
-	id, err := uuid.Parse(rest)
+	stamp, subject, found := strings.Cut(rest, "|")
+	if !found {
+		return uuid.Nil(), time.Time{}, fmt.Errorf("%w: no issued-at", token.ErrInvalidToken)
+	}
+	issuedAt, err := time.Parse(time.RFC3339Nano, stamp)
 	if err != nil {
-		return uuid.Nil(), fmt.Errorf("%w: bad subject", token.ErrInvalidToken)
+		return uuid.Nil(), time.Time{}, fmt.Errorf("%w: bad issued-at", token.ErrInvalidToken)
 	}
-	return id, nil
+	id, err := uuid.Parse(subject)
+	if err != nil {
+		return uuid.Nil(), time.Time{}, fmt.Errorf("%w: bad subject", token.ErrInvalidToken)
+	}
+	return id, issuedAt, nil
 }
 
 // identityFixture bundles a wired Identity with the fakes behind it.

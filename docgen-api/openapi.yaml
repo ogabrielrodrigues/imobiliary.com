@@ -208,6 +208,69 @@ paths:
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /v1/auth/password/forgot:
+    post:
+      tags: [Authentication]
+      summary: Ask for a password-reset link
+      description: |
+        Mails a one-time link to the address, if it belongs to an account.
+
+        Always answers 202, and always the same. Reporting whether the
+        address was found would turn an endpoint anyone can reach into a way
+        to ask which addresses are registered here.
+      operationId: requestPasswordReset
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, format: email }
+              required: [email]
+      responses:
+        "202":
+          description: |
+            The request was accepted. This says nothing about whether a
+            message was sent.
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/auth/password/reset:
+    post:
+      tags: [Authentication]
+      summary: Set a password from a reset link
+      description: |
+        Consumes the token from the mail and sets a new password.
+
+        The token works once and expires. Every session of the account ends,
+        including any the caller holds: whoever presents this proved control
+        of the mailbox and nothing more, and the premise of the flow is that
+        the account may already be in someone else's hands.
+      operationId: resetPassword
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token: { type: string }
+                new_password: { type: string, minLength: 12, maxLength: 256 }
+              required: [token, new_password]
+      responses:
+        "204":
+          description: The password was set.
+        "401":
+          description: |
+            The token is unknown, expired or already used. The three are not
+            told apart.
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
   /v1/me:
     get:
       tags: [Authentication]
@@ -240,6 +303,45 @@ paths:
         "204":
           description: The account and its data were erased.
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/me/password:
+    post:
+      tags: [Authentication]
+      summary: Change the password
+      description: |
+        Replaces the password of the authenticated account, and answers with a
+        **new session**.
+
+        Every other session of the account ends immediately — not when its
+        access token would have lapsed. A change that left a second party
+        signed in would be decorative, and that party is the reason anyone
+        changes a password. The session returned is what keeps the caller
+        working through its own request.
+
+        Charged to the strict per-IP credential budget rather than the write
+        one: guessing a password is guessing a password whether or not the
+        guesser already holds a session.
+      operationId: changePassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                current_password: { type: string }
+                new_password: { type: string, minLength: 12, maxLength: 256 }
+              required: [current_password, new_password]
+      responses:
+        "200":
+          description: The password changed, and a fresh session was issued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
   /v1/me/export:

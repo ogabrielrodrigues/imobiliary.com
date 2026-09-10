@@ -171,7 +171,7 @@ func (i *Identity) Logout(ctx context.Context, secret string) error {
 
 // Authenticate resolves the account behind an access token.
 func (i *Identity) Authenticate(ctx context.Context, accessToken string) (*domain.User, error) {
-	userID, err := i.tokens.ParseAccess(accessToken)
+	userID, issuedAt, err := i.tokens.ParseAccess(accessToken)
 	if err != nil {
 		return nil, err
 	}
@@ -183,6 +183,21 @@ func (i *Identity) Authenticate(ctx context.Context, accessToken string) (*domai
 	}
 	if err != nil {
 		return nil, err
+	}
+
+	// An access token is stateless, so revoking a session does not reach one
+	// already in circulation. Comparing against the last password change is
+	// what closes that window: without it, changing a password would leave
+	// every token minted before it valid until it expired on its own, and an
+	// intruder would keep working for the rest of the access-token lifetime.
+	//
+	// Truncated to the second because that is all a JWT issue time carries: an
+	// unrounded comparison would reject the very token minted to replace the
+	// session, whose iat rounds down below the instant of the change. The cost
+	// is that a token issued in the same second as the change survives, which
+	// is a window nothing can act on.
+	if user.PasswordChangedAt != nil && issuedAt.Before(user.PasswordChangedAt.Truncate(time.Second)) {
+		return nil, fmt.Errorf("authenticate: %w", token.ErrInvalidToken)
 	}
 	return user, nil
 }

@@ -5,6 +5,7 @@ package http_test
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	json "encoding/json/v2"
 	"io"
 	"io/fs"
@@ -17,6 +18,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -40,6 +42,46 @@ type testServer struct {
 	// blobDir lets a test confirm that erasure reached the filesystem, which
 	// is the half of it a database assertion cannot see.
 	blobDir string
+	// mailbox is where the reset link can be read back, since following it is
+	// the only way to exercise the flow the way a person would.
+	mailbox *testMailbox
+}
+
+// testMailbox collects the messages the service tried to send.
+type testMailbox struct {
+	mu   sync.Mutex
+	sent []sentMail
+}
+
+type sentMail struct {
+	to      string
+	subject string
+	body    string
+}
+
+func (m *testMailbox) Send(_ context.Context, to, subject, body string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sent = append(m.sent, sentMail{to: to, subject: subject, body: body})
+	return nil
+}
+
+// last returns the most recent message, failing the test when there is none.
+func (m *testMailbox) last(t *testing.T) sentMail {
+	t.Helper()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.sent) == 0 {
+		t.Fatal("no message was sent")
+	}
+	return m.sent[len(m.sent)-1]
+}
+
+// count reports how many messages have been sent.
+func (m *testMailbox) count() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.sent)
 }
 
 // storedBlobs counts the files under the blob directory.
@@ -123,6 +165,20 @@ func newTestServer(t *testing.T, opts serverOptions) *testServer {
 		Cache:     cache,
 	})
 
+	mailbox := &testMailbox{}
+	passwords := usecase.NewPasswords(usecase.PasswordsConfig{
+		Users:      sqlite.NewUserRepository(db),
+		Sessions:   sqlite.NewSessionRepository(db),
+		Resets:     sqlite.NewPasswordResetRepository(db),
+		Hasher:     password.NewHasher(),
+		Tokens:     token.NewIssuer(jwtSecret, 15*time.Minute),
+		Mailer:     mailbox,
+		AppURL:     "https://docs.example.com",
+		ResetTTL:   30 * time.Minute,
+		RefreshTTL: 24 * time.Hour,
+		Logger:     testLogger(),
+	})
+
 	privacy := usecase.NewPrivacy(usecase.PrivacyConfig{
 		Users:     sqlite.NewUserRepository(db),
 		Templates: templatesRepo,
@@ -147,6 +203,7 @@ func newTestServer(t *testing.T, opts serverOptions) *testServer {
 		Templates:       templates,
 		Documents:       documents,
 		Privacy:         privacy,
+		Passwords:       passwords,
 		Limiters:        limiters,
 		Logger:          testLogger(),
 		Health:          db.Ping,
@@ -157,7 +214,7 @@ func newTestServer(t *testing.T, opts serverOptions) *testServer {
 	httpServer := httptest.NewServer(server.Handler())
 	t.Cleanup(httpServer.Close)
 
-	return &testServer{Server: httpServer, t: t, blobDir: filepath.Join(dir, "blobs")}
+	return &testServer{Server: httpServer, t: t, blobDir: filepath.Join(dir, "blobs"), mailbox: mailbox}
 }
 
 // do sends a request and returns the response.
@@ -1204,4 +1261,189 @@ func TestRegistrationRecordsTermsAcceptance(t *testing.T) {
 		"password":      "a-sufficiently-long-password",
 		"terms_version": "1.0",
 	}), http.StatusCreated)
+}
+
+// TestChangePasswordEndsTheOtherSessions is the assertion the whole feature
+// rests on: changing a password has to expel whoever else was signed in, and
+// has to do it now rather than whenever their access token happens to lapse.
+func TestChangePasswordEndsTheOtherSessions(t *testing.T) {
+	server := newTestServer(t, defaultServerOptions())
+	const email = "change@example.com"
+	const oldPassword = "a-sufficiently-long-password"
+	const newPassword = "uma-senha-bem-diferente-agora"
+
+	first := server.registerAndLogin(email)
+
+	// A second sign-in, standing in for the other device — or the intruder.
+	var second sessionBody
+	decode(t, server.postJSON("/v1/auth/login", "", map[string]string{
+		"email":    email,
+		"password": oldPassword,
+	}), http.StatusOK, &second)
+
+	// Both work before the change.
+	expectStatus(t, server.get("/v1/me", first.AccessToken), http.StatusOK)
+	expectStatus(t, server.get("/v1/me", second.AccessToken), http.StatusOK)
+
+	// A JWT issue time is carried in whole seconds, so the rule that retires a
+	// token minted before a password change can only resolve to the second.
+	// Crossing one here is what makes the assertion below mean anything:
+	// without it the old token shares a second with the change and survives,
+	// which is the one-second window the design accepts.
+	time.Sleep(1100 * time.Millisecond)
+	var replacement sessionBody
+	decode(t, server.postJSON("/v1/me/password", first.AccessToken, map[string]string{
+		"current_password": oldPassword,
+		"new_password":     newPassword,
+	}), http.StatusOK, &replacement)
+
+	// The session handed back keeps the browser that asked signed in.
+	expectStatus(t, server.get("/v1/me", replacement.AccessToken), http.StatusOK)
+
+	// And the other one is out immediately — not in fifteen minutes, when its
+	// access token would have expired on its own. This is the assertion that
+	// separates a real password change from a decorative one.
+	expectStatus(t, server.get("/v1/me", second.AccessToken), http.StatusUnauthorized)
+	expectStatus(t, server.get("/v1/me", first.AccessToken), http.StatusUnauthorized)
+
+	// Its refresh token is gone too, so it cannot mint its way back in.
+	expectStatus(t, server.postJSON("/v1/auth/refresh", "", map[string]string{
+		"refresh_token": second.RefreshToken,
+	}), http.StatusUnauthorized)
+
+	// The old password no longer opens anything; the new one does.
+	expectStatus(t, server.postJSON("/v1/auth/login", "", map[string]string{
+		"email": email, "password": oldPassword,
+	}), http.StatusUnauthorized)
+	expectStatus(t, server.postJSON("/v1/auth/login", "", map[string]string{
+		"email": email, "password": newPassword,
+	}), http.StatusOK)
+
+	// And the account holder is told, which is how a victim of a takeover finds
+	// out about it.
+	if notice := server.mailbox.last(t); !strings.Contains(notice.subject, "senha foi alterada") {
+		t.Errorf("no password-change notice was sent; last subject was %q", notice.subject)
+	}
+}
+
+// TestChangePasswordRefusesTheWrongCurrentPassword covers the guard that stops
+// a stolen session from becoming a stolen account.
+func TestChangePasswordRefusesTheWrongCurrentPassword(t *testing.T) {
+	server := newTestServer(t, defaultServerOptions())
+	session := server.registerAndLogin("guard@example.com")
+
+	expectStatus(t, server.postJSON("/v1/me/password", session.AccessToken, map[string]string{
+		"current_password": "not-the-current-password",
+		"new_password":     "uma-senha-bem-diferente-agora",
+	}), http.StatusUnauthorized)
+
+	// Too short, and rejected on the same grounds registration would use.
+	expectStatus(t, server.postJSON("/v1/me/password", session.AccessToken, map[string]string{
+		"current_password": "a-sufficiently-long-password",
+		"new_password":     "curta",
+	}), http.StatusUnprocessableEntity)
+
+	// Unchanged, which is a mistake worth naming rather than silently accepting.
+	expectStatus(t, server.postJSON("/v1/me/password", session.AccessToken, map[string]string{
+		"current_password": "a-sufficiently-long-password",
+		"new_password":     "a-sufficiently-long-password",
+	}), http.StatusUnprocessableEntity)
+
+	// None of that ended the session.
+	expectStatus(t, server.get("/v1/me", session.AccessToken), http.StatusOK)
+}
+
+// TestForgotPasswordSaysNothingAboutTheAddress covers the enumeration guard: an
+// endpoint anyone can reach must not become a way to ask who has an account.
+func TestForgotPasswordSaysNothingAboutTheAddress(t *testing.T) {
+	server := newTestServer(t, defaultServerOptions())
+	server.registerAndLogin("known@example.com")
+
+	before := server.mailbox.count()
+
+	expectStatus(t, server.postJSON("/v1/auth/password/forgot", "", map[string]string{
+		"email": "known@example.com",
+	}), http.StatusAccepted)
+	expectStatus(t, server.postJSON("/v1/auth/password/forgot", "", map[string]string{
+		"email": "nobody@example.com",
+	}), http.StatusAccepted)
+
+	// Identical answers, and exactly one message — the difference is in the
+	// mailbox, where the caller cannot see it.
+	if sent := server.mailbox.count() - before; sent != 1 {
+		t.Errorf("sent %d messages, want exactly one", sent)
+	}
+}
+
+// TestResetPasswordConsumesTheLinkOnce walks the recovery the way a person
+// does: ask, follow the link from the mail, set a password, sign in.
+func TestResetPasswordConsumesTheLinkOnce(t *testing.T) {
+	server := newTestServer(t, defaultServerOptions())
+	const email = "forgot@example.com"
+	const newPassword = "outra-senha-bem-comprida"
+
+	session := server.registerAndLogin(email)
+
+	expectStatus(t, server.postJSON("/v1/auth/password/forgot", "", map[string]string{
+		"email": email,
+	}), http.StatusAccepted)
+
+	secret := resetTokenFrom(t, server.mailbox.last(t).body)
+
+	// A JWT issue time is carried in whole seconds, so the rule that retires a
+	// token minted before a password change can only resolve to the second.
+	// Crossing one here is what makes the assertion below mean anything:
+	// without it the old token shares a second with the change and survives,
+	// which is the one-second window the design accepts.
+	time.Sleep(1100 * time.Millisecond)
+
+	expectStatus(t, server.postJSON("/v1/auth/password/reset", "", map[string]string{
+		"token":        secret,
+		"new_password": newPassword,
+	}), http.StatusNoContent)
+
+	// A reset assumes the account may already be in someone else's hands, so
+	// nobody stays signed in — including whoever asked.
+	expectStatus(t, server.get("/v1/me", session.AccessToken), http.StatusUnauthorized)
+
+	// The new password works.
+	expectStatus(t, server.postJSON("/v1/auth/login", "", map[string]string{
+		"email": email, "password": newPassword,
+	}), http.StatusOK)
+
+	// And the link is spent: a second use is refused, so a forwarded or
+	// intercepted mail is worth nothing after the fact.
+	expectStatus(t, server.postJSON("/v1/auth/password/reset", "", map[string]string{
+		"token":        secret,
+		"new_password": "mais-uma-senha-bem-comprida",
+	}), http.StatusUnauthorized)
+}
+
+// TestResetPasswordRejectsAnUnknownToken covers the shape of a guessed link.
+func TestResetPasswordRejectsAnUnknownToken(t *testing.T) {
+	server := newTestServer(t, defaultServerOptions())
+
+	expectStatus(t, server.postJSON("/v1/auth/password/reset", "", map[string]string{
+		"token":        "not-a-real-token",
+		"new_password": "uma-senha-bem-comprida-mesmo",
+	}), http.StatusUnauthorized)
+}
+
+// resetTokenFrom pulls the secret out of the link a reset mail carries.
+func resetTokenFrom(t *testing.T, body string) string {
+	t.Helper()
+
+	const marker = "token="
+	at := strings.Index(body, marker)
+	if at < 0 {
+		t.Fatalf("no reset link in the message:\n%s", body)
+	}
+	secret := body[at+len(marker):]
+	if end := strings.IndexAny(secret, "\r\n "); end >= 0 {
+		secret = secret[:end]
+	}
+	if secret == "" {
+		t.Fatalf("empty reset token in the message:\n%s", body)
+	}
+	return secret
 }

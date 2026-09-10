@@ -88,21 +88,31 @@ func (i *Issuer) IssueAccess(userID uuid.UUID) (string, time.Time, error) {
 	return signed, expiresAt, nil
 }
 
-// ParseAccess validates a raw access token and returns the user it identifies.
-func (i *Issuer) ParseAccess(raw string) (uuid.UUID, error) {
+// ParseAccess validates a raw access token and returns the user it identifies
+// together with the instant it was issued.
+//
+// The issue time is returned because an access token is stateless: nothing can
+// be revoked out from under it, so the only way to reject one minted before a
+// credential changed is to compare the two instants. Without it, changing a
+// password would leave every token already in circulation valid until it
+// expired on its own.
+func (i *Issuer) ParseAccess(raw string) (uuid.UUID, time.Time, error) {
 	var claims jwt.RegisteredClaims
 	_, err := i.parser.ParseWithClaims(raw, &claims, func(*jwt.Token) (any, error) {
 		return i.secret, nil
 	})
 	if err != nil {
-		return uuid.Nil(), fmt.Errorf("%w: %w", ErrInvalidToken, err)
+		return uuid.Nil(), time.Time{}, fmt.Errorf("%w: %w", ErrInvalidToken, err)
 	}
 
 	userID, err := uuid.Parse(claims.Subject)
 	if err != nil {
-		return uuid.Nil(), fmt.Errorf("%w: subject is not a uuid", ErrInvalidToken)
+		return uuid.Nil(), time.Time{}, fmt.Errorf("%w: subject is not a uuid", ErrInvalidToken)
 	}
-	return userID, nil
+	if claims.IssuedAt == nil {
+		return uuid.Nil(), time.Time{}, fmt.Errorf("%w: no issued-at claim", ErrInvalidToken)
+	}
+	return userID, claims.IssuedAt.Time.UTC(), nil
 }
 
 // NewRefreshSecret returns a fresh opaque refresh secret, URL-safe so it can

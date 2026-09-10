@@ -46,6 +46,16 @@ type Config struct {
 	// decoration.
 	TrustProxyHeaders bool
 
+	// AppURL is where the platform is served, used to build the link a
+	// password-reset mail carries. The API is otherwise URL-agnostic.
+	AppURL string
+	// ResendAPIKey and MailFrom configure delivery. Without a key the service
+	// falls back to writing mail to the log, which is what development wants:
+	// the reset link appears in the terminal and nothing reaches a real inbox.
+	ResendAPIKey     string
+	MailFrom         string
+	PasswordResetTTL time.Duration
+
 	MaxTemplateBytes int64
 	MaxRequestBytes  int64
 	ShutdownTimeout  time.Duration
@@ -61,6 +71,9 @@ func Load() (*Config, error) {
 		BlobDir:           env("DOCGEN_BLOB_DIR", "data/blobs"),
 		JWTSecret:         []byte(os.Getenv("DOCGEN_JWT_SECRET")),
 		TrustProxyHeaders: envBool("DOCGEN_TRUST_PROXY_HEADERS", false),
+		AppURL:            env("DOCGEN_APP_URL", "http://localhost:3000"),
+		ResendAPIKey:      os.Getenv("DOCGEN_RESEND_API_KEY"),
+		MailFrom:          env("DOCGEN_MAIL_FROM", "Imobiliary Docs <nao-responda@localhost>"),
 		ShutdownTimeout:   15 * time.Second,
 		RateLimits: RateLimits{
 			GlobalPerIP:  Rule{Rate: 10, Burst: 60},
@@ -74,6 +87,9 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if cfg.RefreshTokenTTL, err = envDuration("DOCGEN_REFRESH_TTL", 30*24*time.Hour); err != nil {
+		return nil, err
+	}
+	if cfg.PasswordResetTTL, err = envDuration("DOCGEN_PASSWORD_RESET_TTL", 30*time.Minute); err != nil {
 		return nil, err
 	}
 	if cfg.MaxTemplateBytes, err = envInt64("DOCGEN_MAX_TEMPLATE_BYTES", 10<<20); err != nil {

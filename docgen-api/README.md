@@ -54,6 +54,10 @@ go run ./cmd/docgen
 | `DOCGEN_MAX_TEMPLATE_BYTES` | `10485760` | Upload size limit |
 | `DOCGEN_MAX_REQUEST_BYTES` | `1048576` | JSON body size limit |
 | `DOCGEN_TRUST_PROXY_HEADERS` | `false` | Read the client IP from `X-Forwarded-For` |
+| `DOCGEN_APP_URL` | `http://localhost:3000` | Where the platform is served; the reset link points here |
+| `DOCGEN_RESEND_API_KEY` | *unset* | Resend key. Unset means mail is written to the log instead of sent |
+| `DOCGEN_MAIL_FROM` | `Imobiliary Docs <nao-responda@localhost>` | Sender address, on a domain verified with the provider |
+| `DOCGEN_PASSWORD_RESET_TTL` | `30m` | How long a reset link stays usable |
 
 Leave `DOCGEN_TRUST_PROXY_HEADERS` off unless a trusted proxy sets the header.
 Honouring it otherwise would let any client choose its own rate-limit key.

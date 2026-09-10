@@ -37,6 +37,7 @@ type Options struct {
 	Templates *usecase.Templates
 	Documents *usecase.Documents
 	Privacy   *usecase.Privacy
+	Passwords *usecase.Passwords
 	Limiters  Limiters
 	Logger    *slog.Logger
 	// Health reports whether dependencies are reachable.
@@ -53,6 +54,7 @@ type Server struct {
 	templates *usecase.Templates
 	documents *usecase.Documents
 	privacy   *usecase.Privacy
+	passwords *usecase.Passwords
 	limiters  Limiters
 	logger    *slog.Logger
 	health    func(context.Context) error
@@ -69,6 +71,7 @@ func NewServer(opts Options) *Server {
 		templates:         opts.Templates,
 		documents:         opts.Documents,
 		privacy:           opts.Privacy,
+		passwords:         opts.Passwords,
 		limiters:          opts.Limiters,
 		logger:            opts.Logger,
 		health:            opts.Health,
@@ -106,14 +109,28 @@ func (s *Server) Handler() http.Handler {
 		))
 	}
 
+	// credentialed is authenticated, like read, but charged to the strict
+	// per-IP budget rather than the write one. Guessing a password is guessing
+	// a password whether or not the guesser already holds a session, and no
+	// existing wrapper does both.
+	credentialed := func(h http.HandlerFunc) http.Handler {
+		return s.requireAuth(chain(h,
+			limitBody(s.maxRequestBytes),
+			limitPerIP(s.limiters.Auth, s.trustProxyHeaders, s.logger),
+		))
+	}
+
 	mux.Handle("GET /healthz", http.HandlerFunc(s.handleHealth))
 
 	mux.Handle("POST /v1/auth/register", credentials(s.handleRegister))
 	mux.Handle("POST /v1/auth/login", credentials(s.handleLogin))
 	mux.Handle("POST /v1/auth/refresh", credentials(s.handleRefresh))
 	mux.Handle("POST /v1/auth/logout", credentials(s.handleLogout))
+	mux.Handle("POST /v1/auth/password/forgot", credentials(s.handleForgotPassword))
+	mux.Handle("POST /v1/auth/password/reset", credentials(s.handleResetPassword))
 
 	mux.Handle("GET /v1/me", read(s.handleMe))
+	mux.Handle("POST /v1/me/password", credentialed(s.handleChangePassword))
 	// The data-subject rights of article 18. Erasure is a mutation and is
 	// charged to the write budget; the export is a read, but an expensive one,
 	// so it is charged too.

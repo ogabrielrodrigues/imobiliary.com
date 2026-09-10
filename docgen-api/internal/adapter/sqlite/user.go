@@ -22,12 +22,16 @@ func NewUserRepository(db *DB) *UserRepository {
 }
 
 const userColumns = "id, email, name, password_hash, created_at, updated_at, " +
-	"terms_accepted_at, terms_version"
+	"terms_accepted_at, terms_version, password_changed_at"
 
 // Create inserts a new account, reporting domain.ErrAlreadyExists when the
 // email is taken.
 func (r *UserRepository) Create(ctx context.Context, u *domain.User) error {
-	const query = `INSERT INTO users (` + userColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	// password_changed_at is absent from the insert on purpose: a new account
+	// has not changed its password, and writing its creation time here would be
+	// recording an event that did not happen.
+	const query = `INSERT INTO users (id, email, name, password_hash, created_at,
+		updated_at, terms_accepted_at, terms_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 
 	var acceptedAt *string
 	if u.TermsAcceptedAt != nil {
@@ -68,10 +72,11 @@ func scanUser(row *sql.Row) (*domain.User, error) {
 		createdAt, updatedAt string
 		acceptedAt           *string
 		termsVersion         *string
+		passwordChangedAt    *string
 	)
 
 	err := row.Scan(&rawID, &u.Email, &u.Name, &u.PasswordHash, &createdAt, &updatedAt,
-		&acceptedAt, &termsVersion)
+		&acceptedAt, &termsVersion, &passwordChangedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("user: %w", domain.ErrNotFound)
 	}
@@ -99,6 +104,13 @@ func scanUser(row *sql.Row) (*domain.User, error) {
 	}
 	if termsVersion != nil {
 		u.TermsVersion = *termsVersion
+	}
+	if passwordChangedAt != nil {
+		at, err := parseTime(*passwordChangedAt)
+		if err != nil {
+			return nil, fmt.Errorf("sqlite: parse user password_changed_at: %w", err)
+		}
+		u.PasswordChangedAt = &at
 	}
 	return &u, nil
 }
@@ -344,4 +356,28 @@ func unreferencedHashes(ctx context.Context, tx *sql.Tx, hashes []string) ([]str
 		}
 	}
 	return out, nil
+}
+
+// UpdatePassword replaces the stored hash and records when it changed.
+//
+// The instant is what an access token is later compared against, so it is
+// written in the same statement as the hash: a change recorded without it would
+// leave tokens minted under the old password valid until they expired.
+func (r *UserRepository) UpdatePassword(ctx context.Context, id uuid.UUID, hash string, at time.Time) error {
+	const query = `UPDATE users SET password_hash = ?, password_changed_at = ?, updated_at = ?
+		WHERE id = ?`
+
+	stamp := formatTime(at)
+	result, err := r.db.write.ExecContext(ctx, query, hash, stamp, stamp, idOf(id))
+	if err != nil {
+		return fmt.Errorf("sqlite: update password: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("sqlite: update password: %w", err)
+	}
+	if affected == 0 {
+		return fmt.Errorf("user: %w", domain.ErrNotFound)
+	}
+	return nil
 }

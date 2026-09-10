@@ -12,6 +12,7 @@ import (
 	"time"
 
 	adapterhttp "docgen/internal/adapter/http"
+	"docgen/internal/adapter/mail"
 	"docgen/internal/adapter/sqlite"
 	"docgen/internal/platform/blob"
 	"docgen/internal/platform/config"
@@ -96,6 +97,27 @@ func run(logger *slog.Logger) error {
 		Cache:     cache,
 	})
 
+	// Without a provider key the service logs mail instead of sending it, so a
+	// development run prints the reset link in the terminal and no message can
+	// reach a real person by accident.
+	var mailer usecase.Mailer = mail.NewLogger(logger)
+	if cfg.ResendAPIKey != "" {
+		mailer = mail.NewResend(cfg.ResendAPIKey, cfg.MailFrom)
+	}
+
+	passwordService := usecase.NewPasswords(usecase.PasswordsConfig{
+		Users:      users,
+		Sessions:   sessions,
+		Resets:     sqlite.NewPasswordResetRepository(db),
+		Hasher:     password.NewHasher(),
+		Tokens:     token.NewIssuer(cfg.JWTSecret, cfg.AccessTokenTTL),
+		Mailer:     mailer,
+		AppURL:     cfg.AppURL,
+		ResetTTL:   cfg.PasswordResetTTL,
+		RefreshTTL: cfg.RefreshTokenTTL,
+		Logger:     logger,
+	})
+
 	privacyService := usecase.NewPrivacy(usecase.PrivacyConfig{
 		Users:     users,
 		Templates: templates,
@@ -120,6 +142,7 @@ func run(logger *slog.Logger) error {
 		Templates:         templateService,
 		Documents:         documentService,
 		Privacy:           privacyService,
+		Passwords:         passwordService,
 		Limiters:          limiters,
 		Logger:            logger,
 		Health:            db.Ping,
@@ -128,7 +151,7 @@ func run(logger *slog.Logger) error {
 		TrustProxyHeaders: cfg.TrustProxyHeaders,
 	})
 
-	go purgeExpiredSessions(ctx, sessions, logger)
+	go purgeExpiredSessions(ctx, sessions, sqlite.NewPasswordResetRepository(db), logger)
 
 	httpServer := &http.Server{
 		Addr:              cfg.Addr,
@@ -185,7 +208,7 @@ func newLimiter(rule config.Rule) *ratelimit.Limiter {
 
 // purgeExpiredSessions removes refresh tokens that can no longer be used,
 // keeping the table from growing without bound.
-func purgeExpiredSessions(ctx context.Context, sessions *sqlite.SessionRepository, logger *slog.Logger) {
+func purgeExpiredSessions(ctx context.Context, sessions *sqlite.SessionRepository, resets *sqlite.PasswordResetRepository, logger *slog.Logger) {
 	ticker := time.NewTicker(sessionCleanupInterval)
 	defer ticker.Stop()
 
@@ -201,6 +224,18 @@ func purgeExpiredSessions(ctx context.Context, sessions *sqlite.SessionRepositor
 			}
 			if removed > 0 {
 				logger.Info("purged expired sessions", slog.Int64("count", removed))
+			}
+
+			// Reset tokens are swept by the same tick. They are short-lived and
+			// spent quickly, so leaving them would accumulate rows that prove
+			// nothing anybody needs.
+			spent, err := resets.DeleteExpired(ctx, time.Now().UTC())
+			if err != nil {
+				logger.Warn("purging password resets failed", slog.Any("error", err))
+				continue
+			}
+			if spent > 0 {
+				logger.Info("purged password resets", slog.Int64("count", spent))
 			}
 		}
 	}
