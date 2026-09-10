@@ -77,7 +77,16 @@ function Sidebar({ user }: { readonly user: User }) {
     // any and collapses to nothing when the content overflows.
     <aside className="flex w-52 shrink-0 flex-col gap-6 overflow-y-auto border-r border-border bg-raised px-3.5 py-5">
       {/* Inside the app, home is the model list, not the landing page. */}
-      <Brand to="/templates" className="px-2 text-base" />
+      {/*
+        20px, against the 13.5px of the navigation below: enough of a step to
+        read as the heading of the region rather than another item in the
+        list. At 16px the mark filled a little over half the column and left
+        the rest empty, which is what made it look adrift.
+
+        px-2.5 is the sidebar's one inset — nav links, the account row and the
+        sign-out button all use it, so every left edge lands on the same line.
+      */}
+      <Brand to="/templates" className="px-2.5 text-[20px]" />
 
       <nav aria-label="Seções" className="flex flex-col gap-0.5">
         {NAV.map((item) => {
@@ -108,7 +117,7 @@ function Sidebar({ user }: { readonly user: User }) {
       </nav>
 
       <div className="mt-auto flex flex-col gap-3 border-t border-border pt-3.5">
-        <div className="flex items-center gap-2.5 px-1">
+        <div className="flex items-center gap-2.5 px-2.5">
           <span
             aria-hidden="true"
             className="flex size-7 shrink-0 items-center justify-center rounded-full bg-border text-[11px] font-semibold text-muted-foreground"
