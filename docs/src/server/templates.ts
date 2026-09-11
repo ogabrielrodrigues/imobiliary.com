@@ -23,11 +23,19 @@ import { assertSameOrigin, callContext, docgen, sessions } from "./runtime.ts";
 /** How many versions a picker asks for at once. */
 const VERSION_PAGE_LIMIT = 100;
 
+/**
+ * How many templates the list asks for: the API's largest page. The search on
+ * that screen runs over what was fetched, since the API offers none, so the
+ * list takes as much as one request allows; the screen says when it may have
+ * been cut short.
+ */
+export const TEMPLATE_LIST_LIMIT = 100;
+
 export const listTemplates = createServerFn({ method: "GET" }).handler(
   async (): Promise<Result<Template[]>> =>
     attempt(() =>
       sessions().authorize(callContext(), (ctx) =>
-        docgen().templates.list(ctx),
+        docgen().templates.list(ctx, { limit: TEMPLATE_LIST_LIMIT }),
       ),
     ),
 );

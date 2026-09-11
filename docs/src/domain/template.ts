@@ -102,6 +102,26 @@ export function validateTemplateFile(file: File): FieldError[] {
   return [];
 }
 
+/** Lowercased and stripped of accents, so "Locação" and "locacao" match. */
+function foldForSearch(text: string): string {
+  return text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim();
+}
+
+/**
+ * Whether a template matches what someone typed in the search box.
+ *
+ * Every word must appear somewhere in the name or the description, in any
+ * order, ignoring case and accents: "aditamento locacao" finds "Aditamento de
+ * contrato de locação". An empty query matches everything.
+ */
+export function matchesTemplateSearch(template: Template, query: string): boolean {
+  const words = foldForSearch(query).split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+
+  const haystack = foldForSearch(`${template.name} ${template.description}`);
+  return words.every((word) => haystack.includes(word));
+}
+
 /** Renders a byte count the way the interface shows it, e.g. "1,2 MB". */
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
