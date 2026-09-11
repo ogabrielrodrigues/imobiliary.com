@@ -1,4 +1,5 @@
-import { IconFileText, IconSearch, IconUpload } from "@tabler/icons-react";
+import { IconFileText, IconSearch, IconUpload, IconX } from "@tabler/icons-react";
+import { useRef } from "react";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 
@@ -93,8 +94,12 @@ function TemplatesPage() {
 }
 
 /**
- * The search box. type="search" gives the browser's own clear button and lets
- * Escape empty it.
+ * The search box.
+ *
+ * The browser's own clear button is hidden: it is drawn by the browser, blue
+ * and unlike anything else here, and differs between browsers. The one in its
+ * place is the app's ghost icon button, shown only when there is something to
+ * clear. Escape clears too, as it does in a native search field.
  */
 function SearchBox({
   value,
@@ -103,6 +108,14 @@ function SearchBox({
   readonly value: string;
   readonly onChange: (value: string) => void;
 }) {
+  const input = useRef<HTMLInputElement>(null);
+
+  function clear() {
+    onChange("");
+    // Back to the field, so clearing and typing again is one motion.
+    input.current?.focus();
+  }
+
   return (
     <div role="search" className="relative w-full sm:w-64">
       <IconSearch
@@ -110,6 +123,7 @@ function SearchBox({
         className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-faint"
       />
       <Input
+        ref={input}
         type="search"
         aria-label="Buscar modelos"
         placeholder="Buscar modelos"
@@ -121,8 +135,26 @@ function SearchBox({
           const next = event.currentTarget.value;
           onChange(next);
         }}
-        className="pl-9"
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && value !== "") {
+            event.preventDefault();
+            clear();
+          }
+        }}
+        className="pr-9 pl-9 [&::-webkit-search-cancel-button]:appearance-none"
       />
+      {value !== "" && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          aria-label="Limpar busca"
+          onClick={clear}
+          className="absolute top-1/2 right-1.5 -translate-y-1/2 text-muted-foreground"
+        >
+          <IconX aria-hidden="true" className="size-3.5" />
+        </Button>
+      )}
     </div>
   );
 }
