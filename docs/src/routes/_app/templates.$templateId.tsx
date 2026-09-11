@@ -41,6 +41,7 @@ import {
 } from "@/domain/template";
 import { saveFile } from "@/lib/download";
 import { blurThenChange, formErrors, visibleError } from "@/lib/form";
+import { templateProblem } from "@/lib/template-errors";
 import { relativeDate } from "@/lib/format";
 import { queryKeys } from "@/queries/keys";
 import { invalidateAfter, templateContentQuery } from "@/queries/options";
@@ -551,7 +552,11 @@ function PublishVersion({
               // Picking a file is finishing with the field.
               field.handleBlur();
             }}
-            error={messageFor(failure, "file") ?? visibleError(field.state.meta, submitted)}
+            error={
+              messageFor(failure, "file") ??
+              templateProblem(failure) ??
+              visibleError(field.state.meta, submitted)
+            }
           />
         )}
       </form.Field>

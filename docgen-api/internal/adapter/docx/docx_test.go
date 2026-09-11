@@ -329,6 +329,60 @@ func TestCompileRejectsUnsupportedConstructs(t *testing.T) {
 	}
 }
 
+// TestCompileNamesMalformedPlaceholders covers the typo that used to come back
+// as the parser's "bad character U+007D '}'": the report must quote the
+// fragment the author has to fix. The first case is the one that was found in
+// a real contract, next to a well-formed placeholder and split across runs.
+func TestCompileNamesMalformedPlaceholders(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"one closing brace", runs("RG {{.locatario_", "identidade} {{.emissor}}"), `"{{.locatario_identidade}"`},
+		{"never closed", runs("CPF {{.cpf e mais texto"), `"{{.cpf e mais texto"`},
+		{"stray opening brace", runs("{{.nome{}}"), `"{{.nome{"`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			source := buildDOCX(t, map[string]string{
+				"word/document.xml": documentWith(tc.body),
+			})
+
+			normalized, err := Normalize(source)
+			if err != nil {
+				t.Fatalf("normalize: %v", err)
+			}
+			_, err = Compile(normalized)
+			if !errors.Is(err, domain.ErrValidation) {
+				t.Fatalf("Compile() error = %v, want a validation error", err)
+			}
+			if !strings.Contains(err.Error(), "malformed placeholder "+tc.want) {
+				t.Errorf("Compile() error = %q, want it to quote %s", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestCompileAcceptsRepeatedPlaceholders(t *testing.T) {
+	source := buildDOCX(t, map[string]string{
+		"word/document.xml": documentWith(runs("{{.nome}} e {{.data}}, depois {{.nome}} de novo em {{.data}}")),
+	})
+
+	normalized, err := Normalize(source)
+	if err != nil {
+		t.Fatalf("normalize: %v", err)
+	}
+	tpl, err := Compile(normalized)
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	if got := tpl.Placeholders(); !slices.Equal(got, []string{"data", "nome"}) {
+		t.Errorf("Placeholders() = %v, want each name once", got)
+	}
+}
+
 // TestRenderRejectsMissingValue relies on missingkey=error as the last line of
 // defence, behind the explicit validation performed by the use case.
 func TestRenderRejectsMissingValue(t *testing.T) {

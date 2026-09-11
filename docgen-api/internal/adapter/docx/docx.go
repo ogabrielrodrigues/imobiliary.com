@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"sort"
 	"strings"
 	"text/template"
@@ -122,6 +123,16 @@ func Compile(src []byte) (*Template, error) {
 		part, err := readPart(f)
 		if err != nil {
 			return nil, err
+		}
+
+		// An unclosed or over-closed placeholder is the commonest typo, and the
+		// parser's own report of it ("bad character U+007D '}'") names neither
+		// the placeholder nor where it is. Report the fragment instead.
+		if broken := malformedPlaceholders(string(part)); len(broken) > 0 {
+			for _, fragment := range broken {
+				invalid.Addf("template", "%s has a malformed placeholder %q; write each one as {{.field_name}}", f.Name, fragment)
+			}
+			continue
 		}
 
 		parsed, err := template.New(f.Name).Option("missingkey=error").Parse(string(part))
@@ -279,6 +290,73 @@ func validation(message string) error {
 	v := &domain.ValidationError{}
 	v.Add("template", message)
 	return v
+}
+
+// maxMalformedReported caps how many broken placeholders one part reports: a
+// document with dozens of them needs fixing either way, and the list should
+// stay readable.
+const maxMalformedReported = 5
+
+// maxFragmentRunes bounds the text quoted from an action that never closes.
+const maxFragmentRunes = 40
+
+// xmlTag matches one XML tag, so a part can be read as its text alone.
+var xmlTag = regexp.MustCompile(`<[^>]*>`)
+
+// malformedPlaceholders returns the text of every action in an XML part that
+// is not closed by exactly "}}" before the next one opens: "{{.name}" with a
+// single brace, "{{.name" never closed, or a stray "{" or "}" inside. Each
+// fragment runs from its "{{" to the first brace that breaks it, which is the
+// part an author has to find and fix.
+//
+// Tags are removed first. Normalization joins a well-formed action into one
+// run, but a broken one can still be spread across several.
+func malformedPlaceholders(part string) []string {
+	text := xmlTag.ReplaceAllString(part, "")
+
+	var found []string
+	seen := make(map[string]bool)
+	for i := 0; i < len(text) && len(found) < maxMalformedReported; {
+		open := strings.Index(text[i:], actionOpen)
+		if open < 0 {
+			break
+		}
+		open += i
+		body := text[open+len(actionOpen):]
+
+		shut := strings.Index(body, actionClose)
+		if shut >= 0 && !strings.ContainsAny(body[:shut], "{}") {
+			i = open + len(actionOpen) + shut + len(actionClose)
+			continue
+		}
+
+		// Up to and including the first stray brace; failing that, a bounded
+		// stretch of what follows the unclosed "{{".
+		var fragment string
+		if stray := strings.IndexAny(body, "{}"); stray >= 0 && (shut < 0 || stray <= shut) {
+			fragment = text[open : open+len(actionOpen)+stray+1]
+		} else {
+			fragment = actionOpen + truncateRunes(body, maxFragmentRunes)
+		}
+		fragment = strings.TrimSpace(fragment)
+		if !seen[fragment] {
+			seen[fragment] = true
+			found = append(found, fragment)
+		}
+		i = open + len(actionOpen)
+	}
+	return found
+}
+
+// truncateRunes cuts s to at most n runes, never inside a UTF-8 sequence.
+func truncateRunes(s string, n int) string {
+	for i := range s {
+		if n == 0 {
+			return s[:i]
+		}
+		n--
+	}
+	return s
 }
 
 // cleanParseError strips the internal part name from a parse error, which would

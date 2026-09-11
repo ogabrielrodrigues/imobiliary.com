@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { validateTemplateUpload } from "@/domain/template";
 import type { Template } from "@/domain/template";
 import { blurThenChange, formErrors, visibleError } from "@/lib/form";
+import { templateProblem } from "@/lib/template-errors";
 import { invalidateAfter } from "@/queries/options";
 import { createTemplate } from "@/server/templates";
 
@@ -160,7 +161,11 @@ function NewTemplatePage() {
                   field.handleBlur();
                 }}
                 error={
-                  messageFor(failure, "file") ?? visibleError(field.state.meta, submitted)
+                  // The API reports a problem inside the document under
+                  // `template`; it belongs on the file, where it can be seen.
+                  messageFor(failure, "file") ??
+                  templateProblem(failure) ??
+                  visibleError(field.state.meta, submitted)
                 }
               />
             )}
