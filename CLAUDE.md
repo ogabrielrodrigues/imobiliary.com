@@ -132,6 +132,11 @@ component base (not Radix), `-t start` the framework template.
 - Dependencies it pulled in: `@base-ui/react` (the point of `-b base`),
   `class-variance-authority`, `cn`, `tw-animate-css`, and
   `shadcn` itself for `shadcn/tailwind.css`.
+- **A Fontsource variable package registers "<Name> Variable"**, not the
+  plain name. `--font-sans` said "Figtree" until 2026-09-11, which matched no
+  loaded face, so the platform rendered in the system font the whole time;
+  `document.fonts` showed zero loaded faces. Always put the "… Variable"
+  name first, and check `document.fonts` after changing a font.
 - **The fonts are self-hosted**, via `@fontsource-variable/figtree` and
   `@fontsource-variable/jetbrains-mono`, imported in `src/styles/app.css`. They
   were on Google Fonts until the LGPD pass: that sent every visitor's address to

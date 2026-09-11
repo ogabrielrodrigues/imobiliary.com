@@ -190,8 +190,15 @@
 }
 
 @theme inline {
-  --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  /*
+    The self-hosted packages register their faces as "<Name> Variable", and
+    only that name loads the files. Asking for plain "Figtree" matched nothing,
+    so the page silently fell back to the system font for as long as that was
+    written. The plain names stay second, for a machine that has the font
+    installed and a stylesheet that somehow failed to load.
+  */
+  --font-sans: "Figtree Variable", "Figtree", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
