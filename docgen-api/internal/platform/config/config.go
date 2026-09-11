@@ -72,7 +72,10 @@ type Config struct {
 // everything except the JWT secret, which has no safe default.
 func Load() (*Config, error) {
 	cfg := &Config{
-		Addr:              env("DOCGEN_ADDR", ":8080"),
+		// Loopback by default. The API is meant to be reachable only by the
+		// platform, and with DOCGEN_TRUST_PROXY_HEADERS on, anyone who can reach
+		// it directly can forge X-Forwarded-For. Exposing it takes a decision.
+		Addr:              env("DOCGEN_ADDR", "127.0.0.1:8080"),
 		DatabasePath:      env("DOCGEN_DB_PATH", "data/docgen.db"),
 		BlobDir:           env("DOCGEN_BLOB_DIR", "data/blobs"),
 		JWTSecret:         []byte(os.Getenv("DOCGEN_JWT_SECRET")),

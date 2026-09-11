@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 // cheapParams keep the tests fast. Cost is what makes argon2 useful in
@@ -128,5 +129,35 @@ func TestHasherUsesDefaultParams(t *testing.T) {
 	}
 	if err := hasher.Verify("a different password", encoded); !errors.Is(err, ErrMismatch) {
 		t.Errorf("Verify with a wrong password = %v, want ErrMismatch", err)
+	}
+}
+
+// TestHasherBoundsConcurrentDerivations covers the memory guard: once every
+// slot is taken, the next derivation waits instead of allocating its own
+// working set, and it proceeds as soon as one is released.
+func TestHasherBoundsConcurrentDerivations(t *testing.T) {
+	h := NewHasher()
+	for range MaxConcurrentHashes {
+		h.acquire()
+	}
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = h.Hash("a-sufficiently-long-password")
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		t.Fatal("a derivation ran while every slot was taken")
+	case <-time.After(150 * time.Millisecond):
+	}
+
+	h.release()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the waiting derivation never got the freed slot")
 	}
 }

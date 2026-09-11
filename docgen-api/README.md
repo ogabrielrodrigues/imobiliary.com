@@ -46,7 +46,7 @@ go run ./cmd/docgen
 | Variable | Default | Meaning |
 |---|---|---|
 | `DOCGEN_JWT_SECRET` | *required* | HMAC key, at least 32 bytes |
-| `DOCGEN_ADDR` | `:8080` | Listen address |
+| `DOCGEN_ADDR` | `127.0.0.1:8080` | Listen address. Loopback on purpose: the API should be reachable only by the platform |
 | `DOCGEN_DB_PATH` | `data/docgen.db` | SQLite file |
 | `DOCGEN_BLOB_DIR` | `data/blobs` | Document storage directory |
 | `DOCGEN_ACCESS_TTL` | `15m` | Access token lifetime |

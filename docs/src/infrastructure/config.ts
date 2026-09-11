@@ -42,7 +42,7 @@ export function getConfig(): Config {
   }
 
   cached = {
-    apiUrl: process.env["DOCGEN_API_URL"] ?? "http://localhost:8080",
+    apiUrl: process.env["DOCGEN_API_URL"] ?? "http://127.0.0.1:8080",
     sessionSecret,
     trustProxyHeaders: process.env["TRUST_PROXY_HEADERS"] === "true",
     isProduction: process.env["NODE_ENV"] === "production",

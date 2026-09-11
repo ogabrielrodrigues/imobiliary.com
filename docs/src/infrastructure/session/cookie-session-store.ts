@@ -17,6 +17,17 @@ import { getConfig } from "../config.ts";
 const COOKIE_NAME = "imobiliary_docs_session";
 
 /**
+ * How long the cookie, and the seal inside it, stay valid: 30 days.
+ *
+ * It matches the API default for DOCGEN_REFRESH_TTL, which is the longest
+ * the session inside could be of any use anyway. Without it the cookie had
+ * no expiry and its seal never lapsed, so a stolen copy stayed decryptable
+ * forever and browsers that restore sessions kept it indefinitely. Change
+ * both together.
+ */
+const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+
+/**
  * What actually goes in the cookie.
  *
  * Instants are stored as ISO strings because the cookie is JSON: a Date would
@@ -42,6 +53,8 @@ function sessionConfig() {
   return {
     name: COOKIE_NAME,
     password: config.sessionSecret,
+    // Sets both the cookie Max-Age and the lifetime of the seal itself.
+    maxAge: SESSION_MAX_AGE_SECONDS,
     cookie: {
       httpOnly: true,
       // Lax rather than Strict so that arriving from an external link keeps the

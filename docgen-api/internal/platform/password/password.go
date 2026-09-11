@@ -119,19 +119,41 @@ func decode(encoded string) (p Params, salt, key []byte, err error) {
 // layer declares, so that layer depends on a behaviour rather than on argon2.
 type Hasher struct {
 	params Params
+	// slots bounds how many derivations run at once across the process.
+	slots chan struct{}
 }
+
+// MaxConcurrentHashes caps simultaneous derivations.
+//
+// Each one holds DefaultParams.Memory (19 MiB) for its duration. The per-IP
+// limit on the credential endpoints bounds one client, not many: a flood
+// from enough addresses would otherwise hold that much memory per request
+// until the process is killed. Eight keeps the worst case near 152 MiB; the
+// ninth caller waits for a slot instead of allocating its own.
+const MaxConcurrentHashes = 8
 
 // NewHasher returns a Hasher using DefaultParams.
 func NewHasher() *Hasher {
-	return &Hasher{params: DefaultParams}
+	return &Hasher{params: DefaultParams, slots: make(chan struct{}, MaxConcurrentHashes)}
 }
 
 // Hash derives an encoded hash for the password.
 func (h *Hasher) Hash(plain string) (string, error) {
+	h.acquire()
+	defer h.release()
 	return HashWithParams(plain, h.params)
 }
 
 // Verify reports whether plain matches the encoded hash.
+//
+// It goes through the same slots as Hash, and that includes the dummy
+// verification Login runs for unknown addresses: those cost exactly as
+// much memory as real ones, which is the point of them.
 func (h *Hasher) Verify(plain, encoded string) error {
+	h.acquire()
+	defer h.release()
 	return Verify(plain, encoded)
 }
+
+func (h *Hasher) acquire() { h.slots <- struct{}{} }
+func (h *Hasher) release() { <-h.slots }
