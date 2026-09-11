@@ -171,9 +171,11 @@ function PrivacyPolicyPage() {
           consentimento para usá-lo — informamos.
         </P>
         <P>
-          Guardamos ainda, no armazenamento local do seu navegador, um único
-          registro indicando que você já dispensou o aviso de cookies. Ele não
-          identifica ninguém e nunca é enviado a nós.
+          Guardamos ainda, no armazenamento local do seu navegador, até dois
+          registros: um indicando que você já dispensou o aviso de cookies, e
+          outro com as suas preferências de acessibilidade — tamanho do texto,
+          contraste e animações —, se você alterar alguma em Ajustes. Nenhum
+          deles identifica ninguém, e nenhum é enviado a nós.
         </P>
         <P>
           Não usamos cookies de análise, de publicidade ou de terceiros. Não há
@@ -298,7 +300,7 @@ function PrivacyPolicyPage() {
         <LegalList>
           <li>
             <strong className="text-foreground">Acesso e portabilidade:</strong>{" "}
-            em <em>Meus dados</em>, dentro da sua conta, você baixa um arquivo
+            em <em>Ajustes › Meus dados</em>, dentro da sua conta, você baixa um arquivo
             com tudo o que guardamos, em formato aberto e legível.
           </li>
           <li>

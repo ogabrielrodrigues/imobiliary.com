@@ -69,7 +69,7 @@ hospedagem de fontes: o navegador do visitante não contata host de terceiro.
 
 | Direito | Como é exercido |
 |---|---|
-| Confirmação e acesso | `GET /v1/me/export` — tela "Meus dados" |
+| Confirmação e acesso | `GET /v1/me/export` — tela "Ajustes › Meus dados" |
 | Portabilidade | idem, JSON aberto |
 | Eliminação da conta | `DELETE /v1/me` — apaga registros **e arquivos** |
 | Eliminação de um documento | `DELETE /v1/documents/{id}` |

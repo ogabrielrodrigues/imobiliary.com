@@ -27,6 +27,7 @@ export const Route = createFileRoute("/robots.txt")({
             "# a redirect to the sign-in form.",
             "Disallow: /templates",
             "Disallow: /documentos",
+            "Disallow: /ajustes",
             "Disallow: /meus-dados",
             "",
             "# Reached only from a private link, and the address carries a token.",

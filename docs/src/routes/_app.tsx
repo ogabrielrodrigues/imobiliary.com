@@ -6,11 +6,12 @@ import {
   useNavigate,
   useRouterState,
 } from "@tanstack/react-router";
-import { cn } from "@/lib/utils";
+import { Settings } from "lucide-react";
 
 import { Brand } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import type { User } from "@/domain/user";
+import { cn } from "@/lib/utils";
 import { currentUser, logout } from "@/server/auth";
 
 export const Route = createFileRoute("/_app")({
@@ -38,7 +39,6 @@ export const Route = createFileRoute("/_app")({
 const NAV = [
   { to: "/templates", label: "Templates" },
   { to: "/documentos", label: "Documentos" },
-  { to: "/meus-dados", label: "Meus dados" },
 ] as const;
 
 function AppShell() {
@@ -118,6 +118,27 @@ function Sidebar({ user }: { readonly user: User }) {
       </nav>
 
       <div className="mt-auto flex flex-col gap-3 border-t border-border pt-3.5">
+        {/*
+          Account-level settings sit with the account, not with the work. A nav
+          of its own, so a screen reader lists it as a separate landmark from
+          the sections above.
+        */}
+        <nav aria-label="Conta">
+          <Link
+            to="/ajustes"
+            aria-current={pathname.startsWith("/ajustes") ? "page" : undefined}
+            className={cn(
+              "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-control transition-colors",
+              pathname.startsWith("/ajustes")
+                ? "bg-muted font-medium text-foreground"
+                : "text-muted-foreground hover:bg-row-hover hover:text-foreground",
+            )}
+          >
+            <Settings aria-hidden="true" className="size-4 shrink-0" />
+            Ajustes
+          </Link>
+        </nav>
+
         <div className="flex items-center gap-2.5 px-2.5">
           <span
             aria-hidden="true"

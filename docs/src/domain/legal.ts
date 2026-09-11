@@ -58,8 +58,8 @@ export const PRIVACY_POLICY: LegalDocument = {
   // 1.1 names Resend as a processor and declares the international transfer
   // that sending a password-reset mail entails. The terms did not change, so
   // their version did not either.
-  version: "1.1",
-  effectiveFrom: "2026-09-10",
+  version: "1.2",
+  effectiveFrom: "2026-09-11",
 };
 
 export const TERMS_OF_USE: LegalDocument = {
