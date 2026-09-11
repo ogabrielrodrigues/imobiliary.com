@@ -26,17 +26,17 @@ export function LegalPage({
           aria-label="Principal"
           className="mx-auto flex max-w-3xl items-center gap-6 px-6 py-4"
         >
-          <Brand to="/" className="text-[18px]" />
+          <Brand to="/" className="text-title-sm" />
         </nav>
       </header>
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-6">
         <article className="flex flex-col gap-6 py-16">
           <header className="flex flex-col gap-2">
-            <h1 className="text-[30px] font-semibold leading-[1.15] tracking-[-0.02em]">
+            <h1 className="text-headline font-semibold leading-[1.15] tracking-[-0.02em]">
               {document.title}
             </h1>
-            <p className="font-mono text-[11px] tracking-[0.1em] text-faint uppercase">
+            <p className="font-mono text-label tracking-[0.1em] text-faint uppercase">
               Versão {document.version} · em vigor desde{" "}
               {formatEffectiveDate(document.effectiveFrom)}
             </p>
@@ -61,7 +61,7 @@ export function LegalSection({
 }) {
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="mt-4 text-[19px] font-semibold tracking-[-0.01em]">
+      <h2 className="mt-4 text-title-md font-semibold tracking-[-0.01em]">
         {title}
       </h2>
       {children}
@@ -72,7 +72,7 @@ export function LegalSection({
 /** A paragraph of a legal text, at reading size rather than interface size. */
 export function P({ children }: { readonly children: ReactNode }) {
   return (
-    <p className="text-[15px] leading-relaxed text-muted-foreground">
+    <p className="text-lead leading-relaxed text-muted-foreground">
       {children}
     </p>
   );
@@ -81,7 +81,7 @@ export function P({ children }: { readonly children: ReactNode }) {
 /** A list where each item is a distinct commitment or category. */
 export function LegalList({ children }: { readonly children: ReactNode }) {
   return (
-    <ul className="flex list-disc flex-col gap-2 pl-5 text-[15px] leading-relaxed text-muted-foreground marker:text-faint">
+    <ul className="flex list-disc flex-col gap-2 pl-5 text-lead leading-relaxed text-muted-foreground marker:text-faint">
       {children}
     </ul>
   );
@@ -99,7 +99,7 @@ export function LegalFooter() {
     // The extra bottom padding is the room the cookie notice is occupying, if
     // any. Without it the notice sits squarely on top of these links.
     <footer className="border-t border-border pb-[var(--cookie-notice-space,0px)]">
-      <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-x-5 gap-y-2 px-6 py-6 text-[13px] text-faint">
+      <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-x-5 gap-y-2 px-6 py-6 text-small text-faint">
         <span>Uma subplataforma do Imobiliary.</span>
         <Link to="/privacidade" className="ml-auto hover:text-foreground">
           Política de Privacidade

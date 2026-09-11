@@ -23,7 +23,7 @@ export function AuthLayout({
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-8 px-6 py-16">
         <header className="flex flex-col gap-3">
           {/* Nobody is signed in on these screens, so home is the landing page. */}
-          <Brand to="/" className="text-[22px]" />
+          <Brand to="/" className="text-title-lg" />
           <div className="flex flex-col gap-1.5">
             <h1 className="text-balance text-2xl font-semibold tracking-[-0.015em]">
               {title}
@@ -39,7 +39,7 @@ export function AuthLayout({
         {summary != null && (
           <p
             role="alert"
-            className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-[13px] text-destructive"
+            className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-small text-destructive"
           >
             {summary}
           </p>
@@ -47,7 +47,7 @@ export function AuthLayout({
 
         {children}
 
-        <p className="text-[13px] text-muted-foreground">{footer}</p>
+        <p className="text-small text-muted-foreground">{footer}</p>
       </main>
 
       {/*

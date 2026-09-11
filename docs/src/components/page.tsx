@@ -57,7 +57,7 @@ export function LoadFailure({ failure }: { readonly failure: Failure }) {
       {failure.kind === "authentication" && (
         <Link
           to="/entrar"
-          className="rounded-md text-[13px] font-semibold text-primary hover:underline"
+          className="rounded-md text-small font-semibold text-primary hover:underline"
         >
           Entrar novamente
         </Link>
@@ -79,7 +79,7 @@ export function EmptyState({
   return (
     <div className="flex flex-col items-start gap-3 rounded-lg border border-border bg-card px-5 py-6">
       <p className="text-sm font-semibold">{title}</p>
-      <p className="max-w-prose text-[12.5px] leading-relaxed text-muted-foreground">
+      <p className="max-w-prose text-caption leading-relaxed text-muted-foreground">
         {description}
       </p>
       {action}
@@ -118,12 +118,17 @@ export function StatusPill({
 }
 
 /** The small square that marks a .docx, as the design draws it. */
-export function DocxIcon({ size = 34 }: { readonly size?: number }) {
+export function DocxIcon({
+  size = 34,
+}: {
+  /** In px at the default font size; rendered in rem so it grows with the text. */
+  readonly size?: number;
+}) {
   return (
     <span
       aria-hidden="true"
-      style={{ width: size, height: size }}
-      className="flex shrink-0 items-center justify-center rounded-md border border-border-strong bg-muted font-mono text-[10px] font-medium text-docs"
+      style={{ width: `${size / 16}rem`, height: `${size / 16}rem` }}
+      className="flex shrink-0 items-center justify-center rounded-md border border-border-strong bg-muted font-mono text-micro font-medium text-docs"
     >
       docx
     </span>

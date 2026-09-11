@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 
 import type { Block, Marks, Segment } from "@/domain/block";
 import { humanize, placeholderSyntax } from "@/domain/placeholder";
@@ -52,7 +52,7 @@ export function DocumentPreview({
 const BLOCK_CLASS: Record<Block["type"], string> = {
   heading1: "text-2xl font-semibold tracking-[-0.015em]",
   heading2: "text-lg font-semibold",
-  heading3: "text-[15px] font-semibold",
+  heading3: "text-lead font-semibold",
   paragraph: "text-sm leading-[1.7]",
 };
 

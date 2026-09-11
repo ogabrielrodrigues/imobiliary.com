@@ -57,7 +57,7 @@ function DocumentsPage() {
         {summary != null && (
           <p
             role="alert"
-            className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-[13px] text-destructive"
+            className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-small text-destructive"
           >
             {summary}
           </p>
@@ -92,7 +92,7 @@ function DocumentsPage() {
                       <th
                         key={heading || `actions-${index}`}
                         scope="col"
-                        className="px-5 py-3 font-mono text-[11px] font-medium tracking-[0.08em] whitespace-nowrap text-faint uppercase"
+                        className="px-5 py-3 font-mono text-label font-medium tracking-[0.08em] whitespace-nowrap text-faint uppercase"
                       >
                         {heading === "" ? (
                           <span className="sr-only">Ações</span>
@@ -135,9 +135,9 @@ function DocumentRow({
 
   return (
     <tr className="border-b border-muted transition-colors last:border-b-0 hover:bg-row-hover">
-      <td className="px-5 py-3.5 text-[13.5px]">{document.filename}</td>
+      <td className="px-5 py-3.5 text-control">{document.filename}</td>
 
-      <td className="px-5 py-3.5 text-[13px] text-muted-foreground">
+      <td className="px-5 py-3.5 text-small text-muted-foreground">
         {templateName === null ? (
           // The template was deleted, or sits beyond the page fetched to
           // resolve names. Saying so beats printing a bare identifier.
@@ -151,18 +151,18 @@ function DocumentRow({
             {templateName}
           </Link>
         )}
-        <span className="ml-2 font-mono text-[11.5px] text-faint">
+        <span className="ml-2 font-mono text-meta text-faint">
           v{document.templateVersion}
         </span>
       </td>
 
-      <td className="px-5 py-3.5 text-[13px] whitespace-nowrap text-muted-foreground">
+      <td className="px-5 py-3.5 text-small whitespace-nowrap text-muted-foreground">
         <time dateTime={document.createdAt.toISOString()}>
           {shortDateTime(document.createdAt)}
         </time>
       </td>
 
-      <td className="px-5 py-3.5 font-mono text-[12.5px] tabular-nums whitespace-nowrap text-muted-foreground">
+      <td className="px-5 py-3.5 font-mono text-caption tabular-nums whitespace-nowrap text-muted-foreground">
         {formatBytes(document.size)}
       </td>
 

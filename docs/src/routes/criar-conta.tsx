@@ -119,7 +119,7 @@ function SignUpPage() {
           any request is made and a screen reader announces it as a choice.
           The acceptance is recorded server-side with its version.
         */}
-        <label className="flex items-start gap-2.5 text-[13px] leading-relaxed text-muted-foreground">
+        <label className="flex items-start gap-2.5 text-small leading-relaxed text-muted-foreground">
           <input
             type="checkbox"
             name="terms"

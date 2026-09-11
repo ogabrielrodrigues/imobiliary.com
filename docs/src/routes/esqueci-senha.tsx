@@ -79,7 +79,7 @@ function ForgotPasswordPage() {
           form to find out who has an account here.
         */}
         <div className="flex flex-col gap-4">
-          <p className="text-[13.5px] leading-relaxed text-muted-foreground">
+          <p className="text-control leading-relaxed text-muted-foreground">
             O link vale por 30 minutos e só pode ser usado uma vez. Se não
             chegar, confira a caixa de spam antes de pedir outro.
           </p>

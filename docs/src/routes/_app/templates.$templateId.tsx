@@ -5,7 +5,7 @@ import {
   useNavigate,
   useRouter,
 } from "@tanstack/react-router";
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 import { Trash2 } from "lucide-react";
 
 import { messageFor, summaryOf, type Failure } from "@/application/result";
@@ -242,7 +242,7 @@ function GenerateScreen({
             </Button>
             <Link
               to="/templates"
-              className="rounded-md px-3 py-2 text-[13px] text-muted-foreground hover:text-foreground"
+              className="rounded-md px-3 py-2 text-small text-muted-foreground hover:text-foreground"
             >
               Voltar
             </Link>
@@ -254,7 +254,7 @@ function GenerateScreen({
       />
 
       <PageBody>
-        <div className="flex flex-wrap items-center gap-3 text-[13px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-3 text-small text-muted-foreground">
           <DocxIcon size={28} />
           <span>Versão {shown}</span>
           <Dot />
@@ -271,7 +271,7 @@ function GenerateScreen({
           {template.version && (
             <>
               <Dot />
-              <span className="font-mono text-[12px]">
+              <span className="font-mono text-fine">
                 {formatBytes(template.version.size)}
               </span>
             </>
@@ -279,7 +279,7 @@ function GenerateScreen({
         </div>
 
         {pinned && (
-          <p className="max-w-3xl rounded-md border border-docs/35 bg-docs/10 px-4 py-3 text-[13px] text-docs">
+          <p className="max-w-3xl rounded-md border border-docs/35 bg-docs/10 px-4 py-3 text-small text-docs">
             Você está vendo a versão {shown}. A atual é a{" "}
             {template.latestVersion}, e o documento gerado aqui usará a{" "}
             {shown}.{" "}
@@ -303,7 +303,7 @@ function GenerateScreen({
         {summary != null && (
           <p
             role="alert"
-            className="max-w-3xl rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-[13px] text-destructive"
+            className="max-w-3xl rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-small text-destructive"
           >
             {summary}
           </p>
@@ -328,7 +328,7 @@ function GenerateScreen({
             />
           ) : (
             <>
-              <p className="text-[12.5px] text-faint">
+              <p className="text-caption text-faint">
                 Clique em um campo no documento para preenchê-lo. Esta é uma
                 leitura simplificada do modelo — o arquivo gerado mantém a
                 formatação original do Word.
@@ -379,12 +379,12 @@ function VersionPicker({
   readonly onChange: (version: number) => void;
 }) {
   return (
-    <label className="flex items-center gap-2 text-[13px] text-muted-foreground">
+    <label className="flex items-center gap-2 text-small text-muted-foreground">
       <span className="sr-only">Versão do modelo</span>
       <select
         value={shown}
         onChange={(event) => onChange(Number(event.currentTarget.value))}
-        className="h-[34px] rounded-md border border-border-strong bg-input px-2.5 text-[13px] text-foreground outline-none focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring/20"
+        className="h-8.5 rounded-md border border-border-strong bg-input px-2.5 text-small text-foreground outline-none focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring/20"
       >
         {versions.map((version) => (
           <option key={version.id} value={version.version}>
@@ -478,7 +478,7 @@ function PublishVersion({
     >
       <div className="flex flex-col gap-1">
         <h2 className="text-sm font-semibold">Publicar nova versão</h2>
-        <p className="text-[12.5px] text-faint">
+        <p className="text-caption text-faint">
           Envie um .docx atualizado. Ele vira a versão{" "}
           {template.latestVersion + 1}; as anteriores continuam disponíveis e os
           documentos já gerados não mudam.
@@ -492,7 +492,7 @@ function PublishVersion({
       />
 
       {failure && messageFor(failure, "file") === undefined && (
-        <p role="alert" className="text-[12.5px] text-destructive">
+        <p role="alert" className="text-caption text-destructive">
           {summaryOf(failure)}
         </p>
       )}
@@ -581,7 +581,7 @@ function DeleteTemplate({ template }: { readonly template: Template }) {
             </AlertDialogHeader>
 
             {failure && (
-              <p role="alert" className="text-[12.5px] text-destructive">
+              <p role="alert" className="text-caption text-destructive">
                 {summaryOf(failure)}
               </p>
             )}
@@ -622,7 +622,7 @@ function Checklist({
 
   return (
     <details className="rounded-lg border border-border bg-card px-5 py-4">
-      <summary className="cursor-pointer text-[13px] font-medium text-muted-foreground marker:text-faint">
+      <summary className="cursor-pointer text-small font-medium text-muted-foreground marker:text-faint">
         Campos ·{" "}
         <span aria-live="polite" className="text-foreground">
           {filled} de {placeholders.length} preenchidos
@@ -633,7 +633,7 @@ function Checklist({
         {groupPlaceholders(placeholders).map((group) => (
           <section key={group.key ?? "__loose"} className="flex flex-col gap-2">
             {group.label !== null && (
-              <h3 className="font-mono text-[11px] font-medium tracking-[0.1em] text-faint uppercase">
+              <h3 className="font-mono text-label font-medium tracking-[0.1em] text-faint uppercase">
                 {group.label}
               </h3>
             )}
@@ -681,7 +681,7 @@ function FallbackForm({
 }) {
   if (placeholders.length === 0) {
     return (
-      <p className="text-[13px] text-muted-foreground">
+      <p className="text-small text-muted-foreground">
         Este modelo não declara nenhum campo, então não há o que preencher.
       </p>
     );
@@ -689,7 +689,7 @@ function FallbackForm({
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
-      <p className="text-[12.5px] text-faint">
+      <p className="text-caption text-faint">
         Não foi possível exibir o conteúdo deste modelo, então os campos vêm
         listados. A geração funciona normalmente.
       </p>
@@ -700,7 +700,7 @@ function FallbackForm({
           className="flex flex-col gap-4 border-0 p-0"
         >
           {group.label !== null && (
-            <legend className="font-mono text-[11px] font-medium tracking-[0.1em] text-faint uppercase">
+            <legend className="font-mono text-label font-medium tracking-[0.1em] text-faint uppercase">
               {group.label}
             </legend>
           )}

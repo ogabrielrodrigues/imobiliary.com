@@ -43,7 +43,7 @@ function PrivacySettingsPage() {
     <>
       <PageHeader title="Meus dados" />
       <PageBody>
-        <p className="max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
+        <p className="max-w-2xl text-small leading-relaxed text-muted-foreground">
           A Lei n.º 13.709/2018 (LGPD) garante a você o direito de acessar,
           levar consigo e eliminar seus dados. As duas coisas abaixo são
           imediatas — não passam por pedido nem por análise. Os detalhes de o
@@ -58,7 +58,7 @@ function PrivacySettingsPage() {
         <ExportPanel />
         <DeletePanel />
 
-        <p className="max-w-2xl text-[12.5px] leading-relaxed text-faint">
+        <p className="max-w-2xl text-caption leading-relaxed text-faint">
           Para correção de dados, dúvidas ou qualquer outro pedido, escreva para{" "}
           {CONTROLLER.privacyEmail}. Encarregado pelo tratamento de dados:{" "}
           {CONTROLLER.officerName}, {CONTROLLER.officerEmail}.
@@ -114,19 +114,19 @@ function PasswordPanel() {
       <h2 id="password-title" className="text-sm font-semibold">
         Alterar senha
       </h2>
-      <p className="text-[13px] leading-relaxed text-muted-foreground">
+      <p className="text-small leading-relaxed text-muted-foreground">
         Ao trocar a senha, as sessões abertas em outros dispositivos são
         encerradas na hora. Esta continua conectada.
       </p>
 
       {changed && (
-        <p role="status" className="text-[12.5px] text-success">
+        <p role="status" className="text-caption text-success">
           Senha alterada. Enviamos um aviso para o seu e-mail.
         </p>
       )}
       {failure && messageFor(failure, "currentPassword") === undefined &&
         messageFor(failure, "newPassword") === undefined && (
-          <p role="alert" className="text-[12.5px] text-destructive">
+          <p role="alert" className="text-caption text-destructive">
             {summaryOf(failure)}
           </p>
         )}
@@ -188,19 +188,19 @@ function ExportPanel() {
       <h2 id="export-title" className="text-sm font-semibold">
         Baixar meus dados
       </h2>
-      <p className="text-[13px] leading-relaxed text-muted-foreground">
+      <p className="text-small leading-relaxed text-muted-foreground">
         Um arquivo com tudo o que guardamos: sua conta, seus modelos, todas as
         versões e todos os documentos gerados — incluindo os valores que você
         preencheu em cada um. Modelos que você excluiu aparecem marcados como
         tal, porque continuam armazenados até a exclusão da conta.
       </p>
-      <p className="text-[12.5px] text-faint">
+      <p className="text-caption text-faint">
         Os arquivos .docx em si não vêm neste JSON; baixe-os em Modelos e em
         Documentos.
       </p>
 
       {failure && (
-        <p role="alert" className="text-[12.5px] text-destructive">
+        <p role="alert" className="text-caption text-destructive">
           {summaryOf(failure)}
         </p>
       )}
@@ -257,13 +257,13 @@ function DeletePanel() {
       <h2 id="delete-title" className="text-sm font-semibold">
         Excluir minha conta
       </h2>
-      <p className="text-[13px] leading-relaxed text-muted-foreground">
+      <p className="text-small leading-relaxed text-muted-foreground">
         Apaga sua conta e tudo que pertence a ela: modelos, versões, documentos
         gerados, os valores preenchidos neles e os arquivos armazenados. A
         exclusão é imediata e definitiva — não há como desfazer, e nós não
         guardamos cópia.
       </p>
-      <p className="text-[12.5px] text-faint">
+      <p className="text-caption text-faint">
         Se quiser levar seus dados, baixe-os antes.
       </p>
 
@@ -305,7 +305,7 @@ function DeletePanel() {
             />
 
             {failure && failure.kind !== "validation" && (
-              <p role="alert" className="text-[12.5px] text-destructive">
+              <p role="alert" className="text-caption text-destructive">
                 {summaryOf(failure)}
               </p>
             )}

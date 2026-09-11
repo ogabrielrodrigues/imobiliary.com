@@ -107,7 +107,7 @@ export function CookieNotice() {
       className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-raised/95 backdrop-blur-sm"
     >
       <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-3 px-6 py-4">
-        <p className="min-w-64 flex-1 text-[13px] leading-relaxed text-muted-foreground">
+        <p className="min-w-64 flex-1 text-small leading-relaxed text-muted-foreground">
           Usamos um único cookie, necessário para manter você conectado. Não há
           cookies de análise, publicidade ou terceiros.{" "}
           <Link

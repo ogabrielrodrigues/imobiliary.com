@@ -89,7 +89,7 @@ function LandingPage() {
           aria-label="Principal"
           className="mx-auto flex max-w-5xl items-center gap-6 px-6 py-4"
         >
-          <Brand to="/" className="text-[18px]" />
+          <Brand to="/" className="text-title-sm" />
           {/*
             Someone already signed in has no use for a sign-in link, and
             offering one invites them to authenticate over their own session.
@@ -108,16 +108,16 @@ function LandingPage() {
           aria-labelledby="hero-title"
           className="flex flex-col items-start gap-6 py-20"
         >
-          <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-faint">
+          <p className="font-mono text-label uppercase tracking-[0.1em] text-faint">
             Documentos padronizados
           </p>
           <h1
             id="hero-title"
-            className="max-w-2xl text-balance text-[34px] font-semibold leading-[1.15] tracking-[-0.025em]"
+            className="max-w-2xl text-balance text-display font-semibold leading-[1.15] tracking-[-0.025em]"
           >
             Seus contratos, preenchidos sozinhos.
           </h1>
-          <p className="max-w-xl text-[15px] leading-relaxed text-muted-foreground">
+          <p className="max-w-xl text-lead leading-relaxed text-muted-foreground">
             Envie um modelo <code className="font-mono text-docs">.docx</code>{" "}
             com os campos marcados. A plataforma descobre quais são, monta o
             formulário e devolve o documento pronto — com a formatação do Word
@@ -130,7 +130,7 @@ function LandingPage() {
           */}
           <Link
             to={signedIn ? "/templates" : "/criar-conta"}
-            className="rounded-md bg-primary px-4 py-[9px] text-[13.5px] font-semibold text-primary-foreground"
+            className="rounded-md bg-primary px-4 py-2.25 text-control font-semibold text-primary-foreground"
           >
             {signedIn ? "Abrir meus modelos" : "Criar conta"}
           </Link>

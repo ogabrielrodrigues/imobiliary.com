@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 
 import { formatBytes, MAX_TEMPLATE_BYTES } from "@/domain/template";
 
@@ -34,12 +34,12 @@ export function Dropzone({
         <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3.5">
           <span
             aria-hidden="true"
-            className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border-strong bg-muted font-mono text-[11px] font-medium text-docs"
+            className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border-strong bg-muted font-mono text-label font-medium text-docs"
           >
             docx
           </span>
           <span className="flex min-w-0 flex-col gap-0.5">
-            <span className="truncate text-[13.5px] font-medium">
+            <span className="truncate text-control font-medium">
               {file.name}
             </span>
             <span className="text-xs text-faint">{formatBytes(file.size)}</span>
@@ -47,7 +47,7 @@ export function Dropzone({
           <button
             type="button"
             onClick={() => onSelect(null)}
-            className="ml-auto rounded-md px-2.5 py-1.5 text-[13px] text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="ml-auto rounded-md px-2.5 py-1.5 text-small text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             Trocar
           </button>
@@ -84,12 +84,12 @@ export function Dropzone({
       >
         <span
           aria-hidden="true"
-          className="flex size-10 items-center justify-center rounded-md border border-border-strong bg-muted font-mono text-[11px] font-medium text-docs"
+          className="flex size-10 items-center justify-center rounded-md border border-border-strong bg-muted font-mono text-label font-medium text-docs"
         >
           docx
         </span>
         <span className="text-sm font-medium">Arraste o modelo .docx</span>
-        <span className="text-[12.5px] text-faint">
+        <span className="text-caption text-faint">
           ou clique para escolher · até {formatBytes(MAX_TEMPLATE_BYTES)}
         </span>
         <input

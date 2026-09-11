@@ -81,7 +81,7 @@ function NewTemplatePage() {
           <div className="flex max-w-2xl flex-col gap-5 rounded-lg border border-border bg-card p-6">
             <div className="flex flex-col gap-1.5">
               <h2 className="text-lg font-semibold">{created.name}</h2>
-              <p className="text-[13px] text-muted-foreground">
+              <p className="text-small text-muted-foreground">
                 Versão {created.latestVersion} publicada. Estes são os campos
                 que encontramos no documento — são exatamente os que você
                 preencherá ao gerar.
@@ -129,7 +129,7 @@ function NewTemplatePage() {
         actions={
           <Link
             to="/templates"
-            className="rounded-md px-3 py-2 text-[13px] text-muted-foreground hover:text-foreground"
+            className="rounded-md px-3 py-2 text-small text-muted-foreground hover:text-foreground"
           >
             Cancelar
           </Link>
@@ -144,7 +144,7 @@ function NewTemplatePage() {
           {summary != null && (
             <p
               role="alert"
-              className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-[13px] text-destructive"
+              className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-small text-destructive"
             >
               {summary}
             </p>
@@ -169,7 +169,7 @@ function NewTemplatePage() {
             error={messageFor(failure, "description")}
           />
 
-          <p className="text-[12.5px] leading-relaxed text-faint">
+          <p className="text-caption leading-relaxed text-faint">
             Marque os campos no Word com{" "}
             <code className="font-mono text-docs">{"{{.nome_do_campo}}"}</code>,
             em minúsculas e sem acentos. Não importa se o Word quebrou o campo

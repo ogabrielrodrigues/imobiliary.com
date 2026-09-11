@@ -77,7 +77,7 @@ function TemplateCard({ template }: { readonly template: Template }) {
       </div>
 
       <div className="mt-auto flex items-center justify-between">
-        <span className="font-mono text-[11.5px] text-muted-foreground">
+        <span className="font-mono text-meta text-muted-foreground">
           {/*
             A listed template carries no version, so the field count is only
             known once one is opened. Saying "versão N" is honest; inventing a

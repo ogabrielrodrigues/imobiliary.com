@@ -106,7 +106,7 @@ function SignInPage() {
         */}
         <Link
           to="/esqueci-senha"
-          className="-mt-2 self-start text-[13px] text-muted-foreground hover:text-foreground"
+          className="-mt-2 self-start text-small text-muted-foreground hover:text-foreground"
         >
           Esqueci minha senha
         </Link>

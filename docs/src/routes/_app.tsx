@@ -6,7 +6,7 @@ import {
   useNavigate,
   useRouterState,
 } from "@tanstack/react-router";
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 
 import { Brand } from "@/components/brand";
 import { Button } from "@/components/ui/button";
@@ -87,7 +87,7 @@ function Sidebar({ user }: { readonly user: User }) {
         px-2.5 is the sidebar's one inset — nav links, the account row and the
         sign-out button all use it, so every left edge lands on the same line.
       */}
-      <Brand to="/templates" className="px-2.5 text-[20px]" />
+      <Brand to="/templates" className="px-2.5 text-title" />
 
       <nav aria-label="Seções" className="flex flex-col gap-0.5">
         {NAV.map((item) => {
@@ -98,7 +98,7 @@ function Sidebar({ user }: { readonly user: User }) {
               to={item.to}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13.5px] transition-colors",
+                "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-control transition-colors",
                 active
                   ? "bg-muted font-medium text-foreground"
                   : "text-muted-foreground hover:bg-row-hover hover:text-foreground",
@@ -121,15 +121,15 @@ function Sidebar({ user }: { readonly user: User }) {
         <div className="flex items-center gap-2.5 px-2.5">
           <span
             aria-hidden="true"
-            className="flex size-7 shrink-0 items-center justify-center rounded-full bg-border text-[11px] font-semibold text-muted-foreground"
+            className="flex size-7 shrink-0 items-center justify-center rounded-full bg-border text-label font-semibold text-muted-foreground"
           >
             {initialsOf(user.name)}
           </span>
           <span className="flex min-w-0 flex-col">
-            <span className="truncate text-[12.5px] font-medium">
+            <span className="truncate text-caption font-medium">
               {user.name}
             </span>
-            <span className="truncate text-[11px] text-faint">
+            <span className="truncate text-label text-faint">
               {user.email}
             </span>
           </span>
@@ -138,7 +138,7 @@ function Sidebar({ user }: { readonly user: User }) {
           type="button"
           variant="ghost"
           onClick={onSignOut}
-          className="h-8 justify-start px-2.5 text-[13px] text-muted-foreground"
+          className="h-8 justify-start px-2.5 text-small text-muted-foreground"
         >
           Sair
         </Button>

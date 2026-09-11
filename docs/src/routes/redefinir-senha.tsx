@@ -106,7 +106,7 @@ function ResetPasswordPage() {
           </>
         }
       >
-        <p className="text-[13.5px] leading-relaxed text-muted-foreground">
+        <p className="text-control leading-relaxed text-muted-foreground">
           Links de redefinição valem por 30 minutos e só funcionam uma vez. Se o
           seu expirou ou já foi usado, peça outro.
         </p>

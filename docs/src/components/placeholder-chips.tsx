@@ -15,7 +15,7 @@ export function PlaceholderChips({
 }) {
   if (names.length === 0) {
     return (
-      <p className="text-[12.5px] text-faint">
+      <p className="text-caption text-faint">
         Este modelo não declara nenhum campo.
       </p>
     );
@@ -28,7 +28,7 @@ export function PlaceholderChips({
       {groups.map((group) => (
         <section key={group.key ?? "__loose"} className="flex flex-col gap-2">
           {group.label !== null && (
-            <h3 className="font-mono text-[11px] font-medium tracking-[0.1em] text-faint uppercase">
+            <h3 className="font-mono text-label font-medium tracking-[0.1em] text-faint uppercase">
               {group.label}
             </h3>
           )}

@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 
 /** Where the wordmark leads. A route the router knows, never a bare string. */
 type BrandDestination = "/" | "/templates";

@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Input as InputPrimitive } from "@base-ui/react/input";
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 
 /**
  * Adjusted from the shadcn default to the design system's field: 38px tall,
@@ -13,7 +13,7 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
       type={type}
       data-slot="input"
       className={cn(
-        "h-[38px] w-full min-w-0 rounded-md border border-border-strong bg-input px-3 py-2",
+        "h-9.5 w-full min-w-0 rounded-md border border-border-strong bg-input px-3 py-2",
         "text-sm text-foreground transition-colors outline-none",
         "placeholder:text-faint",
         "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/20",

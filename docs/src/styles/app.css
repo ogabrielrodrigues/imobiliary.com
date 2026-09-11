@@ -108,6 +108,29 @@
   --color-row-hover: var(--row-hover);
   --color-disabled-foreground: var(--disabled-foreground);
 
+  /*
+    The type scale, in rem, each size equal to the design's px value at the
+    default 16px. In rem so that text follows both the reader's browser font
+    size and the font-size preference in Ajustes; a px size ignores both, which
+    is why none may be written as text-[Npx] again. No line-height is declared
+    with them on purpose: the utilities then set font-size only, exactly as the
+    px sizes they replace did.
+  */
+  --text-micro: 0.625rem; /* 10px */
+  --text-label: 0.6875rem; /* 11px */
+  --text-meta: 0.71875rem; /* 11.5px */
+  --text-fine: 0.75rem; /* 12px */
+  --text-caption: 0.78125rem; /* 12.5px */
+  --text-small: 0.8125rem; /* 13px */
+  --text-control: 0.84375rem; /* 13.5px */
+  --text-lead: 0.9375rem; /* 15px */
+  --text-title-sm: 1.125rem; /* 18px */
+  --text-title-md: 1.1875rem; /* 19px */
+  --text-title: 1.25rem; /* 20px */
+  --text-title-lg: 1.375rem; /* 22px */
+  --text-headline: 1.875rem; /* 30px */
+  --text-display: 2.125rem; /* 34px */
+
   /* The design system fixes these three rather than deriving them, so they are
      written out instead of scaled from --radius. */
   --radius-sm: 6px;
@@ -120,7 +143,13 @@
     @apply border-border outline-ring/50;
   }
 
+  /*
+    A percentage, not px: it keeps the reader's own browser font size and
+    multiplies the Ajustes preference on top of it. Every rem in the interface
+    follows from here.
+  */
   html {
+    font-size: calc(100% * var(--font-scale, 1));
     background-color: var(--color-background);
   }
 
