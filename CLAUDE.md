@@ -528,7 +528,19 @@ _Update this section as work proceeds. It is what a fresh session reads first._
 
 ### Next step
 
-**The block editor**, the last piece of the original plan. It needs the docx
+**Accessibility and the Ajustes page — approved 2026-09-11, in progress.** The
+plan, with its rationale and verification, is the "Acessibilidade e a página de
+Ajustes" section of
+`C:UsersEscritorio.claudeplansgostei-muito-da-documenta-o-splendid-cookie.md`.
+In order: px type sizes to rem tokens (81 of them, which is why a font-size
+setting would otherwise do nothing), default palette fixed to pass AA with a
+contrast test, preferences in localStorage applied before first paint,
+`/ajustes` with Tabs (Acessibilidade / Segurança / Meus dados, tab in the URL,
+`/meus-dados` redirects), then skip link, `<main>`, route announcer and the
+required-chip label. Out of scope, to record as open items: collapsible
+sidebar (reflow), underlined links, text spacing.
+
+After that, **the block editor**, the last piece of the original plan. It needs the docx
 `build` module: blocks → `word/document.xml` → `writeZip`. Write the writer and
 **open its output in Word before building any interface around it** — that is
 the step that decides whether the whole idea works. Store the block tree as
