@@ -100,9 +100,11 @@ func run(logger *slog.Logger) error {
 	// Without a provider key the service logs mail instead of sending it, so a
 	// development run prints the reset link in the terminal and no message can
 	// reach a real person by accident.
-	var mailer usecase.Mailer = mail.NewLogger(logger)
-	if cfg.ResendAPIKey != "" {
-		mailer = mail.NewResend(cfg.ResendAPIKey, cfg.MailFrom)
+	// config.Load already refused to start with neither, so exactly one applies.
+	var mailer usecase.Mailer = mail.NewResend(cfg.ResendAPIKey, cfg.MailFrom)
+	if cfg.ResendAPIKey == "" {
+		logger.Warn("DOCGEN_MAIL_LOG is on: mail, including password-reset links, is written to this log")
+		mailer = mail.NewLogger(logger)
 	}
 
 	passwordService := usecase.NewPasswords(usecase.PasswordsConfig{

@@ -55,7 +55,8 @@ go run ./cmd/docgen
 | `DOCGEN_MAX_REQUEST_BYTES` | `1048576` | JSON body size limit |
 | `DOCGEN_TRUST_PROXY_HEADERS` | `false` | Read the client IP from `X-Forwarded-For` |
 | `DOCGEN_APP_URL` | `http://localhost:3000` | Where the platform is served; the reset link points here |
-| `DOCGEN_RESEND_API_KEY` | *unset* | Resend key. Unset means mail is written to the log instead of sent |
+| `DOCGEN_RESEND_API_KEY` | *required** | Resend key |
+| `DOCGEN_MAIL_LOG` | `false` | *Development only: write mail to the log instead of sending it. One of the two is required; the service refuses to start with neither, because the log holds working reset links |
 | `DOCGEN_MAIL_FROM` | `Imobiliary Docs <nao-responda@localhost>` | Sender address, on a domain verified with the provider |
 | `DOCGEN_PASSWORD_RESET_TTL` | `30m` | How long a reset link stays usable |
 

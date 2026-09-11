@@ -50,9 +50,15 @@ type Config struct {
 	// password-reset mail carries. The API is otherwise URL-agnostic.
 	AppURL string
 	// ResendAPIKey and MailFrom configure delivery. Without a key the service
+	// refuses to start unless MailLog is declared; with MailLog it
 	// falls back to writing mail to the log, which is what development wants:
 	// the reset link appears in the terminal and nothing reaches a real inbox.
-	ResendAPIKey     string
+	ResendAPIKey string
+	// MailLog writes mail to the log instead of sending it. It must be asked
+	// for by name: the log fallback prints password-reset links, so a
+	// deployment that merely forgot the provider key must fail to start
+	// rather than quietly hand every reset link to whoever reads its logs.
+	MailLog          bool
 	MailFrom         string
 	PasswordResetTTL time.Duration
 
@@ -73,6 +79,7 @@ func Load() (*Config, error) {
 		TrustProxyHeaders: envBool("DOCGEN_TRUST_PROXY_HEADERS", false),
 		AppURL:            env("DOCGEN_APP_URL", "http://localhost:3000"),
 		ResendAPIKey:      os.Getenv("DOCGEN_RESEND_API_KEY"),
+		MailLog:           envBool("DOCGEN_MAIL_LOG", false),
 		MailFrom:          env("DOCGEN_MAIL_FROM", "Imobiliary Docs <nao-responda@localhost>"),
 		ShutdownTimeout:   15 * time.Second,
 		RateLimits: RateLimits{
@@ -97,6 +104,16 @@ func Load() (*Config, error) {
 	}
 	if cfg.MaxRequestBytes, err = envInt64("DOCGEN_MAX_REQUEST_BYTES", 1<<20); err != nil {
 		return nil, err
+	}
+
+	// Fail closed, the way the secrets do. Without this the service would
+	// fall back to logging mail, and a production deployment missing its key
+	// would print a working password-reset link for any account on request.
+	if cfg.ResendAPIKey == "" && !cfg.MailLog {
+		return nil, errors.New(
+			"config: DOCGEN_RESEND_API_KEY must be set, or DOCGEN_MAIL_LOG=true " +
+				"declared explicitly for development (it writes reset links to the log)",
+		)
 	}
 
 	if len(cfg.JWTSecret) < MinJWTSecretLength {
