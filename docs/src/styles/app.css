@@ -48,13 +48,20 @@
   --secondary-foreground: #e8eaee;
   --border: #262b34;
   --input: #0b0d10;
+  /* A field's edge carries information, so it needs 3:1 against the field;
+     --border-strong, at 1.7:1, is left to the decorative borders. */
+  --input-border: #646d7c;
 
-  /* Accents */
-  --primary: oklch(0.74 0.13 195);
+  /*
+    Accents. The lightness of each is set by contrast, not taste: every one of
+    them is used as text, on the page, on a card and over its own 15% tint, and
+    must reach 4.5:1 in all three. styles/contrast.test.ts holds them to it.
+  */
+  --primary: oklch(0.775 0.13 195);
   --primary-foreground: #06201f;
-  --destructive: oklch(0.68 0.17 25);
+  --destructive: oklch(0.805 0.17 25);
   --destructive-foreground: #2a0703;
-  --ring: oklch(0.74 0.13 195);
+  --ring: oklch(0.775 0.13 195);
 
   /*
     Names the design system uses that shadcn has no slot for.
@@ -62,8 +69,8 @@
     --docs is the subapplication colour: it marks the "docs" half of the
     wordmark and every placeholder token, and doubles as the warning hue.
   */
-  --docs: oklch(0.78 0.14 85);
-  --success: oklch(0.74 0.13 150);
+  --docs: oklch(0.805 0.14 85);
+  --success: oklch(0.79 0.13 150);
   --faint: #828c9b;
   --border-strong: #343b47;
   --border-hover: #3f4756;
@@ -92,6 +99,7 @@
   --color-secondary-foreground: var(--secondary-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
+  --color-input-border: var(--input-border);
 
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
