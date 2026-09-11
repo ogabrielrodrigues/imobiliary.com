@@ -303,7 +303,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-10 — SEO discovery layer done; the editor is what remains
+**Last updated:** 2026-09-11 — security sweep done and fixed; the editor is what remains
 
 ### Done
 
@@ -498,6 +498,34 @@ _Update this section as work proceeds. It is what a fresh session reads first._
     - The JSON-LD omits `publisher` while the controller identity is still
       placeholders, so no `[RAZÃO SOCIAL]` can reach a search engine.
 
+17. **Security sweep, and every finding fixed.** Plan and evidence in the
+    plan file's security section. Verified clean: `pnpm audit`, `govulncheck`
+    (GO-2026-5932 in x/crypto is not reachable and has no fix — watch it), zip
+    slip, template injection, SQL, JWT, XSS, ReDoS, secrets never committed.
+    Fixed, one commit each group:
+    - **Mail fails closed** (`d3132b0`). No Resend key → the API refuses to
+      start, unless `DOCGEN_MAIL_LOG=true` is declared. The old silent
+      fallback logged reset links, which is account takeover for anyone
+      reading logs.
+    - **Register no longer reveals taken emails** (`dd58230`). Always 202, no
+      body; a taken address gets an "someone tried to sign up" email instead.
+      The hash runs on both paths so timing matches.
+    - **Cookie expires with the refresh token, API binds to 127.0.0.1, a
+      global argon2 semaphore (8)** (`9be5c5b`).
+    - **Platform zip reader capped at 16 MiB per entry, `TRUSTED_ORIGIN`,
+      no decoder echo in 422s, `no-store` on every server function, account
+      export is a POST with the origin check** (`49effdf`).
+    - **Rate limit keys IPv6 per /64** — per-address keys let one client
+      rotate through its /64 past the login limit — **and the bucket map is
+      swept early past 100k keys** (`d114363`).
+    - `pnpm security` at the root (`scripts/security.mjs`, pinned tool
+      versions) runs all of it; proven to fail on a planted `minimist@1.2.0`.
+      Use `npx`, not `pnpm dlx`, for Redocly: dlx cannot pick between its two
+      binaries and writes to `pnpm-workspace.yaml` as a side effect.
+    - `SECURITY.md`, `/.well-known/security.txt` (contact from
+      `CONTROLLER`; bump `REVIEWED` yearly or `Expires` lapses), and a
+      deployment section in the root README.
+
 ### Next step
 
 **The block editor**, the last piece of the original plan. It needs the docx
@@ -538,7 +566,9 @@ pnpm dev        # the platform on :3000
 ```
 
 `docs/.env` needs `SESSION_SECRET` (32+ chars) or the platform refuses to
-start. `DOCGEN_API_URL` defaults to `http://localhost:8080`.
+start. `DOCGEN_API_URL` defaults to `http://127.0.0.1:8080`, where the API
+now binds. `docgen-api/.env` needs `DOCGEN_MAIL_LOG=true` in development, or
+a Resend key — the API refuses to start with neither.
 
 ### Open items
 
@@ -592,6 +622,12 @@ start. `DOCGEN_API_URL` defaults to `http://localhost:8080`.
   is unaffected — but this matters the day a CDN goes in front of it.
 - `docgen-api/docs/api-reference.html` changed when the versions endpoint was
   added, and the published artifact below still carries the older text.
+- **`'unsafe-inline'` is still in the CSP `script-src`.** Removing it needs a
+  per-request nonce threaded through the framework's own script tags.
+  Mitigated by the framework escaping its inline state and by the absence of
+  any raw-HTML sink, but it is the one hardening item the sweep left open.
+- **No CI.** `pnpm security` is run by hand. It was written to be called by a
+  CI job unchanged, the day there is one.
 - The published API reference lives at
   `https://claude.ai/code/artifact/e3eaf9ee-95d7-46a0-bd7f-d596a95345ee`.
   Update it by republishing `docgen-api/docs/api-reference.html` **with that
