@@ -49,6 +49,7 @@ export function DocumentPreview({
         <BlockView
           // Blocks have no identity of their own; position is what they are.
           key={index}
+          blockIndex={index}
           block={block}
           editing={editing}
           onEdit={setEditing}
@@ -67,28 +68,38 @@ const BLOCK_CLASS: Record<Block["type"], string> = {
 };
 
 function BlockView({
+  blockIndex,
   block,
   editing,
   onEdit,
   renderPlaceholder,
 }: {
+  readonly blockIndex: number;
   readonly block: Block;
+  /** The occurrence being edited, as "block:segment". */
   readonly editing: string | null;
-  readonly onEdit: (name: string | null) => void;
+  readonly onEdit: (occurrence: string | null) => void;
   readonly renderPlaceholder: RenderPlaceholder;
 }) {
-  const content = block.segments.map((segment, index) =>
-    segment.kind === "text" ? (
-      <TextSpan key={index} segment={segment} />
-    ) : (
+  const content = block.segments.map((segment, index) => {
+    if (segment.kind === "text") {
+      return <TextSpan key={index} segment={segment} />;
+    }
+
+    // Editing is tracked per occurrence, never per name. A placeholder that
+    // appears twice would otherwise open two inputs at once; the second
+    // steals focus from the first, whose blur commits an empty value and
+    // marks both as errors before anyone typed.
+    const occurrence = `${blockIndex}:${index}`;
+    return (
       <span key={index} className="contents">
         {renderPlaceholder(segment.name, segment, {
-          editing: editing === segment.name,
-          onEdit,
+          editing: editing === occurrence,
+          onEdit: (name) => onEdit(name === null ? null : occurrence),
         })}
       </span>
-    ),
-  );
+    );
+  });
 
   const className = BLOCK_CLASS[block.type];
 
