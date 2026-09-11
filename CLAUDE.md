@@ -97,7 +97,8 @@ component base (not Radix), `-t start` the framework template.
 - **TypeScript 7 removed `baseUrl`.** Path aliases resolve relative to
   `tsconfig.json` now; adding `baseUrl` back is a hard error.
 - **`shadcn init` prompts for a preset even with `-y`.** Pass `-p nova`
-  (Lucide icons) or it blocks forever in a non-interactive shell.
+  or it blocks forever in a non-interactive shell. (That preset chose Lucide;
+  the project has since moved to Tabler — see below.)
 - **`shadcn init` appends its own palette and overrides the theme.** It wrote a
   light `:root`, a `.dark` block, and an `@theme inline` that replaced the font
   with Geist and the colours with greys. `src/styles/app.css` has since been
@@ -120,10 +121,16 @@ component base (not Radix), `-t start` the framework template.
   once the handler returns, so `setValues(c => ({ ...c, [k]: e.currentTarget
   .value }))` throws and takes the page down. Capture the value first. This
   cost a blank screen once.
+- **Icons are Tabler** (`@tabler/icons-react`), at the user's request: it is
+  an icon library shadcn supports officially. `components.json` says
+  `"iconLibrary": "tabler"` so `shadcn add` generates with it; `lucide-react`
+  was removed. A generated component that still imports Lucide gets converted.
+  Decorative icons carry `aria-hidden`; an icon-only button keeps its
+  `aria-label`.
 - **Type sizes are rem tokens and `cn` is `@/lib/utils`.** See item 18 of
   the Status; both have bitten once.
 - Dependencies it pulled in: `@base-ui/react` (the point of `-b base`),
-  `class-variance-authority`, `cn`, `lucide-react`, `tw-animate-css`, and
+  `class-variance-authority`, `cn`, `tw-animate-css`, and
   `shadcn` itself for `shadcn/tailwind.css`.
 - **The fonts are self-hosted**, via `@fontsource-variable/figtree` and
   `@fontsource-variable/jetbrains-mono`, imported in `src/styles/app.css`. They

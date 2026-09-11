@@ -6,7 +6,7 @@ import {
   useRouter,
 } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
-import { Trash2 } from "lucide-react";
+import { IconTrash } from "@tabler/icons-react";
 
 import { messageFor, summaryOf, type Failure } from "@/application/result";
 import { DocumentPreview } from "@/components/document-preview";
@@ -565,7 +565,7 @@ function DeleteTemplate({ template }: { readonly template: Template }) {
         onClick={ask}
         className="text-muted-foreground hover:text-destructive"
       >
-        <Trash2 />
+        <IconTrash aria-hidden="true" />
       </Button>
 
       {mounted && (

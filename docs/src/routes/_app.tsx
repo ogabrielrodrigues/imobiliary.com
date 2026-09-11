@@ -6,7 +6,7 @@ import {
   useNavigate,
   useRouterState,
 } from "@tanstack/react-router";
-import { Settings } from "lucide-react";
+import { IconSettings } from "@tabler/icons-react";
 
 import { Brand } from "@/components/brand";
 import { Button } from "@/components/ui/button";
@@ -134,7 +134,7 @@ function Sidebar({ user }: { readonly user: User }) {
                 : "text-muted-foreground hover:bg-row-hover hover:text-foreground",
             )}
           >
-            <Settings aria-hidden="true" className="size-4 shrink-0" />
+            <IconSettings aria-hidden="true" className="size-4 shrink-0" />
             Ajustes
           </Link>
         </nav>
