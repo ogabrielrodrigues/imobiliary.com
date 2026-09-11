@@ -15,11 +15,14 @@ type Rgb = readonly [number, number, number];
 
 const css = readFileSync(new URL("./app.css", import.meta.url), "utf8");
 
-/** The custom properties declared in the first block matching `selector`. */
+/**
+ * The custom properties declared in the first block matching `selector`.
+ * Declarations hold no braces, so the block ends at the first closing one.
+ */
 function tokens(selector: string): Map<string, string> {
   const start = css.indexOf(`${selector} {`);
   assert.notEqual(start, -1, `no ${selector} block in app.css`);
-  const body = css.slice(start, css.indexOf("\n}", start));
+  const body = css.slice(start, css.indexOf("}", start));
   const map = new Map<string, string>();
   for (const match of body.matchAll(/--([a-z-]+):\s*([^;]+);/g)) {
     map.set(match[1]!, match[2]!.trim());
@@ -108,8 +111,21 @@ function assertPalette(palette: Map<string, string>, textRatio: number) {
   assert.deepEqual(failures, []);
 }
 
+const HIGH_CONTRAST = ':root[data-contrast="more"]';
+const HIGH_CONTRAST_BY_SYSTEM = ':root:not([data-contrast="standard"])';
+
 describe("palette contrast", () => {
   it("passes WCAG AA in the default theme", () => {
     assertPalette(tokens(":root"), 4.5);
+  });
+
+  it("passes WCAG AAA in high contrast", () => {
+    // The high-contrast block overrides only what it declares; anything it
+    // leaves out falls through to the default theme and is checked as such.
+    assertPalette(new Map([...tokens(":root"), ...tokens(HIGH_CONTRAST)]), 7);
+  });
+
+  it("is the same high contrast whether chosen or asked for by the system", () => {
+    assert.deepEqual(tokens(HIGH_CONTRAST_BY_SYSTEM), tokens(HIGH_CONTRAST));
   });
 });

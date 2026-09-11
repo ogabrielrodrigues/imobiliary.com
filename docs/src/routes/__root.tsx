@@ -3,10 +3,12 @@ import {
   createRootRoute,
   HeadContent,
   Outlet,
+  ScriptOnce,
   Scripts,
 } from "@tanstack/react-router";
 
 import { CookieNotice } from "@/components/cookie-notice";
+import { bootScript } from "@/lib/accessibility-storage";
 import appCss from "@/styles/app.css?url";
 
 export const Route = createRootRoute({
@@ -51,9 +53,19 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
     // The interface is written in Brazilian Portuguese; declaring it lets
     // screen readers pick the right voice and browsers offer the right
     // translation.
-    <html lang="pt-BR" className="dark">
+    //
+    // suppressHydrationWarning: the head script below may set data-* attributes
+    // on this element before React hydrates, on purpose.
+    <html lang="pt-BR" className="dark" suppressHydrationWarning>
       <head>
         <HeadContent />
+        {/*
+          The accessibility preferences, applied before first paint so that
+          someone who asked for large text or high contrast never sees the page
+          without it. Inline, so it is covered by the CSP's 'unsafe-inline' for
+          now; it will need the nonce when that goes.
+        */}
+        <ScriptOnce>{bootScript()}</ScriptOnce>
       </head>
       <body>
         {children}

@@ -179,6 +179,111 @@
   }
 }
 
+/*
+  Accessibility preferences, set in Ajustes and stored in the browser. A script
+  in the document head applies them as attributes on <html> before first paint;
+  with no attribute, the operating system's own preference decides.
+*/
+
+/* Font size multiplies the reader's browser size; see the html rule above. */
+:root[data-font-scale="1.125"] {
+  --font-scale: 1.125;
+}
+:root[data-font-scale="1.25"] {
+  --font-scale: 1.25;
+}
+:root[data-font-scale="1.5"] {
+  --font-scale: 1.5;
+}
+
+/*
+  High contrast: at least 7:1 for text (WCAG AAA), borders a reader can
+  actually see, a heavier focus ring and underlined links, so nothing depends
+  on colour alone. Declared twice with the same values — once when chosen, once
+  when the system asks for it and the reader has not turned it off — because a
+  selector cannot say "attribute, or media query". contrast.test.ts checks both
+  copies, and that they agree.
+*/
+:root[data-contrast="more"] {
+  --background: #000000;
+  --foreground: #ffffff;
+  --card: #0a0a0c;
+  --card-foreground: #ffffff;
+  --popover: #0a0a0c;
+  --popover-foreground: #ffffff;
+  --muted: #16181d;
+  --muted-foreground: #dde1e8;
+  --accent: #16181d;
+  --accent-foreground: #ffffff;
+  --secondary: #16181d;
+  --secondary-foreground: #ffffff;
+  --border: #6b7383;
+  --input: #000000;
+  --input-border: #b3bac6;
+  --primary: oklch(0.86 0.12 195);
+  --primary-foreground: #001514;
+  --destructive: oklch(0.84 0.14 25);
+  --destructive-foreground: #1a0402;
+  --ring: oklch(0.86 0.12 195);
+  --docs: oklch(0.9 0.13 85);
+  --success: oklch(0.87 0.13 150);
+  --faint: #c8cdd6;
+  --border-strong: #b3bac6;
+  --border-hover: #d0d5dd;
+  --raised: #050506;
+  --row-hover: #1a1d23;
+  --disabled-foreground: #9aa3b2;
+}
+:root[data-contrast="more"] a {
+  text-decoration-line: underline;
+}
+:root[data-contrast="more"] :focus-visible {
+  outline-width: 3px;
+}
+
+@media (prefers-contrast: more) {
+  :root:not([data-contrast="standard"]) {
+    --background: #000000;
+    --foreground: #ffffff;
+    --card: #0a0a0c;
+    --card-foreground: #ffffff;
+    --popover: #0a0a0c;
+    --popover-foreground: #ffffff;
+    --muted: #16181d;
+    --muted-foreground: #dde1e8;
+    --accent: #16181d;
+    --accent-foreground: #ffffff;
+    --secondary: #16181d;
+    --secondary-foreground: #ffffff;
+    --border: #6b7383;
+    --input: #000000;
+    --input-border: #b3bac6;
+    --primary: oklch(0.86 0.12 195);
+    --primary-foreground: #001514;
+    --destructive: oklch(0.84 0.14 25);
+    --destructive-foreground: #1a0402;
+    --ring: oklch(0.86 0.12 195);
+    --docs: oklch(0.9 0.13 85);
+    --success: oklch(0.87 0.13 150);
+    --faint: #c8cdd6;
+    --border-strong: #b3bac6;
+    --border-hover: #d0d5dd;
+    --raised: #050506;
+    --row-hover: #1a1d23;
+    --disabled-foreground: #9aa3b2;
+  }
+  :root:not([data-contrast="standard"]) a {
+    text-decoration-line: underline;
+  }
+  :root:not([data-contrast="standard"]) :focus-visible {
+    outline-width: 3px;
+  }
+}
+
+/*
+  Motion is reduced when the system asks or when the reader chose to in
+  Ajustes. There is no setting that forces motion back on against the system.
+*/
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -187,5 +292,26 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+:root[data-motion="reduce"] *,
+:root[data-motion="reduce"] *::before,
+:root[data-motion="reduce"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/*
+  Windows high-contrast mode replaces colours and removes box shadows, and the
+  focus rings on buttons and fields are box shadows over outline-none. Without
+  this, keyboard focus would be invisible there.
+*/
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 2px solid CanvasText !important;
+    outline-offset: 2px;
   }
 }
