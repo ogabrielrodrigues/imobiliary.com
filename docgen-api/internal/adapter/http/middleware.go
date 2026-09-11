@@ -6,6 +6,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
@@ -206,6 +207,36 @@ func bearerToken(r *http.Request) (string, bool) {
 // rate-limit key by sending a header, which is the same as having no per-IP
 // limit at all.
 func clientIP(r *http.Request, trustProxy bool) string {
+	return rateKey(rawClientIP(r, trustProxy))
+}
+
+// rateKey is the identity a request is charged to.
+//
+// An IPv4 address is one key. An IPv6 address is not: a single customer is
+// routinely handed a whole /64, which is 2^64 addresses, so keying each one
+// separately would let one client rotate its source address on every
+// request and never meet a limit - the credential limit included, which is
+// what stands between a login form and password guessing. It would also fill
+// the limiter with one bucket per address. The /64 is the unit a network
+// actually assigns, so it is the unit charged.
+func rateKey(ip string) string {
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
+		return ip
+	}
+	addr = addr.Unmap()
+	if addr.Is4() {
+		return addr.String()
+	}
+	prefix, err := addr.Prefix(64)
+	if err != nil {
+		return ip
+	}
+	return prefix.String()
+}
+
+// rawClientIP is the address the request came from, before grouping.
+func rawClientIP(r *http.Request, trustProxy bool) string {
 	if trustProxy {
 		if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
 			// The left-most entry is the original client; the rest were added

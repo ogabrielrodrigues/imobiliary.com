@@ -9,6 +9,7 @@ package ratelimit
 import (
 	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -28,6 +29,10 @@ type Limiter struct {
 	now   func() time.Time
 
 	buckets sync.Map // string -> *bucket
+	// keys counts the buckets held, so growth can be noticed without walking
+	// the map on every request.
+	keys    atomic.Int64
+	maxKeys int64
 
 	stopOnce sync.Once
 	stop     chan struct{}
@@ -42,15 +47,29 @@ func WithClock(now func() time.Time) Option {
 	return func(l *Limiter) { l.now = now }
 }
 
+// WithMaxKeys changes the ceiling at which idle buckets are swept early.
+func WithMaxKeys(n int) Option {
+	return func(l *Limiter) { l.maxKeys = int64(n) }
+}
+
+// defaultMaxKeys is how many buckets may accumulate before idle ones are
+// swept without waiting for the janitor. A bucket is small, but a flood of
+// distinct keys would otherwise grow the map for the full idle window.
+const defaultMaxKeys = 100_000
+
+// pressureEviction is how idle a bucket must be to go in an early sweep.
+const pressureEviction = time.Minute
+
 // New returns a limiter granting rate tokens per second per key, allowing a
 // burst of at most burst requests. It starts a janitor goroutine that evicts
 // idle keys; call Close to stop it.
 func New(rate float64, burst int, opts ...Option) *Limiter {
 	l := &Limiter{
-		rate:  rate,
-		burst: float64(burst),
-		now:   time.Now,
-		stop:  make(chan struct{}),
+		rate:    rate,
+		burst:   float64(burst),
+		now:     time.Now,
+		stop:    make(chan struct{}),
+		maxKeys: defaultMaxKeys,
 	}
 	for _, opt := range opts {
 		opt(l)
@@ -75,7 +94,10 @@ func (l *Limiter) Allow(key string) (bool, time.Duration) {
 func (l *Limiter) AllowN(key string, n float64) (bool, time.Duration) {
 	now := l.now()
 
-	v, _ := l.buckets.LoadOrStore(key, &bucket{tokens: l.burst, lastSeen: now})
+	v, loaded := l.buckets.LoadOrStore(key, &bucket{tokens: l.burst, lastSeen: now})
+	if !loaded && l.keys.Add(1) > l.maxKeys {
+		l.evictIdle(pressureEviction)
+	}
 	b := v.(*bucket)
 
 	b.mu.Lock()
@@ -120,8 +142,12 @@ func (l *Limiter) evictIdle(olderThan time.Duration) {
 		b.mu.Lock()
 		idle := b.lastSeen.Before(cutoff)
 		b.mu.Unlock()
+		// LoadAndDelete rather than Delete, so a bucket two sweeps race over is
+		// only subtracted from the count once.
 		if idle {
-			l.buckets.Delete(key)
+			if _, deleted := l.buckets.LoadAndDelete(key); deleted {
+				l.keys.Add(-1)
+			}
 		}
 		return true
 	})

@@ -163,3 +163,27 @@ func TestAllowIsSafeForConcurrentUse(t *testing.T) {
 		t.Errorf("granted %d requests, want exactly %d", got, burst)
 	}
 }
+
+// TestLimiterSweepsIdleKeysUnderPressure covers the memory guard: once the
+// map passes its ceiling, idle buckets go immediately instead of waiting
+// out the janitor.
+func TestLimiterSweepsIdleKeysUnderPressure(t *testing.T) {
+	now := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	l := New(1, 1, WithClock(func() time.Time { return now }), WithMaxKeys(3))
+	defer l.Close()
+
+	for _, key := range []string{"a", "b", "c"} {
+		l.Allow(key)
+	}
+	if got := l.keys.Load(); got != 3 {
+		t.Fatalf("holding %d keys, want 3", got)
+	}
+
+	// The first three go idle; a fourth key tips the map over the ceiling.
+	now = now.Add(2 * pressureEviction)
+	l.Allow("d")
+
+	if got := l.keys.Load(); got != 1 {
+		t.Errorf("holding %d keys after the sweep, want only the fresh one", got)
+	}
+}
