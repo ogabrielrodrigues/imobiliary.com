@@ -63,7 +63,19 @@ function SettingsPage() {
           className="gap-4"
         >
           {/* Four tabs outgrow a phone; the list scrolls sideways instead of wrapping. */}
-          <TabsList aria-label="Seções de ajustes" className="max-w-full self-start overflow-x-auto">
+          {/*
+            Scrolls sideways on a phone, where four tabs do not fit. Two
+            things keep that from showing a vertical scrollbar on a wide
+            screen: overflow-x alone turns overflow-y into auto as well, so it
+            is pinned hidden; and the list's fixed 32px height is released
+            (with the same group-data prefix, or the component's h-8 wins on
+            specificity), since icons and rem-sized text can exceed it. The
+            focus ring still shows: it fits inside the list's 3px padding.
+          */}
+          <TabsList
+            aria-label="Seções de ajustes"
+            className="max-w-full self-start overflow-x-auto overflow-y-hidden group-data-horizontal/tabs:h-auto"
+          >
 
             {TABS.map((tab) => (
               <TabsTrigger key={tab.value} value={tab.value} className="px-3">
