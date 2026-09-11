@@ -10,6 +10,7 @@ import {
 import {
   IconFileText,
   IconFiles,
+  IconLayoutDashboard,
   IconLogout,
   IconMenu2,
   IconSettings,
@@ -45,6 +46,7 @@ export const Route = createFileRoute("/_app")({
 });
 
 const NAV = [
+  { to: "/dashboard", label: "Dashboard", icon: IconLayoutDashboard },
   { to: "/templates", label: "Templates", icon: IconFileText },
   { to: "/documentos", label: "Documentos", icon: IconFiles },
 ] as const;
@@ -110,7 +112,7 @@ function MobileBar({ user }: { readonly user: User }) {
       >
         <IconMenu2 aria-hidden="true" className="size-5" />
       </Button>
-      <Brand to="/templates" className="text-title-sm" />
+      <Brand to="/dashboard" className="text-title-sm" />
 
       {mounted && (
         <Sheet open={open} onOpenChange={setOpen}>
@@ -139,7 +141,7 @@ function SidebarContent({ user }: { readonly user: User }) {
 
   return (
     <>
-      {/* Inside the app, home is the model list, not the landing page. */}
+      {/* Inside the app, home is the dashboard, not the landing page. */}
       {/*
         20px, against the 13.5px of the navigation below: enough of a step to
         read as the heading of the region rather than another item in the
@@ -149,7 +151,7 @@ function SidebarContent({ user }: { readonly user: User }) {
         px-2.5 is the sidebar's one inset — nav links, the account row and the
         sign-out button all use it, so every left edge lands on the same line.
       */}
-      <Brand to="/templates" className="px-2.5 text-title" />
+      <Brand to="/dashboard" className="px-2.5 text-title" />
 
       <nav aria-label="Seções" className="flex flex-col gap-0.5">
         {NAV.map((item) => {

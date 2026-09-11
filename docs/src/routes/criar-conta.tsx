@@ -26,7 +26,7 @@ export const Route = createFileRoute("/criar-conta")({
    */
   beforeLoad: async () => {
     if ((await currentUser()) !== null) {
-      throw redirect({ to: "/templates" });
+      throw redirect({ to: "/dashboard" });
     }
   },
   head: () =>

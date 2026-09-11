@@ -16,9 +16,11 @@ import type {
   DocumentGateway,
   FileContent,
   Page,
+  StatsGateway,
   TemplateGateway,
 } from "../../application/ports.ts";
 import type { GeneratedDocument, GenerateInput } from "../../domain/document.ts";
+import type { DashboardStats, StatsPeriod } from "../../domain/stats.ts";
 import type {
   Template,
   TemplateUploadInput,
@@ -86,12 +88,29 @@ interface ApiDocument {
   download_url: string;
 }
 
+interface ApiStats {
+  days: number;
+  time_zone: string;
+  templates: number;
+  documents: number;
+  documents_in_period: number;
+  documents_previous_period: number;
+  per_day: { date: string; documents: number }[];
+  top_templates: {
+    template_id: string;
+    name: string;
+    deleted: boolean;
+    documents: number;
+  }[];
+}
+
 // ----- client --------------------------------------------------------------
 
 export interface DocgenClient {
   readonly auth: AuthGateway;
   readonly templates: TemplateGateway;
   readonly documents: DocumentGateway;
+  readonly stats: StatsGateway;
 }
 
 export function createDocgenClient(options: TransportOptions): DocgenClient {
@@ -101,6 +120,16 @@ export function createDocgenClient(options: TransportOptions): DocgenClient {
     auth: createAuthGateway(http),
     templates: createTemplateGateway(http),
     documents: createDocumentGateway(http),
+    stats: createStatsGateway(http),
+  };
+}
+
+function createStatsGateway(http: Transport): StatsGateway {
+  return {
+    async get(ctx, { days, timeZone }): Promise<DashboardStats> {
+      const query = new URLSearchParams({ days: String(days), tz: timeZone });
+      return toStats(await http.json<ApiStats>(ctx, "GET", `/v1/me/stats?${query}`));
+    },
   };
 }
 
@@ -380,6 +409,25 @@ function toTemplate(body: ApiTemplate): Template {
     ...(body.version === undefined
       ? {}
       : { version: toTemplateVersion(body.version) }),
+  };
+}
+
+function toStats(body: ApiStats): DashboardStats {
+  return {
+    // The API only ever answers with a window it offers.
+    days: body.days as StatsPeriod,
+    timeZone: body.time_zone,
+    templates: body.templates,
+    documents: body.documents,
+    documentsInPeriod: body.documents_in_period,
+    documentsPreviousPeriod: body.documents_previous_period,
+    perDay: body.per_day.map((d) => ({ date: d.date, documents: d.documents })),
+    topTemplates: body.top_templates.map((t) => ({
+      templateId: t.template_id,
+      name: t.name,
+      deleted: t.deleted,
+      documents: t.documents,
+    })),
   };
 }
 

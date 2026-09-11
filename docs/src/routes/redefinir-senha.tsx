@@ -25,7 +25,7 @@ export const Route = createFileRoute("/redefinir-senha")({
   },
   beforeLoad: async () => {
     if ((await currentUser()) !== null) {
-      throw redirect({ to: "/templates" });
+      throw redirect({ to: "/dashboard" });
     }
   },
   head: () => ({

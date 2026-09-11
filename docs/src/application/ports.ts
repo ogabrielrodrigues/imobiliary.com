@@ -9,6 +9,7 @@
  */
 
 import type { GeneratedDocument, GenerateInput } from "../domain/document.ts";
+import type { DashboardStats, StatsPeriod } from "../domain/stats.ts";
 import type {
   Template,
   TemplateUploadInput,
@@ -38,6 +39,14 @@ export interface CallContext {
 export interface Page {
   readonly limit?: number | undefined;
   readonly offset?: number | undefined;
+}
+
+/** The dashboard's figures, counted in the viewer's time zone. */
+export interface StatsGateway {
+  get(
+    ctx: CallContext,
+    query: { readonly days: StatsPeriod; readonly timeZone: string },
+  ): Promise<DashboardStats>;
 }
 
 export interface AuthGateway {

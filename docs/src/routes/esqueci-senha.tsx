@@ -15,7 +15,7 @@ import { currentUser, requestPasswordReset } from "@/server/auth";
 export const Route = createFileRoute("/esqueci-senha")({
   beforeLoad: async () => {
     if ((await currentUser()) !== null) {
-      throw redirect({ to: "/templates" });
+      throw redirect({ to: "/dashboard" });
     }
   },
   head: () => ({

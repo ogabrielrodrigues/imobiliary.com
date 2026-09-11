@@ -672,16 +672,36 @@ _Update this section as work proceeds. It is what a fresh session reads first._
     - The signed-in screens (drawer, cards) still need a signed-in browser to
       be seen.
 
+23. **The dashboard, at `/dashboard`, now the home after sign-in.** The brand
+    in the app, the sign-in and sign-up redirects and the landing page's
+    calls to action all lead there; it is first in the sidebar.
+    - **API: `GET /v1/me/stats?days=7|30|90&tz=<IANA>`** (`40215aa`). Days
+      are bucketed in Go in the caller's zone (`time/tzdata` embedded — Windows
+      has no zone database); totals and the top five are SQL. Comparing
+      `created_at` as text in SQL is sound only because the stored layout is
+      fixed-width UTC. A deleted template still ranks, marked `deleted`.
+    - **Platform:** `getDashboard` fetches the stats, the five latest documents
+      and the template names in parallel. The window is `?periodo=` in the
+      URL. **The first load renders on the server, which cannot know the
+      viewer's zone: it uses `America/Sao_Paulo`** (`DEFAULT_TIME_ZONE`);
+      client navigations use the browser's.
+    - **Charts:** shadcn Chart (Recharts 3.8). `chart.tsx` was adjusted: the
+      series colours go through the container's `style` prop instead of a
+      `<style>` written with `dangerouslySetInnerHTML`, and its light/dark map
+      is gone because tokens already follow `data-scheme`. The series uses
+      `--primary-text`, already held above 3:1 by the contrast test, so no
+      `--chart-*` tokens were needed. Animation stops under
+      `data-motion="reduce"` (`useReducedMotion`). A summary sentence gives
+      the chart's facts in text.
+    - **The template ranking is a list with bars, not a chart**, so each row
+      can be a real link. The shadcn `card` that came with `chart` was
+      removed, unused.
+    - An account with no documents gets three getting-started steps instead
+      of empty charts.
+
 ### Next step
 
-**Responsiveness and the dashboard — approved 2026-09-11, in progress.** The
-plan is the "Responsividade, ferramentas TanStack e Dashboard" section of
-`C:\Users\Escritorio\.claude\plans\gostei-muito-da-documenta-o-splendid-cookie.md`. In scope now: phase 1 (the mobile layout, with the desktop
-pixel-identical, proven by style hashes of the public pages at 1280px) and
-phase 3 (`GET /v1/me/stats` in the API, then `/dashboard` as the home after
-sign-in, with shadcn Chart).
-
-**Deferred by the user, next after that: phase 2, the TanStack libraries** —
+**Phase 2, the TanStack libraries — planned, deferred by the user until now** —
 Query (router SSR integration, `queryOptions` factories, mutations instead of
 `router.invalidate()`), Table (Documentos, with real paging) and Form (all
 seven forms; validate on blur, then on every keystroke once a field shows an

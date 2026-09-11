@@ -24,7 +24,7 @@ export const Route = createFileRoute("/entrar")({
    */
   beforeLoad: async () => {
     if ((await currentUser()) !== null) {
-      throw redirect({ to: "/templates" });
+      throw redirect({ to: "/dashboard" });
     }
   },
   head: () =>
@@ -61,7 +61,7 @@ function SignInPage() {
       });
 
       if (result.ok) {
-        await navigate({ to: "/templates" });
+        await navigate({ to: "/dashboard" });
         return;
       }
       setFailure(result.failure);

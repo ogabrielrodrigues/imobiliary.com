@@ -96,10 +96,10 @@ function LandingPage() {
             offering one invites them to authenticate over their own session.
           */}
           <Link
-            to={signedIn ? "/templates" : "/entrar"}
+            to={signedIn ? "/dashboard" : "/entrar"}
             className="ml-auto rounded-md px-3 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
           >
-            {signedIn ? "Ir para meus modelos" : "Entrar"}
+            {signedIn ? "Ir para o dashboard" : "Entrar"}
           </Link>
         </nav>
       </header>
@@ -133,10 +133,10 @@ function LandingPage() {
             Only the call to action has to know.
           */}
           <Link
-            to={signedIn ? "/templates" : "/criar-conta"}
+            to={signedIn ? "/dashboard" : "/criar-conta"}
             className="rounded-md bg-primary px-4 py-2.25 text-control font-semibold text-primary-foreground"
           >
-            {signedIn ? "Abrir meus modelos" : "Criar conta"}
+            {signedIn ? "Abrir o dashboard" : "Criar conta"}
           </Link>
         </section>
       </main>

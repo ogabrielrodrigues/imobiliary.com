@@ -25,6 +25,7 @@ export const Route = createFileRoute("/robots.txt")({
             "",
             "# Behind sign-in: nothing here to index, and a crawler only meets",
             "# a redirect to the sign-in form.",
+            "Disallow: /dashboard",
             "Disallow: /templates",
             "Disallow: /documentos",
             "Disallow: /ajustes",

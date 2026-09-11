@@ -7,6 +7,7 @@
  */
 
 import type { GeneratedDocument } from "../domain/document.ts";
+import type { DashboardStats } from "../domain/stats.ts";
 
 /**
  * A generated document together with the name of the template behind it.
@@ -19,4 +20,10 @@ import type { GeneratedDocument } from "../domain/document.ts";
 export interface DocumentListItem {
   readonly document: GeneratedDocument;
   readonly templateName: string | null;
+}
+
+/** Everything the dashboard shows: the figures, and the latest documents. */
+export interface DashboardView {
+  readonly stats: DashboardStats;
+  readonly recent: readonly DocumentListItem[];
 }

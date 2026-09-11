@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 
 /** Where the wordmark leads. A route the router knows, never a bare string. */
-type BrandDestination = "/" | "/templates";
+type BrandDestination = "/" | "/dashboard";
 
 /**
  * The wordmark.
@@ -11,7 +11,7 @@ type BrandDestination = "/" | "/templates";
  * "docs" always carries the subapplication colour — it never appears alone.
  *
  * Give it `to` and it becomes the way back to wherever "home" is for the
- * surface it sits on: the model list inside the app, the landing page outside
+ * surface it sits on: the dashboard inside the app, the landing page outside
  * it. A `Link` rather than an anchor, so navigation stays client-side and the
  * router checks the destination at compile time.
  */
