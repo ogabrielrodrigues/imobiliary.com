@@ -18,6 +18,17 @@ export default defineConfig({
     // package would be a second context that no hook can see.
     dedupe: ["react", "react-dom", "@tanstack/react-query"],
   },
+  optimizeDeps: {
+    // Pre-bundled at startup rather than discovered on the first page that
+    // imports them. A discovery mid-session re-optimises the dependencies,
+    // and the page already open is left holding modules from two
+    // generations — every hook then fails with "Invalid hook call".
+    include: [
+      "@tanstack/react-form",
+      "@tanstack/react-query",
+      "@tanstack/react-table",
+    ],
+  },
   plugins: [
     // Tailwind runs first so the generated stylesheet is in place before the
     // framework plugins process the modules that import it.

@@ -1,44 +1,49 @@
 import { IconAlertCircle, IconCircleCheck } from "@tabler/icons-react";
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
+import { useForm, useStore } from "@tanstack/react-form";
 
 import { messageFor, summaryOf, type Failure } from "@/application/result";
-import { FormField } from "@/components/form-field";
+import { BoundFormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
-import { MIN_PASSWORD_LENGTH } from "@/domain/user";
+import { MIN_PASSWORD_LENGTH, validatePasswordChange } from "@/domain/user";
+import { blurThenChange, formErrors } from "@/lib/form";
 import { changePassword } from "@/server/auth";
+
+const EMPTY = { currentPassword: "", newPassword: "" };
 
 /** Changing the password, in the Segurança tab of Ajustes. */
 export function PasswordPanel() {
-  const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [changed, setChanged] = useState(false);
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const values = new FormData(form);
+  const form = useForm({
+    defaultValues: EMPTY,
+    validationLogic: blurThenChange,
+    validators: {
+      onDynamic: ({ value }) => formErrors(validatePasswordChange(value)),
+    },
+    onSubmit: async ({ value, formApi }) => {
+      setFailure(null);
+      setChanged(false);
 
-    setPending(true);
-    setFailure(null);
-    setChanged(false);
-
-    try {
-      const result = await changePassword({
-        data: {
-          currentPassword: String(values.get("currentPassword") ?? ""),
-          newPassword: String(values.get("newPassword") ?? ""),
-        },
-      });
+      const result = await changePassword({ data: value });
       if (result.ok) {
         setChanged(true);
-        form.reset();
+        // Back to a blank, untouched form: neither password should linger on
+        // screen, and nothing about it should look like an error.
+        formApi.reset();
         return;
       }
       setFailure(result.failure);
-    } finally {
-      setPending(false);
-    }
-  }
+    },
+  });
+
+  const pending = useStore(form.store, (state) => state.isSubmitting);
+  const submitted = useStore(form.store, (state) => state.submissionAttempts > 0);
+  const onEdit = () => {
+    setFailure(null);
+    setChanged(false);
+  };
 
   return (
     <section
@@ -67,22 +72,41 @@ export function PasswordPanel() {
           </p>
         )}
 
-      <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
-        <FormField
-          name="currentPassword"
-          label="Senha atual"
-          type="password"
-          autoComplete="current-password"
-          error={messageFor(failure, "currentPassword")}
-        />
-        <FormField
-          name="newPassword"
-          label="Nova senha"
-          type="password"
-          autoComplete="new-password"
-          hint={`Pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`}
-          error={messageFor(failure, "newPassword")}
-        />
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void form.handleSubmit();
+        }}
+        noValidate
+        className="flex flex-col gap-4"
+      >
+        <form.Field name="currentPassword">
+          {(field) => (
+            <BoundFormField
+              field={field}
+              submitted={submitted}
+              serverError={messageFor(failure, "currentPassword")}
+              onEdit={onEdit}
+              label="Senha atual"
+              type="password"
+              autoComplete="current-password"
+            />
+          )}
+        </form.Field>
+        <form.Field name="newPassword">
+          {(field) => (
+            <BoundFormField
+              field={field}
+              submitted={submitted}
+              serverError={messageFor(failure, "newPassword")}
+              onEdit={onEdit}
+              label="Nova senha"
+              type="password"
+              autoComplete="new-password"
+              hint={`Pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`}
+            />
+          )}
+        </form.Field>
         <Button type="submit" size="sm" disabled={pending} className="self-start">
           {pending ? "Alterando…" : "Alterar senha"}
         </Button>

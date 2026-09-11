@@ -1,4 +1,5 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
+import { useForm, useStore } from "@tanstack/react-form";
 import {
   createFileRoute,
   Link,
@@ -8,9 +9,10 @@ import {
 
 import { messageFor, summaryOf, type Failure } from "@/application/result";
 import { AuthLayout } from "@/components/auth-layout";
-import { FormField } from "@/components/form-field";
+import { BoundFormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
-import { MIN_PASSWORD_LENGTH } from "@/domain/user";
+import { MIN_PASSWORD_LENGTH, validateNewPassword } from "@/domain/user";
+import { blurThenChange, formErrors } from "@/lib/form";
 import { currentUser, resetPassword } from "@/server/auth";
 
 /** The token arrives in the link the email carries. */
@@ -55,9 +57,7 @@ function ResetPasswordPage() {
    * and in the address bar over someone's shoulder.
    */
   const [token] = useState(() => search.token);
-
   const [failure, setFailure] = useState<Failure | null>(null);
-  const [pending, setPending] = useState(false);
 
   useEffect(() => {
     if (search.token !== undefined) {
@@ -65,19 +65,16 @@ function ResetPasswordPage() {
     }
   }, [search.token]);
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-
-    setPending(true);
-    setFailure(null);
-
-    try {
+  const form = useForm({
+    defaultValues: { password: "" },
+    validationLogic: blurThenChange,
+    validators: {
+      onDynamic: ({ value }) => formErrors(validateNewPassword(value.password)),
+    },
+    onSubmit: async ({ value }) => {
+      setFailure(null);
       const result = await resetPassword({
-        data: {
-          token: token ?? "",
-          password: String(form.get("password") ?? ""),
-        },
+        data: { token: token ?? "", password: value.password },
       });
       if (result.ok) {
         // No session is opened by a reset, so the next step is signing in with
@@ -86,10 +83,11 @@ function ResetPasswordPage() {
         return;
       }
       setFailure(result.failure);
-    } finally {
-      setPending(false);
-    }
-  }
+    },
+  });
+
+  const pending = useStore(form.store, (state) => state.isSubmitting);
+  const submitted = useStore(form.store, (state) => state.submissionAttempts > 0);
 
   if (token === undefined) {
     return (
@@ -128,16 +126,29 @@ function ResetPasswordPage() {
         </>
       }
     >
-      <form onSubmit={onSubmit} noValidate className="flex flex-col gap-5">
-        <FormField
-          name="password"
-          label="Nova senha"
-          type="password"
-          autoComplete="new-password"
-          autoFocus
-          hint={`Pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`}
-          error={messageFor(failure, "password")}
-        />
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void form.handleSubmit();
+        }}
+        noValidate
+        className="flex flex-col gap-5"
+      >
+        <form.Field name="password">
+          {(field) => (
+            <BoundFormField
+              field={field}
+              submitted={submitted}
+              serverError={messageFor(failure, "password")}
+              onEdit={() => setFailure(null)}
+              label="Nova senha"
+              type="password"
+              autoComplete="new-password"
+              autoFocus
+              hint={`Pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`}
+            />
+          )}
+        </form.Field>
         <Button type="submit" disabled={pending} className="mt-1">
           {pending ? "Salvando…" : "Salvar nova senha"}
         </Button>

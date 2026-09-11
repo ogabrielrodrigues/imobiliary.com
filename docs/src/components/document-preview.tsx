@@ -1,8 +1,25 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 import type { Block, Marks, Segment } from "@/domain/block";
 import { humanize, placeholderSyntax } from "@/domain/placeholder";
+
+/** Which placeholder has its input open. One at a time, across the document. */
+export interface EditingState {
+  readonly editing: boolean;
+  readonly onEdit: (name: string | null) => void;
+}
+
+/**
+ * Draws one placeholder. The caller supplies it, usually a `PlaceholderField`
+ * bound to its form, so the preview holds no values of its own and can never
+ * disagree with the form about what was typed.
+ */
+export type RenderPlaceholder = (
+  name: string,
+  marks: Marks,
+  editing: EditingState,
+) => ReactNode;
 
 /**
  * The template, shown as a document, with each placeholder editable where it
@@ -16,15 +33,10 @@ import { humanize, placeholderSyntax } from "@/domain/placeholder";
  */
 export function DocumentPreview({
   blocks,
-  values,
-  onChange,
-  invalid,
+  renderPlaceholder,
 }: {
   readonly blocks: readonly Block[];
-  readonly values: Readonly<Record<string, string>>;
-  readonly onChange: (name: string, value: string) => void;
-  /** Placeholders the last attempt complained about. */
-  readonly invalid?: ReadonlySet<string> | undefined;
+  readonly renderPlaceholder: RenderPlaceholder;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
 
@@ -38,11 +50,9 @@ export function DocumentPreview({
           // Blocks have no identity of their own; position is what they are.
           key={index}
           block={block}
-          values={values}
           editing={editing}
           onEdit={setEditing}
-          onChange={onChange}
-          invalid={invalid}
+          renderPlaceholder={renderPlaceholder}
         />
       ))}
     </article>
@@ -58,33 +68,25 @@ const BLOCK_CLASS: Record<Block["type"], string> = {
 
 function BlockView({
   block,
-  values,
   editing,
   onEdit,
-  onChange,
-  invalid,
+  renderPlaceholder,
 }: {
   readonly block: Block;
-  readonly values: Readonly<Record<string, string>>;
   readonly editing: string | null;
   readonly onEdit: (name: string | null) => void;
-  readonly onChange: (name: string, value: string) => void;
-  readonly invalid?: ReadonlySet<string> | undefined;
+  readonly renderPlaceholder: RenderPlaceholder;
 }) {
   const content = block.segments.map((segment, index) =>
     segment.kind === "text" ? (
       <TextSpan key={index} segment={segment} />
     ) : (
-      <PlaceholderField
-        key={index}
-        name={segment.name}
-        marks={segment}
-        value={values[segment.name] ?? ""}
-        editing={editing === segment.name}
-        invalid={invalid?.has(segment.name) ?? false}
-        onEdit={onEdit}
-        onChange={onChange}
-      />
+      <span key={index} className="contents">
+        {renderPlaceholder(segment.name, segment, {
+          editing: editing === segment.name,
+          onEdit,
+        })}
+      </span>
     ),
   );
 
@@ -132,15 +134,19 @@ function TextSpan({ segment }: { readonly segment: Segment & { kind: "text" } })
  * Filled, it shows the value. Either way one click puts the caret in it — the
  * form and the document are the same surface, which is the whole point of this
  * layout.
+ *
+ * Typing goes to a draft, handed over by `onCommit` when the input is left or
+ * Enter is pressed: that moment is the field's blur, when a form validates.
+ * Escape drops the draft and commits nothing.
  */
-function PlaceholderField({
+export function PlaceholderField({
   name,
   marks,
   value,
   editing,
   invalid,
   onEdit,
-  onChange,
+  onCommit,
 }: {
   readonly name: string;
   readonly marks: Marks;
@@ -148,7 +154,7 @@ function PlaceholderField({
   readonly editing: boolean;
   readonly invalid: boolean;
   readonly onEdit: (name: string | null) => void;
-  readonly onChange: (name: string, value: string) => void;
+  readonly onCommit: (value: string) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState(value);
@@ -172,13 +178,13 @@ function PlaceholderField({
         size={Math.max(draft.length, label.length) + 1}
         onChange={(event) => setDraft(event.currentTarget.value)}
         onBlur={() => {
-          onChange(name, draft);
+          onCommit(draft);
           onEdit(null);
         }}
         onKeyDown={(event) => {
           if (event.key === "Enter") {
             event.preventDefault();
-            onChange(name, draft);
+            onCommit(draft);
             onEdit(null);
           }
           if (event.key === "Escape") {

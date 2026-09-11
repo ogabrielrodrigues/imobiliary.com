@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useForm, useStore } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   createFileRoute,
@@ -9,8 +10,10 @@ import {
 
 import { messageFor, summaryOf, type Failure } from "@/application/result";
 import { AuthLayout } from "@/components/auth-layout";
-import { FormField } from "@/components/form-field";
+import { BoundFormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
+import { validateLogin } from "@/domain/user";
+import { blurThenChange, formErrors } from "@/lib/form";
 import { currentUser, login } from "@/server/auth";
 import { pageSeo } from "@/lib/seo";
 
@@ -44,23 +47,17 @@ export const Route = createFileRoute("/entrar")({
 function SignInPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  // What the server answered. Local checks live in the form; this is only
+  // what could not be known without asking.
   const [failure, setFailure] = useState<Failure | null>(null);
-  const [pending, setPending] = useState(false);
 
-  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-
-    setPending(true);
-    setFailure(null);
-
-    try {
-      const result = await login({
-        data: {
-          email: String(form.get("email") ?? ""),
-          password: String(form.get("password") ?? ""),
-        },
-      });
+  const form = useForm({
+    defaultValues: { email: "", password: "" },
+    validationLogic: blurThenChange,
+    validators: { onDynamic: ({ value }) => formErrors(validateLogin(value)) },
+    onSubmit: async ({ value }) => {
+      setFailure(null);
+      const result = await login({ data: value });
 
       if (result.ok) {
         // Whatever this tab cached belonged to whoever was here before.
@@ -69,10 +66,12 @@ function SignInPage() {
         return;
       }
       setFailure(result.failure);
-    } finally {
-      setPending(false);
-    }
-  }
+    },
+  });
+
+  const pending = useStore(form.store, (state) => state.isSubmitting);
+  const submitted = useStore(form.store, (state) => state.submissionAttempts > 0);
+  const clearFailure = () => setFailure(null);
 
   return (
     <AuthLayout
@@ -88,22 +87,41 @@ function SignInPage() {
         </>
       }
     >
-      <form onSubmit={onSubmit} noValidate className="flex flex-col gap-5">
-        <FormField
-          name="email"
-          label="E-mail"
-          type="email"
-          autoComplete="email"
-          autoFocus
-          error={messageFor(failure, "email")}
-        />
-        <FormField
-          name="password"
-          label="Senha"
-          type="password"
-          autoComplete="current-password"
-          error={messageFor(failure, "password")}
-        />
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void form.handleSubmit();
+        }}
+        noValidate
+        className="flex flex-col gap-5"
+      >
+        <form.Field name="email">
+          {(field) => (
+            <BoundFormField
+              field={field}
+              submitted={submitted}
+              serverError={messageFor(failure, "email")}
+              onEdit={clearFailure}
+              label="E-mail"
+              type="email"
+              autoComplete="email"
+              autoFocus
+            />
+          )}
+        </form.Field>
+        <form.Field name="password">
+          {(field) => (
+            <BoundFormField
+              field={field}
+              submitted={submitted}
+              serverError={messageFor(failure, "password")}
+              onEdit={clearFailure}
+              label="Senha"
+              type="password"
+              autoComplete="current-password"
+            />
+          )}
+        </form.Field>
         {/*
           Placed under the password rather than in the footer: this is where
           someone is standing when they discover they cannot remember it.

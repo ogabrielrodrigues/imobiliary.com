@@ -46,6 +46,32 @@ function looksLikeEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+function emailProblems(input: string): FieldError[] {
+  const email = normalizeEmail(input);
+
+  if (email === "") {
+    return [{ field: "email", message: "Informe seu e-mail." }];
+  }
+  if (email.length > MAX_EMAIL_LENGTH) {
+    return [
+      {
+        field: "email",
+        message: `O e-mail deve ter no máximo ${MAX_EMAIL_LENGTH} caracteres.`,
+      },
+    ];
+  }
+  if (!looksLikeEmail(email)) {
+    return [{ field: "email", message: "Esse e-mail não parece válido." }];
+  }
+  return [];
+}
+
+/** Checks an address on its own, for the form that asks for a reset link. */
+export function validateEmail(email: string): ValidationError | null {
+  const fields = emailProblems(email);
+  return fields.length > 0 ? new ValidationError(fields) : null;
+}
+
 export interface PasswordChangeInput {
   readonly currentPassword: string;
   readonly newPassword: string;
@@ -73,19 +99,7 @@ export interface RegistrationInput {
 export function validateRegistration(
   input: RegistrationInput,
 ): ValidationError | null {
-  const fields: FieldError[] = [];
-  const email = normalizeEmail(input.email);
-
-  if (email === "") {
-    fields.push({ field: "email", message: "Informe seu e-mail." });
-  } else if (email.length > MAX_EMAIL_LENGTH) {
-    fields.push({
-      field: "email",
-      message: `O e-mail deve ter no máximo ${MAX_EMAIL_LENGTH} caracteres.`,
-    });
-  } else if (!looksLikeEmail(email)) {
-    fields.push({ field: "email", message: "Esse e-mail não parece válido." });
-  }
+  const fields: FieldError[] = [...emailProblems(input.email)];
 
   const name = input.name.trim();
   if (name === "") {

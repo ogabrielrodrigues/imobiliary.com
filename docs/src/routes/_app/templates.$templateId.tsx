@@ -1,13 +1,14 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
+import { useForm, useStore } from "@tanstack/react-form";
 import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { IconAlertCircle, IconAlertTriangle, IconDownload, IconFilePlus, IconPlus, IconTrash } from "@tabler/icons-react";
 
 import { messageFor, summaryOf, type Failure } from "@/application/result";
-import { DocumentPreview } from "@/components/document-preview";
+import { DocumentPreview, PlaceholderField } from "@/components/document-preview";
 import { Dropzone } from "@/components/dropzone";
-import { FormField } from "@/components/form-field";
+import { BoundFormField } from "@/components/form-field";
 import {
   DocxIcon,
   LoadFailure,
@@ -26,8 +27,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { placeholdersOf, type Block } from "@/domain/block";
-import { countFilled, suggestFilename } from "@/domain/document";
+import { placeholdersOf, type Block, type Marks } from "@/domain/block";
+import type { EditingState } from "@/components/document-preview";
+import type { ReactNode } from "react";
+import { countFilled, suggestFilename, validateDocumentData } from "@/domain/document";
 import type { GeneratedDocument } from "@/domain/document";
 import { groupPlaceholders, placeholderSyntax } from "@/domain/placeholder";
 import {
@@ -37,6 +40,7 @@ import {
   type TemplateVersion,
 } from "@/domain/template";
 import { saveFile } from "@/lib/download";
+import { blurThenChange, formErrors, visibleError } from "@/lib/form";
 import { relativeDate } from "@/lib/format";
 import { queryKeys } from "@/queries/keys";
 import { invalidateAfter, templateContentQuery } from "@/queries/options";
@@ -126,43 +130,34 @@ function GenerateScreen({
   const shown = template.version?.version ?? template.latestVersion;
   const pinned = shown !== template.latestVersion;
 
-  const [values, setValues] = useState<Record<string, string>>({});
+  // What the server answered. Local checks live in the form.
   const [failure, setFailure] = useState<Failure | null>(null);
-  const [pending, setPending] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generated, setGenerated] = useState<GeneratedDocument | null>(null);
   const [publishing, setPublishing] = useState(false);
 
-  const filled = countFilled(placeholders, values);
-  const missing = new Set(
-    placeholders.filter((name) => (values[name] ?? "").trim() === ""),
-  );
-
-  function setValue(name: string, value: string) {
-    setValues((current) => ({ ...current, [name]: value }));
-  }
-
-  function showVersion(version: number) {
-    // Choosing the latest drops the parameter instead of pinning to a number,
-    // so "current" keeps a clean address and only a real pin shows in the URL.
-    void navigate({
-      to: "/templates/$templateId",
-      params: { templateId: template.id },
-      search: version === template.latestVersion ? {} : { versao: version },
-      replace: true,
-    });
-  }
-
-  async function onGenerate() {
-    setPending(true);
-    setFailure(null);
-
-    try {
+  /*
+    The form is the one place the values live. The chips in the document, the
+    plain fields shown when the document cannot be read, and the checklist all
+    read and write the same fields, so they can never disagree about what was
+    typed. Field names are `data.<placeholder>`, the same names the domain and
+    the API give their errors, so every error lands on its field unchanged.
+  */
+  const form = useForm({
+    defaultValues: {
+      data: Object.fromEntries(placeholders.map((name) => [name, ""])) as Record<string, string>,
+    },
+    validationLogic: blurThenChange,
+    validators: {
+      onDynamic: ({ value }) => formErrors(validateDocumentData(placeholders, value.data)),
+    },
+    onSubmit: async ({ value }) => {
+      setFailure(null);
       const result = await generateDocument({
         data: {
           templateId: template.id,
           filename: suggestFilename(template.name),
-          data: values,
+          data: value.data,
           placeholders,
           // Sent only when a version is actually pinned. Passing the latest
           // number unconditionally would fix it to a value that can go stale
@@ -178,9 +173,33 @@ function GenerateScreen({
         return;
       }
       setFailure(result.failure);
-    } finally {
-      setPending(false);
-    }
+    },
+  });
+
+  const values = useStore(form.store, (state) => state.values.data);
+  const pending = useStore(form.store, (state) => state.isSubmitting);
+  const submitted = useStore(form.store, (state) => state.submissionAttempts > 0);
+  // A submit the form itself refused, so nothing reached the server. Without
+  // saying so, the button would seem to do nothing at all.
+  const refused = useStore(
+    form.store,
+    (state) => state.submissionAttempts > 0 && !state.isValid,
+  );
+
+  const filled = countFilled(placeholders, values);
+  const missing = new Set(
+    placeholders.filter((name) => (values[name] ?? "").trim() === ""),
+  );
+
+  function showVersion(version: number) {
+    // Choosing the latest drops the parameter instead of pinning to a number,
+    // so "current" keeps a clean address and only a real pin shows in the URL.
+    void navigate({
+      to: "/templates/$templateId",
+      params: { templateId: template.id },
+      search: version === template.latestVersion ? {} : { versao: version },
+      replace: true,
+    });
   }
 
   async function onDownload(document: GeneratedDocument) {
@@ -203,16 +222,54 @@ function GenerateScreen({
 
   const summary = summaryOf(failure);
 
-  // Placeholders the API objected to, so the document can mark them where they
-  // sit rather than only listing them above the fold.
-  const invalidFields = new Set(
-    failure?.kind === "validation"
-      ? failure.fields
-          .map((f) => f.field)
-          .filter((f) => f.startsWith("data."))
-          .map((f) => f.slice("data.".length))
-      : [],
-  );
+  /**
+   * One placeholder bound to its field. Leaving the chip's input commits the
+   * value and counts as leaving the field, which is when it is validated. A
+   * chip is marked when the form shows an error for it, or when the server
+   * rejected it.
+   */
+  function boundChip(name: string, marks: Marks, editing: EditingState) {
+    return (
+      <form.Field name={`data.${name}`}>
+        {(field) => (
+          <PlaceholderField
+            name={name}
+            marks={marks}
+            value={field.state.value}
+            editing={editing.editing}
+            onEdit={editing.onEdit}
+            invalid={
+              messageFor(failure, `data.${name}`) !== undefined ||
+              visibleError(field.state.meta, submitted) !== undefined
+            }
+            onCommit={(value) => {
+              if (value !== field.state.value) setFailure(null);
+              field.handleChange(value);
+              field.handleBlur();
+            }}
+          />
+        )}
+      </form.Field>
+    );
+  }
+
+  /** One placeholder as a plain labelled field, for the fallback form. */
+  function boundInput(name: string, label: string) {
+    return (
+      <form.Field key={name} name={`data.${name}`}>
+        {(field) => (
+          <BoundFormField
+            field={field}
+            submitted={submitted}
+            serverError={messageFor(failure, `data.${name}`)}
+            onEdit={() => setFailure(null)}
+            label={label}
+            placeholder={placeholderSyntax(name)}
+          />
+        )}
+      </form.Field>
+    );
+  }
 
   return (
     <>
@@ -243,7 +300,7 @@ function GenerateScreen({
             >
               Voltar
             </Link>
-            <Button type="button" disabled={pending} onClick={onGenerate}>
+            <Button type="button" disabled={pending} onClick={() => void form.handleSubmit()}>
               <IconFilePlus data-icon="inline-start" aria-hidden="true" />
               {pending ? "Gerando…" : "Gerar documento"}
             </Button>
@@ -311,6 +368,19 @@ function GenerateScreen({
           </p>
         )}
 
+        {refused && summary == null && (
+          <p
+            role="alert"
+            className="flex items-start gap-2.5 max-w-3xl rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-small text-destructive-soft"
+          >
+            <IconAlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+            <span>
+              Faltam {placeholders.length - filled} de {placeholders.length}{" "}
+              campos. Eles estão marcados no documento e listados em Campos.
+            </span>
+          </p>
+        )}
+
         {generated && (
           <GeneratedCard
             document={generated}
@@ -322,12 +392,7 @@ function GenerateScreen({
 
         <div className="grid max-w-5xl gap-5">
           {previewUnavailable ? (
-            <FallbackForm
-              placeholders={placeholders}
-              values={values}
-              onChange={setValue}
-              failure={failure}
-            />
+            <FallbackForm placeholders={placeholders} renderField={boundInput} />
           ) : (
             <>
               <p className="text-caption text-faint">
@@ -335,12 +400,7 @@ function GenerateScreen({
                 leitura simplificada do modelo: o arquivo gerado mantém a
                 formatação original do Word.
               </p>
-              <DocumentPreview
-                blocks={blocks}
-                values={values}
-                onChange={setValue}
-                invalid={invalidFields}
-              />
+              <DocumentPreview blocks={blocks} renderPlaceholder={boundChip} />
             </>
           )}
 
@@ -417,64 +477,59 @@ function PublishVersion({
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  const [file, setFile] = useState<File | null>(null);
+  // What the server answered; the file's shape is checked by the form.
   const [failure, setFailure] = useState<Failure | null>(null);
 
   const publish = useMutation({
-    mutationFn: (form: FormData) => publishTemplateVersion({ data: form }),
+    mutationFn: (data: FormData) => publishTemplateVersion({ data }),
   });
-  const pending = publish.isPending;
 
-  function onPick(chosen: File | null) {
-    setFile(chosen);
-    setFailure(null);
+  const form = useForm({
+    defaultValues: { file: null as File | null },
+    validationLogic: blurThenChange,
+    validators: {
+      // No file yet is checked as an empty one, which the domain already
+      // answers with "Escolha um arquivo .docx."
+      onDynamic: ({ value }) => formErrors(validateTemplateFile(value.file ?? new File([], ""))),
+    },
+    onSubmit: async ({ value }) => {
+      if (value.file === null) return;
 
-    if (chosen) {
-      const problems = validateTemplateFile(chosen);
-      if (problems.length > 0) {
-        setFailure({ kind: "validation", fields: problems });
+      const data = new FormData();
+      data.set("templateId", template.id);
+      data.set("file", value.file, value.file.name);
+
+      setFailure(null);
+      const result = await publish.mutateAsync(data);
+      if (!result.ok) {
+        setFailure(result.failure);
+        return;
       }
-    }
-  }
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!file) {
-      setFailure({
-        kind: "validation",
-        fields: [{ field: "file", message: "Escolha um arquivo .docx." }],
+      // Mark the template stale before leaving any pin, so the screen lands on
+      // the version just published: the "latest" entry cached for this
+      // template still describes the one before.
+      await invalidateAfter(queryClient, "versionPublished");
+      await navigate({
+        to: "/templates/$templateId",
+        params: { templateId: template.id },
+        search: {},
+        replace: true,
       });
-      return;
-    }
+      onDone();
+    },
+  });
 
-    const form = new FormData();
-    form.set("templateId", template.id);
-    form.set("file", file, file.name);
-
-    setFailure(null);
-
-    const result = await publish.mutateAsync(form);
-    if (!result.ok) {
-      setFailure(result.failure);
-      return;
-    }
-
-    // Mark the template stale before leaving any pin, so the screen lands on
-    // the version just published: the "latest" entry cached for this template
-    // still describes the one before.
-    await invalidateAfter(queryClient, "versionPublished");
-    await navigate({
-      to: "/templates/$templateId",
-      params: { templateId: template.id },
-      search: {},
-      replace: true,
-    });
-    onDone();
-  }
+  const pending = useStore(form.store, (state) => state.isSubmitting);
+  const submitted = useStore(form.store, (state) => state.submissionAttempts > 0);
 
   return (
     <form
-      onSubmit={onSubmit}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void form.handleSubmit();
+      }}
+      noValidate
       className="flex max-w-3xl flex-col gap-4 rounded-lg border border-border bg-card px-5 py-4"
     >
       <div className="flex flex-col gap-1">
@@ -486,11 +541,20 @@ function PublishVersion({
         </p>
       </div>
 
-      <Dropzone
-        file={file}
-        onSelect={onPick}
-        error={messageFor(failure, "file")}
-      />
+      <form.Field name="file">
+        {(field) => (
+          <Dropzone
+            file={field.state.value}
+            onSelect={(chosen) => {
+              setFailure(null);
+              field.handleChange(chosen);
+              // Picking a file is finishing with the field.
+              field.handleBlur();
+            }}
+            error={messageFor(failure, "file") ?? visibleError(field.state.meta, submitted)}
+          />
+        )}
+      </form.Field>
 
       {failure && messageFor(failure, "file") === undefined && (
         <p role="alert" className="flex items-start gap-1.5 text-caption text-destructive">
@@ -674,14 +738,11 @@ function Checklist({
  */
 function FallbackForm({
   placeholders,
-  values,
-  onChange,
-  failure,
+  renderField,
 }: {
   readonly placeholders: readonly string[];
-  readonly values: Readonly<Record<string, string>>;
-  readonly onChange: (name: string, value: string) => void;
-  readonly failure: Failure | null;
+  /** Draws one placeholder's field, bound to the screen's form. */
+  readonly renderField: (name: string, label: string) => ReactNode;
 }) {
   if (placeholders.length === 0) {
     return (
@@ -708,20 +769,7 @@ function FallbackForm({
               {group.label}
             </legend>
           )}
-          {group.fields.map((field) => (
-            <FormField
-              key={field.name}
-              name={field.name}
-              label={field.label}
-              placeholder={placeholderSyntax(field.name)}
-              value={values[field.name] ?? ""}
-              onChange={(event) => {
-                const value = event.currentTarget.value;
-                onChange(field.name, value);
-              }}
-              error={messageFor(failure, `data.${field.name}`)}
-            />
-          ))}
+          {group.fields.map((field) => renderField(field.name, field.label))}
         </fieldset>
       ))}
     </div>

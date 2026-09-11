@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
+import { useForm, useStore } from "@tanstack/react-form";
 import {
   createFileRoute,
   Link,
@@ -8,8 +9,10 @@ import {
 
 import { messageFor, summaryOf, type Failure } from "@/application/result";
 import { AuthLayout } from "@/components/auth-layout";
-import { FormField } from "@/components/form-field";
+import { BoundFormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
+import { validateEmail } from "@/domain/user";
+import { blurThenChange, formErrors } from "@/lib/form";
 import { currentUser, requestPasswordReset } from "@/server/auth";
 
 export const Route = createFileRoute("/esqueci-senha")({
@@ -34,29 +37,25 @@ export const Route = createFileRoute("/esqueci-senha")({
 function ForgotPasswordPage() {
   const navigate = useNavigate();
   const [failure, setFailure] = useState<Failure | null>(null);
-  const [pending, setPending] = useState(false);
   const [sent, setSent] = useState(false);
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-
-    setPending(true);
-    setFailure(null);
-
-    try {
-      const result = await requestPasswordReset({
-        data: String(form.get("email") ?? ""),
-      });
+  const form = useForm({
+    defaultValues: { email: "" },
+    validationLogic: blurThenChange,
+    validators: { onDynamic: ({ value }) => formErrors(validateEmail(value.email)) },
+    onSubmit: async ({ value }) => {
+      setFailure(null);
+      const result = await requestPasswordReset({ data: value.email });
       if (result.ok) {
         setSent(true);
         return;
       }
       setFailure(result.failure);
-    } finally {
-      setPending(false);
-    }
-  }
+    },
+  });
+
+  const pending = useStore(form.store, (state) => state.isSubmitting);
+  const submitted = useStore(form.store, (state) => state.submissionAttempts > 0);
 
   if (sent) {
     return (
@@ -109,15 +108,28 @@ function ForgotPasswordPage() {
         </>
       }
     >
-      <form onSubmit={onSubmit} noValidate className="flex flex-col gap-5">
-        <FormField
-          name="email"
-          label="E-mail"
-          type="email"
-          autoComplete="email"
-          autoFocus
-          error={messageFor(failure, "email")}
-        />
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void form.handleSubmit();
+        }}
+        noValidate
+        className="flex flex-col gap-5"
+      >
+        <form.Field name="email">
+          {(field) => (
+            <BoundFormField
+              field={field}
+              submitted={submitted}
+              serverError={messageFor(failure, "email")}
+              onEdit={() => setFailure(null)}
+              label="E-mail"
+              type="email"
+              autoComplete="email"
+              autoFocus
+            />
+          )}
+        </form.Field>
         <Button type="submit" disabled={pending} className="mt-1">
           {pending ? "Enviando…" : "Enviar link"}
         </Button>
