@@ -758,6 +758,10 @@ Your plan is {{.plan}} at {{.amount}} per month.</code></pre>
             <div><span class="field-name">password</span><br><span class="field-type">string · <span class="req">required</span></span></div>
             <div class="field-desc">Between 12 and 256 characters.</div>
           </div>
+          <div class="field">
+            <div><span class="field-name">terms_version</span><br><span class="field-type">string · <span class="req">required</span></span></div>
+            <div class="field-desc">The version of the terms of use accepted. Recorded with the instant, because consent to one version is not consent to the next.</div>
+          </div>
         </div>
         <div class="pair">
           <div>
@@ -765,20 +769,16 @@ Your plan is {{.plan}} at {{.amount}} per month.</code></pre>
             <pre><code>{
   <span class="key">"email"</span>: <span class="str">"someone@example.com"</span>,
   <span class="key">"name"</span>: <span class="str">"Ada Lovelace"</span>,
-  <span class="key">"password"</span>: <span class="str">"a-sufficiently-long-password"</span>
+  <span class="key">"password"</span>: <span class="str">"a-sufficiently-long-password"</span>,
+  <span class="key">"terms_version"</span>: <span class="str">"1.0"</span>
 }</code></pre>
           </div>
           <div>
-            <div class="pair-label">201 Created</div>
-            <pre><code>{
-  <span class="key">"id"</span>: <span class="str">"01a08374-3567-79e9-83a1-…"</span>,
-  <span class="key">"email"</span>: <span class="str">"someone@example.com"</span>,
-  <span class="key">"name"</span>: <span class="str">"Ada Lovelace"</span>,
-  <span class="key">"created_at"</span>: <span class="str">"2026-09-08T23:57:06Z"</span>
-}</code></pre>
+            <div class="pair-label">202 Accepted</div>
+            <pre><code>(no body)</code></pre>
           </div>
         </div>
-        <p><span class="status">409</span> if the address is already registered.</p>
+        <p>The answer is the same whether or not the address already had an account. In that case nothing is created and the owner is told by email; anything that differed would reveal who is registered. It does not start a session: log in afterwards.</p>
       </div>
 
       <div class="endpoint" id="login">
@@ -1111,7 +1111,7 @@ Cache-Control: private, max-age=31536000, immutable</code></pre>
             <tr><td class="status">400</td><td><code>bad_request</code></td><td>A path identifier is not a valid UUID.</td></tr>
             <tr><td class="status">401</td><td><code>unauthorized</code></td><td>No credential, or one that was not accepted. Carries <code>WWW-Authenticate: Bearer</code>.</td></tr>
             <tr><td class="status">404</td><td><code>not_found</code></td><td>No such resource <em>for this account</em>.</td></tr>
-            <tr><td class="status">409</td><td><code>conflict</code></td><td>The email address is already registered.</td></tr>
+            <tr><td class="status">409</td><td><code>conflict</code></td><td>The resource already exists. No endpoint currently answers with it — registration deliberately does not.</td></tr>
             <tr><td class="status">415</td><td><code>unsupported_media_type</code></td><td>The body was sent under an unexpected <code>Content-Type</code>.</td></tr>
             <tr><td class="status">422</td><td><code>validation_failed</code></td><td>Well formed, but not acceptable. The only code that carries <code>fields</code>.</td></tr>
             <tr><td class="status">429</td><td><code>rate_limited</code></td><td>Too many requests. Carries <code>Retry-After</code> in seconds.</td></tr>
