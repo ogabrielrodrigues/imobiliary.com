@@ -518,6 +518,7 @@
       <a href="#refresh"><span class="verb verb-post">POST</span><code>/auth/refresh</code></a>
       <a href="#logout"><span class="verb verb-post">POST</span><code>/auth/logout</code></a>
       <a href="#me"><span class="verb verb-get">GET</span><code>/me</code></a>
+      <a href="#stats"><span class="verb verb-get">GET</span><code>/me/stats</code></a>
     </div>
 
     <div class="nav-group">
@@ -836,6 +837,29 @@ Your plan is {{.plan}} at {{.amount}} per month.</code></pre>
           <span class="path">/v1/me</span>
         </div>
         <p>Returns the authenticated account. Useful for checking that a token is being sent correctly.</p>
+      </div>
+
+      <div class="endpoint" id="stats">
+        <div class="sig">
+          <span class="chip chip-get">GET</span>
+          <span class="path">/v1/me/stats</span>
+        </div>
+        <p>
+          The figures behind the account's dashboard: templates in use, documents held, documents
+          generated in a window and in the window of the same length before it, one count per day,
+          and the five templates used most. Deleted templates still rank, marked <code>deleted</code>,
+          because the documents made from them are still the account's.
+        </p>
+        <div class="fields">
+          <div class="field">
+            <div><span class="field-name">days</span><br><span class="field-type">query · integer</span></div>
+            <div class="field-desc"><code>7</code>, <code>30</code> or <code>90</code>. Defaults to 30. Anything else is a 422.</div>
+          </div>
+          <div class="field">
+            <div><span class="field-name">tz</span><br><span class="field-type">query · string</span></div>
+            <div class="field-desc">IANA time zone, such as <code>America/Sao_Paulo</code>. Days are counted in it, so a document from 22:30 in São Paulo belongs to that day. Defaults to UTC; <code>Local</code> is refused.</div>
+          </div>
+        </div>
       </div>
     </section>
 

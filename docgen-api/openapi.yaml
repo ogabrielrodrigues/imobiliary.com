@@ -61,6 +61,8 @@ tags:
     description: Uploaded DOCX models and their immutable versions.
   - name: Documents
     description: Rendered documents.
+  - name: Dashboard
+    description: Aggregate figures about the account's own activity.
   - name: Privacy
     description: |
       The rights a data subject has over their own data under the LGPD
@@ -370,6 +372,53 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/AccountExport" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/me/stats:
+    get:
+      tags: [Dashboard]
+      summary: Figures behind the account's dashboard
+      description: |
+        Counts of templates and documents, documents per day across a window,
+        and the templates used most in it. Everything is scoped to the caller.
+
+        The window ends today and covers `days` calendar days, counted in the
+        time zone `tz`: a document generated at 22:30 in São Paulo belongs to
+        that day there, whatever UTC date it was stored under. The window of
+        the same length just before it is reported as a single count, which is
+        what a change is measured against.
+
+        Deleted templates are left out of the template count but still ranked,
+        marked `deleted`: the documents made from them are still the
+        account's.
+      operationId: getStats
+      parameters:
+        - name: days
+          in: query
+          required: false
+          description: Length of the window. Only these three are offered.
+          schema:
+            type: integer
+            enum: [7, 30, 90]
+            default: 30
+        - name: tz
+          in: query
+          required: false
+          description: |
+            IANA time zone that decides where each day starts. `Local` is
+            refused, since it would mean the server's zone.
+          schema:
+            type: string
+            default: UTC
+            example: America/Sao_Paulo
+      responses:
+        "200":
+          description: The figures.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Stats" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
   /v1/templates:
@@ -1078,6 +1127,52 @@ components:
             payload are named `data.<placeholder>`.
         message: { type: string }
       required: [field, message]
+
+    Stats:
+      type: object
+      properties:
+        days: { type: integer, enum: [7, 30, 90] }
+        time_zone:
+          type: string
+          description: The zone the days were counted in.
+        templates:
+          type: integer
+          description: Templates not deleted.
+        documents:
+          type: integer
+          description: Every document the account holds.
+        documents_in_period:
+          type: integer
+          description: Documents generated in the window, today included.
+        documents_previous_period:
+          type: integer
+          description: Documents generated in the window of the same length just before.
+        per_day:
+          type: array
+          description: One entry per day of the window, oldest first, zero-filled.
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+                description: A calendar day in `time_zone`, not an instant.
+              documents: { type: integer }
+            required: [date, documents]
+        top_templates:
+          type: array
+          description: Up to five templates, most used in the window first; ties by name.
+          items:
+            type: object
+            properties:
+              template_id: { type: string, format: uuid }
+              name: { type: string }
+              deleted: { type: boolean }
+              documents: { type: integer }
+            required: [template_id, name, deleted, documents]
+      required:
+        [days, time_zone, templates, documents, documents_in_period,
+         documents_previous_period, per_day, top_templates]
 
     Error:
       type: object

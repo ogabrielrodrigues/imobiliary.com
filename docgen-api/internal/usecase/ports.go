@@ -94,6 +94,20 @@ type DocumentRepository interface {
 	Delete(ctx context.Context, ownerID, id uuid.UUID) (string, error)
 }
 
+// StatsRepository answers the aggregate questions behind an account's
+// dashboard. Every method is scoped to one owner in the query.
+type StatsRepository interface {
+	CountActiveTemplates(ctx context.Context, ownerID uuid.UUID) (int, error)
+	CountDocuments(ctx context.Context, ownerID uuid.UUID) (int, error)
+	// DocumentTimesSince returns when each document created at or after since
+	// was generated. Grouping them into days is left to the caller, because a
+	// day depends on the time zone and the database stores UTC.
+	DocumentTimesSince(ctx context.Context, ownerID uuid.UUID, since time.Time) ([]time.Time, error)
+	// TopTemplatesSince ranks templates by the documents generated from them at
+	// or after since, most first, ties broken by name.
+	TopTemplatesSince(ctx context.Context, ownerID uuid.UUID, since time.Time, limit int) ([]domain.TemplateUsage, error)
+}
+
 // BlobStore keeps the DOCX bytes, addressed by content hash.
 type BlobStore interface {
 	Put(r io.Reader) (hash string, size int64, err error)

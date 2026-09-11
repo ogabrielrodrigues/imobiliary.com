@@ -206,6 +206,7 @@ func newTestServer(t *testing.T, opts serverOptions) *testServer {
 		Documents:       documents,
 		Privacy:         privacy,
 		Passwords:       passwords,
+		Stats:           usecase.NewStats(usecase.StatsConfig{Repo: sqlite.NewStatsRepository(db)}),
 		Limiters:        limiters,
 		Logger:          testLogger(),
 		Health:          db.Ping,

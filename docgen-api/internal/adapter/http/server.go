@@ -38,6 +38,7 @@ type Options struct {
 	Documents *usecase.Documents
 	Privacy   *usecase.Privacy
 	Passwords *usecase.Passwords
+	Stats     *usecase.Stats
 	Limiters  Limiters
 	Logger    *slog.Logger
 	// Health reports whether dependencies are reachable.
@@ -55,6 +56,7 @@ type Server struct {
 	documents *usecase.Documents
 	privacy   *usecase.Privacy
 	passwords *usecase.Passwords
+	stats     *usecase.Stats
 	limiters  Limiters
 	logger    *slog.Logger
 	health    func(context.Context) error
@@ -72,6 +74,7 @@ func NewServer(opts Options) *Server {
 		documents:         opts.Documents,
 		privacy:           opts.Privacy,
 		passwords:         opts.Passwords,
+		stats:             opts.Stats,
 		limiters:          opts.Limiters,
 		logger:            opts.Logger,
 		health:            opts.Health,
@@ -130,6 +133,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /v1/auth/password/reset", credentials(s.handleResetPassword))
 
 	mux.Handle("GET /v1/me", read(s.handleMe))
+	mux.Handle("GET /v1/me/stats", read(s.handleStats))
 	mux.Handle("POST /v1/me/password", credentialed(s.handleChangePassword))
 	// The data-subject rights of article 18. Erasure is a mutation and is
 	// charged to the write budget; the export is a read, but an expensive one,

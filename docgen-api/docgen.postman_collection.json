@@ -253,6 +253,30 @@
             "description": "Useful for checking that access_token is set correctly."
           },
           "response": []
+        },
+        {
+          "name": "Dashboard stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/me/stats?days=30&tz=America/Sao_Paulo",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "me",
+                "stats"
+              ],
+              "query": [
+                { "key": "days", "value": "30", "description": "7, 30 or 90" },
+                { "key": "tz", "value": "America/Sao_Paulo", "description": "IANA time zone; days are counted in it" }
+              ]
+            },
+            "description": "Counts of templates and documents, documents per day across the window, and the five templates used most in it. Deleted templates still rank, marked deleted."
+          },
+          "response": []
         }
       ]
     },

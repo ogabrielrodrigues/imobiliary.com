@@ -147,6 +147,7 @@ func run(logger *slog.Logger) error {
 		Documents:         documentService,
 		Privacy:           privacyService,
 		Passwords:         passwordService,
+		Stats:             usecase.NewStats(usecase.StatsConfig{Repo: sqlite.NewStatsRepository(db)}),
 		Limiters:          limiters,
 		Logger:            logger,
 		Health:            db.Ping,
