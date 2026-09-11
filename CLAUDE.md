@@ -333,7 +333,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-11 — themes done; Fustat in a separate commit; the editor is what remains
+**Last updated:** 2026-09-11 — TanStack Query, Table and Form done; the editor is what remains
 
 ### Done
 
@@ -699,15 +699,59 @@ _Update this section as work proceeds. It is what a fresh session reads first._
     - An account with no documents gets three getting-started steps instead
       of empty charts.
 
+24. **TanStack Query, Table and Form** (`cb41b3f`, `4ede01c`, `5693641`). Versions pinned: react-query 5.102.8,
+    react-router-ssr-query 1.167.2, react-table 9.2.4, react-form 1.33.5.
+    - **Query.** One `QueryClient` per router, created in `getRouter`, never
+      at module level: on the server a shared client would hand one account's
+      cache to the next request. `setupRouterSsrQueryIntegration` dehydrates
+      what the server fetched. Loaders call `ensureQueryData`, components
+      `useSuspenseQuery`; the data is still the `Result<T>`. Factories live
+      in `src/queries/` (a layer of its own in `check-layers.mjs`); keys and
+      **what each change makes stale** are in `queries/keys.ts`, tested.
+      `staleTime` 30s, `retry: false` (expected failures are values),
+      `defaultPreloadStaleTime: 0` so the router always asks and the query
+      cache decides. Sign-in, sign-out and account deletion `clear()` it.
+    - **The dashboard's loader returns the zone it used**, and the component
+      builds its key from that. Recomputing the zone in the component gives
+      the server's default on the server and the browser's zone on hydration:
+      two keys, and everything fetched twice.
+    - **The guards still call `currentUser` directly**, not through a query:
+      a guard should read the cookie on every navigation, not a cache.
+    - **Table v9 is not v8.** `useTable({ features, columns, data })`, with
+      features and row models declared in `tableFeatures(...)`; the v8
+      `useReactTable`/`getCoreRowModel` examples on the web are wrong for it.
+      The package ships its own docs under `node_modules/@tanstack/*-table/
+      skills/` — read those. Documentos pages with `?pagina=` and asks for one
+      row more than it shows, since the API returns no total. **No filter by
+      template**: the API has none, so a filter could only search the page on
+      screen. Sorting says it applies to the page.
+    - **Form.** `lib/form.ts` holds the rule, as a custom `validationLogic`
+      over one form-level `onDynamic` validator that calls the domain:
+      leaving a field validates; while any field shows an error each
+      keystroke revalidates; after a submit everything does. `visibleError`
+      shows an error only once its field was left or the form submitted.
+      **A form-level validator is called without the changed field's name**
+      (`FormApi.validateSync` never passes `fieldName`), which is why the
+      rule looks at every field's meta; the first version keyed on the name
+      and never revalidated. Server errors win on their field and are
+      dropped when the person edits. On the generation screen the form owns
+      the values; chips bind `data.<placeholder>` fields through
+      `DocumentPreview`'s `renderPlaceholder`.
+    - Sign-up's terms checkbox was never enforced: `required` does nothing
+      under the form's `noValidate`. It is a validated field now.
+    - **The TanStack packages are in `optimizeDeps.include`.** Discovered
+      mid-session, one re-optimised the dependencies and the open page failed
+      every hook. Also, `graphify update` rewrites `graphify-out/graph.html`,
+      which makes Vite reload the page — do not run it during a browser test.
+    - Verified in the browser, signed out: the blur/keystroke/submit rule on
+      Entrar and Esqueci minha senha, sign-up's four errors including the
+      terms, no console errors. **The signed-in half is not seen yet**: the
+      cache on returning to a screen, generating then seeing Documentos
+      update, the table's sorting and paging, the generation form.
+
 ### Next step
 
-**Phase 2, the TanStack libraries — planned, deferred by the user until now** —
-Query (router SSR integration, `queryOptions` factories, mutations instead of
-`router.invalidate()`), Table (Documentos, with real paging) and Form (all
-seven forms; validate on blur, then on every keystroke once a field shows an
-error, reusing the domain validators). The plan file carries the details.
-
-After that, **the block editor**, the last piece of the original plan. It needs the docx
+**The block editor**, the last piece of the original plan. It needs the docx
 `build` module: blocks → `word/document.xml` → `writeZip`. Write the writer and
 **open its output in Word before building any interface around it** — that is
 the step that decides whether the whole idea works. Store the block tree as
