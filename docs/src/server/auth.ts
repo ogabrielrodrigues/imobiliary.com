@@ -35,10 +35,13 @@ export const ACCOUNT_DELETION_CONFIRMATION = "EXCLUIR";
  *
  * It does not sign the user in — the API deliberately separates the two, and
  * the interface sends them to the sign-in screen next.
+ *
+ * The answer is the same whether or not the address was already taken: the API
+ * returns nothing that could tell the two apart, and neither does this.
  */
 export const register = createServerFn({ method: "POST" })
   .inputValidator((input: RegistrationInput) => input)
-  .handler(async ({ data }): Promise<Result<User>> =>
+  .handler(async ({ data }): Promise<Result<null>> =>
     attempt(async () => {
       assertSameOrigin();
 
@@ -47,11 +50,12 @@ export const register = createServerFn({ method: "POST" })
       const invalid = validateRegistration(data);
       if (invalid) throw invalid;
 
-      return docgen().auth.register(callContext(), {
+      await docgen().auth.register(callContext(), {
         ...data,
         email: data.email.trim(),
         name: data.name.trim(),
       });
+      return null;
     }),
   );
 

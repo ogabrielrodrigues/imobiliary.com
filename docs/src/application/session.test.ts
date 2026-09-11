@@ -68,7 +68,7 @@ class FakeAuth implements AuthGateway {
   refreshDelayMs = 0;
   refreshFails: Error | null = null;
 
-  register(): Promise<User> {
+  register(): Promise<void> {
     throw new Error("not used");
   }
 

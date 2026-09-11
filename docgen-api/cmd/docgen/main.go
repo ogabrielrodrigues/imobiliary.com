@@ -77,12 +77,24 @@ func run(logger *slog.Logger) error {
 
 	cache := usecase.NewTemplateCache(templateCacheSize)
 
+	// Without a provider key the service logs mail instead of sending it, so a
+	// development run prints the reset link in the terminal and no message can
+	// reach a real person by accident.
+	// config.Load already refused to start with neither, so exactly one applies.
+	var mailer usecase.Mailer = mail.NewResend(cfg.ResendAPIKey, cfg.MailFrom)
+	if cfg.ResendAPIKey == "" {
+		logger.Warn("DOCGEN_MAIL_LOG is on: mail, including password-reset links, is written to this log")
+		mailer = mail.NewLogger(logger)
+	}
+
 	identity := usecase.NewIdentity(usecase.IdentityConfig{
 		Users:      users,
 		Sessions:   sessions,
 		Hasher:     password.NewHasher(),
 		Tokens:     token.NewIssuer(cfg.JWTSecret, cfg.AccessTokenTTL),
+		Mailer:     mailer,
 		RefreshTTL: cfg.RefreshTokenTTL,
+		Logger:     logger,
 	})
 	templateService := usecase.NewTemplates(usecase.TemplatesConfig{
 		Repo:      templates,
@@ -96,16 +108,6 @@ func run(logger *slog.Logger) error {
 		Blobs:     blobs,
 		Cache:     cache,
 	})
-
-	// Without a provider key the service logs mail instead of sending it, so a
-	// development run prints the reset link in the terminal and no message can
-	// reach a real person by accident.
-	// config.Load already refused to start with neither, so exactly one applies.
-	var mailer usecase.Mailer = mail.NewResend(cfg.ResendAPIKey, cfg.MailFrom)
-	if cfg.ResendAPIKey == "" {
-		logger.Warn("DOCGEN_MAIL_LOG is on: mail, including password-reset links, is written to this log")
-		mailer = mail.NewLogger(logger)
-	}
 
 	passwordService := usecase.NewPasswords(usecase.PasswordsConfig{
 		Users:      users,

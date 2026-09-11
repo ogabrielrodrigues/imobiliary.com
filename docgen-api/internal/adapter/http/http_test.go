@@ -145,12 +145,15 @@ func newTestServer(t *testing.T, opts serverOptions) *testServer {
 	templatesRepo := sqlite.NewTemplateRepository(db)
 	cache := usecase.NewTemplateCache(16)
 
+	mailbox := &testMailbox{}
 	identity := usecase.NewIdentity(usecase.IdentityConfig{
 		Users:      sqlite.NewUserRepository(db),
 		Sessions:   sqlite.NewSessionRepository(db),
 		Hasher:     password.NewHasher(),
 		Tokens:     token.NewIssuer(jwtSecret, 15*time.Minute),
+		Mailer:     mailbox,
 		RefreshTTL: 24 * time.Hour,
+		Logger:     testLogger(),
 	})
 	templates := usecase.NewTemplates(usecase.TemplatesConfig{
 		Repo:      templatesRepo,
@@ -165,7 +168,6 @@ func newTestServer(t *testing.T, opts serverOptions) *testServer {
 		Cache:     cache,
 	})
 
-	mailbox := &testMailbox{}
 	passwords := usecase.NewPasswords(usecase.PasswordsConfig{
 		Users:      sqlite.NewUserRepository(db),
 		Sessions:   sqlite.NewSessionRepository(db),
@@ -391,7 +393,7 @@ func (s *testServer) registerAndLogin(email string) sessionBody {
 		"password":      "a-sufficiently-long-password",
 		"terms_version": "1.0",
 	}
-	expectStatus(s.t, s.postJSON("/v1/auth/register", "", credentials), http.StatusCreated)
+	expectStatus(s.t, s.postJSON("/v1/auth/register", "", credentials), http.StatusAccepted)
 
 	var session sessionBody
 	decode(s.t, s.postJSON("/v1/auth/login", "", map[string]string{
@@ -1260,7 +1262,7 @@ func TestRegistrationRecordsTermsAcceptance(t *testing.T) {
 		"name":          "Com Aceite",
 		"password":      "a-sufficiently-long-password",
 		"terms_version": "1.0",
-	}), http.StatusCreated)
+	}), http.StatusAccepted)
 }
 
 // TestChangePasswordEndsTheOtherSessions is the assertion the whole feature
@@ -1446,4 +1448,50 @@ func resetTokenFrom(t *testing.T, body string) string {
 		t.Fatalf("empty reset token in the message:\n%s", body)
 	}
 	return secret
+}
+
+// TestRegisterDoesNotRevealATakenEmail covers the enumeration guard on the one
+// endpoint that had none: registering an address that already has an account
+// must look, from outside, exactly like registering a new one.
+func TestRegisterDoesNotRevealATakenEmail(t *testing.T) {
+	server := newTestServer(t, defaultServerOptions())
+	server.registerAndLogin("taken@example.com")
+
+	register := func(email string) (int, string) {
+		t.Helper()
+		resp := server.postJSON("/v1/auth/register", "", map[string]string{
+			"email":         email,
+			"name":          "Outra Pessoa",
+			"password":      "outra-senha-bem-comprida",
+			"terms_version": "1.0",
+		})
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		return resp.StatusCode, string(body)
+	}
+
+	before := server.mailbox.count()
+	takenStatus, takenBody := register("taken@example.com")
+	freeStatus, freeBody := register("free@example.com")
+
+	if takenStatus != freeStatus || takenBody != freeBody {
+		t.Errorf("taken address answered %d %q, free one %d %q; they must be identical",
+			takenStatus, takenBody, freeStatus, freeBody)
+	}
+
+	// The difference lives in the mailbox, where only the owner can see it.
+	if sent := server.mailbox.count() - before; sent != 1 {
+		t.Errorf("sent %d messages, want exactly the notice to the owner", sent)
+	}
+
+	// And the original account still opens with its own password only.
+	expectStatus(t, server.postJSON("/v1/auth/login", "", map[string]string{
+		"email": "taken@example.com", "password": "a-sufficiently-long-password",
+	}), http.StatusOK)
+	expectStatus(t, server.postJSON("/v1/auth/login", "", map[string]string{
+		"email": "taken@example.com", "password": "outra-senha-bem-comprida",
+	}), http.StatusUnauthorized)
 }

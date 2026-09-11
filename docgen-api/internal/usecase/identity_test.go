@@ -227,6 +227,7 @@ func (f fakeTokens) ParseAccess(raw string) (uuid.UUID, time.Time, error) {
 
 // identityFixture bundles a wired Identity with the fakes behind it.
 type identityFixture struct {
+	mail     *fakeMailer
 	identity *Identity
 	users    *fakeUsers
 	sessions *fakeSessions
@@ -239,6 +240,7 @@ func newIdentityFixture(t *testing.T) *identityFixture {
 	fixture := &identityFixture{
 		users:    newFakeUsers(),
 		sessions: newFakeSessions(),
+		mail:     &fakeMailer{},
 		now:      time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC),
 	}
 	clock := func() time.Time { return fixture.now }
@@ -248,6 +250,7 @@ func newIdentityFixture(t *testing.T) *identityFixture {
 		Sessions:   fixture.sessions,
 		Hasher:     fakeHasher{},
 		Tokens:     fakeTokens{ttl: 15 * time.Minute, now: clock},
+		Mailer:     fixture.mail,
 		RefreshTTL: 30 * 24 * time.Hour,
 		Now:        clock,
 	})
@@ -314,13 +317,20 @@ func TestRegisterRejectsInvalidInput(t *testing.T) {
 	}
 }
 
-func TestRegisterRejectsDuplicateEmail(t *testing.T) {
+func TestRegisterDoesNotRevealATakenEmail(t *testing.T) {
 	ctx := t.Context()
 	f := newIdentityFixture(t)
 	f.register(t, ctx)
 
-	if _, err := f.identity.Register(ctx, testEmail, testName, testPassword, "1.0"); !errors.Is(err, domain.ErrAlreadyExists) {
-		t.Errorf("Register with a taken email = %v, want ErrAlreadyExists", err)
+	user, err := f.identity.Register(ctx, testEmail, testName, testPassword, "1.0")
+	if err != nil {
+		t.Fatalf("Register with a taken email = %v; it must look like success", err)
+	}
+	if user != nil {
+		t.Error("a second account was created for a taken email")
+	}
+	if len(f.mail.sent) != 1 || f.mail.sent[0] != testEmail {
+		t.Errorf("notices sent = %v, want one to the owner", f.mail.sent)
 	}
 }
 
@@ -512,4 +522,14 @@ func TestDummyHashIsWellFormed(t *testing.T) {
 	if !errors.Is(err, password.ErrMismatch) {
 		t.Errorf("verifying against the dummy hash = %v, want ErrMismatch (it is malformed)", err)
 	}
+}
+
+// fakeMailer records who was written to.
+type fakeMailer struct {
+	sent []string
+}
+
+func (m *fakeMailer) Send(_ context.Context, to, _, _ string) error {
+	m.sent = append(m.sent, to)
+	return nil
 }

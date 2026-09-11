@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 	"uuid"
 
@@ -34,18 +35,24 @@ type Identity struct {
 	sessions   SessionRepository
 	hasher     PasswordHasher
 	tokens     TokenIssuer
+	mailer     Mailer
 	refreshTTL time.Duration
 	now        Clock
+	logger     *slog.Logger
 }
 
 // IdentityConfig collects the dependencies of the Identity use case.
 type IdentityConfig struct {
-	Users      UserRepository
-	Sessions   SessionRepository
-	Hasher     PasswordHasher
-	Tokens     TokenIssuer
+	Users    UserRepository
+	Sessions SessionRepository
+	Hasher   PasswordHasher
+	Tokens   TokenIssuer
+	// Mailer tells the owner of an address that someone tried to register it,
+	// which is what lets registration answer the same for a taken address.
+	Mailer     Mailer
 	RefreshTTL time.Duration
 	Now        Clock
+	Logger     *slog.Logger
 }
 
 // NewIdentity wires the Identity use case.
@@ -53,13 +60,18 @@ func NewIdentity(cfg IdentityConfig) *Identity {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
+	if cfg.Logger == nil {
+		cfg.Logger = slog.Default()
+	}
 	return &Identity{
 		users:      cfg.Users,
 		sessions:   cfg.Sessions,
 		hasher:     cfg.Hasher,
 		tokens:     cfg.Tokens,
+		mailer:     cfg.Mailer,
 		refreshTTL: cfg.RefreshTTL,
 		now:        cfg.Now,
+		logger:     cfg.Logger,
 	}
 }
 
@@ -79,9 +91,24 @@ func (i *Identity) Register(ctx context.Context, email, name, password, termsVer
 		return nil, v
 	}
 
+	// Hashed before the address is looked up, on both paths, so the time a
+	// request takes cannot tell a taken address from a free one either.
 	hash, err := i.hasher.Hash(password)
 	if err != nil {
 		return nil, fmt.Errorf("register: hash password: %w", err)
+	}
+
+	// A taken address is not an error the caller sees. Answering 409 here
+	// would let anyone ask which addresses have accounts, undoing the care
+	// taken in Login and in the password reset. The owner is told instead,
+	// in the one place only they can read.
+	existing, err := i.users.ByEmail(ctx, email)
+	if err == nil {
+		i.noticeExisting(ctx, existing)
+		return nil, nil
+	}
+	if !errors.Is(err, domain.ErrNotFound) {
+		return nil, err
 	}
 
 	now := i.now().UTC()
@@ -96,9 +123,29 @@ func (i *Identity) Register(ctx context.Context, email, name, password, termsVer
 		TermsVersion:    termsVersion,
 	}
 	if err := i.users.Create(ctx, user); err != nil {
+		// Two registrations for the same address racing each other: the loser
+		// gets the same silent answer as any other taken address.
+		if errors.Is(err, domain.ErrAlreadyExists) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return user, nil
+}
+
+// noticeExisting tells the owner of an address that someone tried to open an
+// account with it. Failures are logged, never returned: reporting them would
+// reveal that the address matched.
+func (i *Identity) noticeExisting(ctx context.Context, user *domain.User) {
+	if i.mailer == nil {
+		return
+	}
+	if err := i.mailer.Send(ctx, user.Email,
+		"Tentativa de cadastro com seu e-mail — Imobiliary Docs",
+		existingAccountMessage(user.Name),
+	); err != nil {
+		i.logger.Error("could not send the existing-account notice", slog.Any("error", err))
+	}
 }
 
 // Login exchanges credentials for a session.

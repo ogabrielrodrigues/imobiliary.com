@@ -106,18 +106,19 @@ export function createDocgenClient(options: TransportOptions): DocgenClient {
 
 function createAuthGateway(http: Transport): AuthGateway {
   return {
-    async register(ctx: CallContext, input: RegistrationInput): Promise<User> {
-      return toUser(
-        await http.json<ApiUser>(ctx, "POST", "/v1/auth/register", {
+    async register(ctx: CallContext, input: RegistrationInput): Promise<void> {
+      // 202 with no body for every well-formed request, taken address or not,
+      // so there is nothing to decode and nothing that could tell them apart.
+      await http.send(ctx, "POST", "/v1/auth/register", {
+        body: JSON.stringify({
           email: input.email,
           name: input.name,
           password: input.password,
-          // Required by the API since acceptance began being recorded. Leaving
-          // it out fails the whole registration with a 422 naming a field the
-          // form does not show, which is how this was missed.
+          // Required by the API since acceptance began being recorded.
           terms_version: input.termsVersion,
         }),
-      );
+        contentType: "application/json",
+      });
     },
 
     async deleteAccount(ctx: CallContext): Promise<void> {

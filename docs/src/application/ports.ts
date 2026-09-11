@@ -41,7 +41,11 @@ export interface Page {
 }
 
 export interface AuthGateway {
-  register(ctx: CallContext, input: RegistrationInput): Promise<User>;
+  /**
+   * Answers the same whether or not the address already had an account, so
+   * nothing comes back to tell the two apart.
+   */
+  register(ctx: CallContext, input: RegistrationInput): Promise<void>;
   /** Erases the account and everything belonging to it. Article 18, VI. */
   deleteAccount(ctx: CallContext): Promise<void>;
   /** Everything held about the account, as a file. Article 18, II and V. */

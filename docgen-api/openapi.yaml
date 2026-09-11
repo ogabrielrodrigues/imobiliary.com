@@ -115,12 +115,12 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/RegisterRequest" }
       responses:
-        "201":
-          description: The account was created.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/User" }
-        "409": { $ref: "#/components/responses/Conflict" }
+        "202":
+          description: |
+            Accepted. The same answer is given whether or not the address
+            already had an account; in that case nothing is created and the
+            owner is told by email. Anything that differed would reveal who
+            is registered.
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
@@ -803,11 +803,6 @@ components:
         No such resource **for this account**. A resource owned by someone else
         is reported as missing rather than forbidden, so the API never confirms
         that an identifier exists.
-      content:
-        application/json:
-          schema: { $ref: "#/components/schemas/Error" }
-    Conflict:
-      description: The resource already exists.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }

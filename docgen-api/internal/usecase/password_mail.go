@@ -70,3 +70,20 @@ func humanDuration(d time.Duration) string {
 		return fmt.Sprintf("%d minutos", minutes)
 	}
 }
+
+// existingAccountMessage tells someone that their address was used to try to
+// open a second account. It is what lets registration answer identically for
+// a taken address without leaving the owner in the dark.
+func existingAccountMessage(name string) string {
+	return strings.Join([]string{
+		greeting(name),
+		"",
+		"Alguém tentou criar uma conta no Imobiliary Docs com este e-mail, que já",
+		"tem uma conta aqui. Nenhuma conta nova foi criada.",
+		"",
+		"Se foi você, basta entrar com sua senha — ou redefini-la, se a esqueceu.",
+		"Se não foi, não precisa fazer nada.",
+		"",
+		"— Imobiliary Docs",
+	}, "\n")
+}

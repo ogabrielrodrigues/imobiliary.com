@@ -65,7 +65,9 @@ function SignUpPage() {
 
       if (result.ok) {
         // Registering does not open a session — the API keeps the two apart —
-        // so the next step is signing in.
+        // so the next step is signing in. The same happens when the address
+        // already had an account: its owner is told by email, and this screen
+        // says nothing that would distinguish the two cases.
         await navigate({ to: "/entrar" });
         return;
       }

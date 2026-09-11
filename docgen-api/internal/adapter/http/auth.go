@@ -80,12 +80,13 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.identity.Register(r.Context(), body.Email, body.Name, body.Password, body.TermsVersion)
-	if err != nil {
+	if _, err := s.identity.Register(r.Context(), body.Email, body.Name, body.Password, body.TermsVersion); err != nil {
 		writeError(w, s.logger, err)
 		return
 	}
-	writeJSON(w, s.logger, http.StatusCreated, newUserResponse(user))
+	// 202 and no body, whether or not the address was already taken. Anything
+	// that differed between the two would tell a caller who has an account.
+	w.WriteHeader(http.StatusAccepted)
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
