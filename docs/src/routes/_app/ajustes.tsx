@@ -62,7 +62,9 @@ function SettingsPage() {
           }}
           className="gap-4"
         >
-          <TabsList aria-label="Seções de ajustes" className="self-start">
+          {/* Four tabs outgrow a phone; the list scrolls sideways instead of wrapping. */}
+          <TabsList aria-label="Seções de ajustes" className="max-w-full self-start overflow-x-auto">
+
             {TABS.map((tab) => (
               <TabsTrigger key={tab.value} value={tab.value} className="px-3">
                 <tab.icon data-icon="inline-start" aria-hidden="true" />

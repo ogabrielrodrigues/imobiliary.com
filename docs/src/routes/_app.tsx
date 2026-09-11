@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   createFileRoute,
   Link,
@@ -6,10 +7,17 @@ import {
   useNavigate,
   useRouterState,
 } from "@tanstack/react-router";
-import { IconFileText, IconFiles, IconLogout, IconSettings } from "@tabler/icons-react";
+import {
+  IconFileText,
+  IconFiles,
+  IconLogout,
+  IconMenu2,
+  IconSettings,
+} from "@tabler/icons-react";
 
 import { Brand } from "@/components/brand";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import type { User } from "@/domain/user";
 import { cn } from "@/lib/utils";
 import { currentUser, logout } from "@/server/auth";
@@ -54,15 +62,73 @@ function AppShell() {
     // which would resize the shell mid-scroll. With the document no longer
     // scrolling, the chrome never auto-collapses and the two agree anyway.
     <div className="flex h-svh overflow-hidden pb-[var(--cookie-notice-space,0px)]">
-      <Sidebar user={user} />
+      {/*
+        From md up, the sidebar is always there, exactly as it has always
+        been. Below md there is no room for it: a bar at the top carries the
+        wordmark and a menu button that opens the same navigation in a drawer.
+      */}
+      <aside className="hidden w-52 shrink-0 flex-col gap-6 overflow-y-auto border-r border-border bg-raised px-3.5 py-5 md:flex">
+        <SidebarContent user={user} />
+      </aside>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <MobileBar user={user} />
         <Outlet />
       </div>
     </div>
   );
 }
 
-function Sidebar({ user }: { readonly user: User }) {
+/**
+ * The top bar on a narrow screen, and the drawer it opens.
+ *
+ * The drawer is mounted only once it has been asked for: Base UI's dialog
+ * renders through a portal, which does not survive hydration here. It closes
+ * on any navigation, and Base UI returns focus to the menu button.
+ */
+function MobileBar({ user }: { readonly user: User }) {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const [mounted, setMounted] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  return (
+    <header className="flex shrink-0 items-center gap-2 border-b border-border bg-raised px-2 py-2 md:hidden">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        aria-label="Abrir menu"
+        aria-expanded={open}
+        onClick={() => {
+          setMounted(true);
+          setOpen(true);
+        }}
+        className="size-10 text-muted-foreground"
+      >
+        <IconMenu2 aria-hidden="true" className="size-5" />
+      </Button>
+      <Brand to="/templates" className="text-title-sm" />
+
+      {mounted && (
+        <Sheet open={open} onOpenChange={setOpen}>
+          <SheetContent
+            side="left"
+            className="w-72 gap-6 overflow-y-auto bg-raised px-3.5 py-5"
+          >
+            <SheetTitle className="sr-only">Menu</SheetTitle>
+            <SidebarContent user={user} />
+          </SheetContent>
+        </Sheet>
+      )}
+    </header>
+  );
+}
+
+/** What the sidebar holds, shared by the fixed sidebar and the drawer. */
+function SidebarContent({ user }: { readonly user: User }) {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
 
@@ -72,11 +138,7 @@ function Sidebar({ user }: { readonly user: User }) {
   }
 
   return (
-    // Scrolls on its own: with the shell clipped to one viewport, a short
-    // window would otherwise cut off the account block with no way to reach it.
-    // mt-auto still behaves — an auto margin absorbs free space when there is
-    // any and collapses to nothing when the content overflows.
-    <aside className="flex w-52 shrink-0 flex-col gap-6 overflow-y-auto border-r border-border bg-raised px-3.5 py-5">
+    <>
       {/* Inside the app, home is the model list, not the landing page. */}
       {/*
         20px, against the 13.5px of the navigation below: enough of a step to
@@ -166,7 +228,7 @@ function Sidebar({ user }: { readonly user: User }) {
           Sair
         </Button>
       </div>
-    </aside>
+    </>
   );
 }
 

@@ -83,7 +83,27 @@ function DocumentsPage() {
             }
           />
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-border bg-card">
+          <>
+          {/*
+            Below md the table becomes a list of cards: five columns do not fit
+            a phone, and a table scrolled sideways hides the one button that
+            matters. Only one of the two is ever displayed, so a screen reader
+            meets the documents once.
+          */}
+          <ul
+            aria-label="Documentos gerados, do mais recente ao mais antigo"
+            className="flex flex-col gap-3 md:hidden"
+          >
+            {result.value.map((item) => (
+              <DocumentCard
+                key={item.document.id}
+                item={item}
+                saving={saving === item.document.id}
+                onDownload={onDownload}
+              />
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto rounded-lg border border-border bg-card md:block">
             <table className="w-full border-collapse text-left">
               <caption className="sr-only">
                 Documentos gerados, do mais recente ao mais antigo
@@ -119,9 +139,62 @@ function DocumentsPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </PageBody>
     </>
+  );
+}
+
+/** One document as a card, for screens too narrow for the table. */
+function DocumentCard({
+  item,
+  saving,
+  onDownload,
+}: {
+  readonly item: DocumentListItem;
+  readonly saving: boolean;
+  readonly onDownload: (id: string) => void;
+}) {
+  const { document, templateName } = item;
+
+  return (
+    <li className="flex flex-col gap-2.5 rounded-lg border border-border bg-card px-4 py-3.5">
+      <span className="text-control font-medium break-all">{document.filename}</span>
+      <span className="text-small text-muted-foreground">
+        {templateName === null ? (
+          <span className="text-faint italic">modelo indisponível</span>
+        ) : (
+          <Link
+            to="/templates/$templateId"
+            params={{ templateId: document.templateId }}
+            className="hover:text-foreground hover:underline"
+          >
+            {templateName}
+          </Link>
+        )}
+        <span className="ml-2 font-mono text-meta text-faint">
+          v{document.templateVersion}
+        </span>
+      </span>
+      <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted-foreground">
+        <time dateTime={document.createdAt.toISOString()}>
+          {shortDateTime(document.createdAt)}
+        </time>
+        <span className="font-mono tabular-nums">{formatBytes(document.size)}</span>
+      </span>
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        disabled={saving}
+        onClick={() => onDownload(document.id)}
+        className="h-10 self-start"
+      >
+        <IconDownload data-icon="inline-start" aria-hidden="true" />
+        {saving ? "Preparando…" : "Baixar"}
+      </Button>
+    </li>
   );
 }
 

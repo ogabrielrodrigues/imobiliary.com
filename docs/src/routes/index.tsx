@@ -117,7 +117,7 @@ function LandingPage() {
           </p>
           <h1
             id="hero-title"
-            className="max-w-2xl text-balance text-display font-semibold leading-[1.15] tracking-[-0.025em]"
+            className="max-w-2xl text-balance text-headline font-semibold leading-[1.15] tracking-[-0.025em] md:text-display"
           >
             Seus contratos, preenchidos sozinhos.
           </h1>

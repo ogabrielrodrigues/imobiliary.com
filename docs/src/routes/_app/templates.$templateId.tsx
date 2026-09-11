@@ -570,7 +570,8 @@ function DeleteTemplate({ template }: { readonly template: Template }) {
         size="icon-sm"
         aria-label="Excluir modelo"
         onClick={ask}
-        className="text-muted-foreground hover:text-destructive"
+        // 40px on a phone: an icon-only button is the easiest target to miss.
+        className="text-muted-foreground hover:text-destructive max-md:size-10"
       >
         <IconTrash aria-hidden="true" />
       </Button>

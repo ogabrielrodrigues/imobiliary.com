@@ -5,7 +5,13 @@ import { Link } from "@tanstack/react-router";
 import { summaryOf, type Failure } from "@/application/result";
 import { MAIN_CONTENT_ID } from "@/components/route-announcer";
 
-/** The bar across the top of every screen inside the shell. */
+/**
+ * The bar across the top of every screen inside the shell.
+ *
+ * On a narrow screen the actions wrap onto a line of their own rather than
+ * squeezing the title. Nothing here changes on a wide one: wrapping only
+ * happens when the row no longer fits, and the column gap is the one it had.
+ */
 export function PageHeader({
   title,
   actions,
@@ -14,9 +20,11 @@ export function PageHeader({
   readonly actions?: ReactNode;
 }) {
   return (
-    <header className="flex shrink-0 items-center gap-3 border-b border-border px-5 py-3.5">
-      <h1 className="text-lg font-semibold">{title}</h1>
-      {actions && <div className="ml-auto flex items-center gap-2">{actions}</div>}
+    <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-4 py-3.5 md:px-5">
+      <h1 className="min-w-0 text-lg font-semibold">{title}</h1>
+      {actions && (
+        <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div>
+      )}
     </header>
   );
 }
@@ -40,7 +48,7 @@ export function PageBody({ children }: { readonly children: ReactNode }) {
     <main
       id={MAIN_CONTENT_ID}
       tabIndex={-1}
-      className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5 outline-none"
+      className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 outline-none md:p-5"
     >
       {children}
     </main>

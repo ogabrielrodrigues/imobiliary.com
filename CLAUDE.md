@@ -655,17 +655,37 @@ _Update this section as work proceeds. It is what a fresh session reads first._
     was true of JetBrains Mono. Both names are now the "… Variable" ones, and
     the browser lists the faces as loaded.
 
+22. **Responsive layout.** Below `md` the sidebar becomes a drawer (shadcn
+    `sheet` over Base UI's dialog, mounted only once opened, closed on any
+    navigation) behind a top bar with a menu button; `SidebarContent` is
+    shared by both. `PageHeader` wraps its actions, `PageBody` pads `p-4`,
+    Documentos shows cards instead of the table, Ajustes' tabs scroll
+    sideways, the landing title drops to `headline`, dialogs keep a 1rem
+    margin, and icon-only buttons are 40px on a phone.
+    - **Desktop is unchanged, and proven:** at 1280px the computed-style hash
+      of every public page matches the one taken before the change. Every new
+      class either applies below `md` only or resolves to the old value on a
+      wide screen.
+    - At 375px and 320px no public page scrolls sideways.
+    - **`CI=true` breaks `shadcn add`:** it stops the CLI answering "no" to
+      the overwrite prompt and the add fails. Use it only for `pnpm install`.
+    - The signed-in screens (drawer, cards) still need a signed-in browser to
+      be seen.
+
 ### Next step
 
-**Themes (Escuro, Claro, Papel) and the Fustat font — approved 2026-09-11, in
-progress.** The plan, with the AA deviations from the design and the reasons,
-is the "Temas: Escuro (padrão), Claro e Papel" section of
-`C:UsersEscritorio.claudeplansgostei-muito-da-documenta-o-splendid-cookie.md`.
-In short: the system preference is resolved in JS into `data-scheme`,
-`data-contrast` and `data-motion` on `<html>`; the `dark` class goes; a new
-Aparência tab comes first in Ajustes; high contrast turns light in the light
-themes. The font change from Figtree to Fustat is a separate commit so it can
-be reverted on its own.
+**Responsiveness and the dashboard — approved 2026-09-11, in progress.** The
+plan is the "Responsividade, ferramentas TanStack e Dashboard" section of
+`C:\Users\Escritorio\.claude\plans\gostei-muito-da-documenta-o-splendid-cookie.md`. In scope now: phase 1 (the mobile layout, with the desktop
+pixel-identical, proven by style hashes of the public pages at 1280px) and
+phase 3 (`GET /v1/me/stats` in the API, then `/dashboard` as the home after
+sign-in, with shadcn Chart).
+
+**Deferred by the user, next after that: phase 2, the TanStack libraries** —
+Query (router SSR integration, `queryOptions` factories, mutations instead of
+`router.invalidate()`), Table (Documentos, with real paging) and Form (all
+seven forms; validate on blur, then on every keystroke once a field shows an
+error, reusing the domain validators). The plan file carries the details.
 
 After that, **the block editor**, the last piece of the original plan. It needs the docx
 `build` module: blocks → `word/document.xml` → `writeZip`. Write the writer and
@@ -772,9 +792,9 @@ a Resend key — the API refuses to start with neither.
   redirect, the required-chip label and `<main>` inside the app. The
   verifying session had no signed-in browser, and signing in is the user's to
   do. Everything public was verified, and the code typechecks and is tested.
-- Accessibility, deliberately out of scope for now: a collapsible sidebar
-  (reflow at 320px, WCAG 1.4.10 — the sidebar is a fixed 13rem with no
-  breakpoint), underlined links outside high contrast, and text spacing.
+- Accessibility, deliberately out of scope for now: underlined links outside
+  high contrast, and text spacing. (Reflow at 320px, WCAG 1.4.10, was closed
+  by the responsive layout, item 22.)
 - The accessibility head script is inline too, so it joins the CSP nonce
   item above; `ScriptOnce` already passes the router's nonce through.
 - **The Aparência tab and the themes inside the app are not yet seen in a
