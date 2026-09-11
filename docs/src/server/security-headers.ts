@@ -57,7 +57,7 @@ function contentSecurityPolicy(development: boolean): string {
  * some responses and not others is a header nobody can rely on.
  */
 export const securityHeaders = createMiddleware({ type: "request" }).server(
-  async ({ next }) => {
+  async ({ next, handlerType }) => {
     const result = await next();
     const { isProduction } = getConfig();
     const headers = result.response.headers;
@@ -68,6 +68,14 @@ export const securityHeaders = createMiddleware({ type: "request" }).server(
     // one and not `frame-ancestors`.
     headers.set("X-Frame-Options", "DENY");
     headers.set("X-Content-Type-Options", "nosniff");
+
+    // Server-function responses carry account data: the export, document
+    // lists, downloads. None of it belongs in a shared cache or on disk in a
+    // browser cache, so they are marked uncacheable in one place rather than
+    // one function at a time.
+    if (handlerType === "serverFn") {
+      headers.set("Cache-Control", "no-store");
+    }
 
     // Send the origin to other sites, never the path. A path here can carry a
     // template or document identifier, which has no business leaving with a

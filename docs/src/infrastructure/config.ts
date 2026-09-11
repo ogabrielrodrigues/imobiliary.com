@@ -24,6 +24,16 @@ export interface Config {
    */
   readonly trustProxyHeaders: boolean;
   readonly isProduction: boolean;
+  /**
+   * The origin every mutating request must come from, such as
+   * https://docs.imobiliary.com.
+   *
+   * When null, the Origin header is compared with the Host of the request,
+   * which is right in development and behind a proxy that preserves Host.
+   * Set it when a proxy in front rewrites Host: the comparison would then
+   * reject every legitimate request or, worse, pass the wrong ones.
+   */
+  readonly trustedOrigin: string | null;
 }
 
 let cached: Config | null = null;
@@ -46,6 +56,7 @@ export function getConfig(): Config {
     sessionSecret,
     trustProxyHeaders: process.env["TRUST_PROXY_HEADERS"] === "true",
     isProduction: process.env["NODE_ENV"] === "production",
+    trustedOrigin: process.env["TRUSTED_ORIGIN"] || null,
   };
   return cached;
 }

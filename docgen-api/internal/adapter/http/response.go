@@ -109,7 +109,9 @@ func writeFailure(w http.ResponseWriter, logger *slog.Logger, status int, code e
 func decodeJSON(r *http.Request, dst any) error {
 	if err := json.UnmarshalRead(r.Body, dst); err != nil {
 		v := &domain.ValidationError{}
-		v.Addf("body", "is not valid JSON: %s", err)
+		// The decoder message is not repeated: it can quote a fragment of the
+		// submitted body and names internals the caller has no use for.
+		v.Add("body", "is not valid JSON")
 		return v
 	}
 	return nil

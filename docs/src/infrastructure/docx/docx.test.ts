@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import { placeholdersOf } from "../../domain/block.ts";
 import { parseDocumentXml, parseDocx } from "./parse.ts";
-import { readZipEntry, writeZip, ZipError } from "./zip.ts";
+import { MAX_ENTRY_BYTES, readZipEntry, writeZip, ZipError } from "./zip.ts";
 
 const encode = (text: string) => new TextEncoder().encode(text);
 const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
@@ -197,5 +197,17 @@ describe("parsing a document", () => {
 
   it("handles a document with nothing in it", () => {
     assert.deepEqual(parseDocumentXml(document("")), []);
+  });
+});
+
+describe("zip bombs", () => {
+  it("refuses an entry that inflates past the ceiling", () => {
+    // Zeros deflate to almost nothing, which is exactly what makes them a bomb:
+    // small on the wire, enormous once expanded.
+    const bomb = new Uint8Array(MAX_ENTRY_BYTES + 1);
+    const archive = writeZip([{ name: "bomb.xml", data: bomb }]);
+
+    assert.ok(archive.byteLength < 200_000, "the archive should be small on the wire");
+    assert.throws(() => readZipEntry(archive, "bomb.xml"), ZipError);
   });
 });

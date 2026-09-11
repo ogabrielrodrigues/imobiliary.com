@@ -109,17 +109,21 @@ export const currentUser = createServerFn({ method: "GET" }).handler(
 /**
  * Everything held about the account, as a file.
  *
- * A GET like the other reads, but it answers with bytes rather than a record:
+ * It answers with bytes rather than a record:
  * the export is meant to be kept, and handing it over as a download is what
  * makes portability something a person can actually act on.
  */
-export const exportAccount = createServerFn({ method: "GET" }).handler(
+export const exportAccount = createServerFn({ method: "POST" }).handler(
   async (): Promise<Result<FileContent>> =>
-    attempt(() =>
-      sessions().authorize(callContext(), (ctx) =>
+    attempt(async () => {
+      // POST and origin-checked like a mutation: it returns everything held
+      // about the account, and a GET is reachable by any top-level navigation
+      // from another site.
+      assertSameOrigin();
+      return sessions().authorize(callContext(), (ctx) =>
         docgen().auth.exportAccount(ctx),
-      ),
-    ),
+      );
+    }),
 );
 
 /**

@@ -96,7 +96,12 @@ export function assertSameOrigin(): void {
     ]);
   }
 
-  if (originHost !== host) {
+  // A configured origin wins over the Host header, which a proxy in front
+  // may have rewritten.
+  const { trustedOrigin } = getConfig();
+  const expected = trustedOrigin === null ? host : new URL(trustedOrigin).host;
+
+  if (originHost !== expected) {
     throw new ValidationError([
       { field: "request", message: "Origem não permitida." },
     ]);

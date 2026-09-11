@@ -20,6 +20,16 @@ const DEFLATED = 8;
 
 export class ZipError extends Error {}
 
+/**
+ * The most a single entry may inflate to: 16 MiB, the API own per-part limit.
+ *
+ * The archives read here have already passed the API checks, but this reader
+ * runs in the platform process and should not bet its memory on another
+ * service having been right. A few kilobytes of deflated zeros can expand to
+ * gigabytes; the ceiling turns that into an error instead of an outage.
+ */
+export const MAX_ENTRY_BYTES = 16 * 1024 * 1024;
+
 export interface ZipEntry {
   readonly name: string;
   readonly data: Uint8Array;
@@ -94,7 +104,17 @@ function readLocalEntry(
     case STORED:
       return body;
     case DEFLATED:
-      return new Uint8Array(inflateRawSync(body));
+      try {
+        return new Uint8Array(
+          inflateRawSync(body, { maxOutputLength: MAX_ENTRY_BYTES }),
+        );
+      } catch (error) {
+        // Node reports an output past maxOutputLength as a RangeError.
+        if (error instanceof RangeError) {
+          throw new ZipError(`entry inflates beyond ${MAX_ENTRY_BYTES} bytes`);
+        }
+        throw error;
+      }
     default:
       throw new ZipError(`unsupported compression method ${method}`);
   }
