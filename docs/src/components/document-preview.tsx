@@ -217,7 +217,7 @@ function PlaceholderField({
           ? "border-dashed border-destructive/60 bg-destructive/12 text-destructive"
           : filled
             ? "border-success/40 bg-success/12 text-foreground"
-            : "border-docs/40 bg-docs/12 font-mono text-xs text-docs",
+            : "border-docs/40 bg-docs/12 font-mono text-xs text-docs-soft",
       )}
     >
       {/*

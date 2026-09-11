@@ -281,7 +281,7 @@ function GenerateScreen({
         </div>
 
         {pinned && (
-          <p className="flex max-w-3xl items-start gap-2.5 rounded-md border border-docs/35 bg-docs/10 px-4 py-3 text-small text-docs">
+          <p className="flex max-w-3xl items-start gap-2.5 rounded-md border border-docs/35 bg-docs/10 px-4 py-3 text-small text-docs-soft">
             <IconAlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
             <span>
             Você está vendo a versão {shown}. A atual é a{" "}
@@ -652,7 +652,7 @@ function Checklist({
                     className={cn(
                       "inline-block rounded-md border px-2 py-1 font-mono text-xs",
                       missing.has(field.name)
-                        ? "border-docs/40 bg-docs/12 text-docs"
+                        ? "border-docs/40 bg-docs/12 text-docs-soft"
                         : "border-success/40 bg-success/12 text-success",
                     )}
                   >

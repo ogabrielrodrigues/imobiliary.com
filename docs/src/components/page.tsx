@@ -128,7 +128,7 @@ export function StatusPill({
 }) {
   const tones = {
     success: "bg-success/15 border-success/35 text-success",
-    docs: "bg-docs/15 border-docs/35 text-docs",
+    docs: "bg-docs/15 border-docs/35 text-docs-soft",
     primary: "bg-primary/15 border-primary/35 text-primary",
     neutral: "bg-muted border-border-strong text-muted-foreground",
   } as const;

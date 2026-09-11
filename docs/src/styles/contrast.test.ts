@@ -101,6 +101,13 @@ function assertPalette(palette: Map<string, string>, textRatio: number) {
       check(`--${accent} on its 15% tint over --${ground}`, ratio(color(accent), tint), textRatio);
     }
   }
+  // Text set on a docs tint — chips, pills, the pinned-version warning — uses
+  // the lighter --docs-soft, as the design draws it.
+  for (const [ground, value] of Object.entries(grounds)) {
+    check(`--docs-soft on --${ground}`, ratio(color("docs-soft"), value), textRatio);
+    const tint = over(color("docs"), value, 0.15);
+    check(`--docs-soft on the 15% docs tint over --${ground}`, ratio(color("docs-soft"), tint), textRatio);
+  }
   check("--primary-foreground on --primary", ratio(color("primary-foreground"), color("primary")), textRatio);
   // Non-text: a field's edge and the focus ring, 1.4.11.
   for (const [ground, value] of Object.entries(grounds)) {

@@ -263,18 +263,21 @@ Spacing base 4px (Tailwind's own scale).
   --color-border-strong: #343b47;
   --color-input: #0b0d10;
 
-  --color-primary: oklch(0.74 0.13 195);
-  --color-primary-foreground: #06201f;
-  --color-docs: oklch(0.78 0.14 85);
+  --color-primary: oklch(0.8 0.15 82);
+  --color-primary-foreground: #231404;
+  --color-docs: oklch(0.66 0.12 58);
   --color-success: oklch(0.74 0.13 150);
   --color-destructive: oklch(0.68 0.17 25);
-  --color-ring: oklch(0.74 0.13 195);
+  --color-ring: oklch(0.8 0.15 82);
 
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
 }
 ```
+
+Text on a docs tint (placeholder chips, pills, warnings) is drawn lighter than
+`--docs` itself: `--docs-soft`, `oklch(0.82 0.1 68)`.
 
 Surfaces used by components but missing from that block, promoted to tokens for
 consistency: `#0f1216` (sidebar, topbar, table header), `#151920` (row hover),
@@ -589,6 +592,13 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       `value` as an **array** — a scalar renders two thumbs. `switch.tsx` is
       in rem and its unchecked track uses `--input-border`; the stock one was
       about 1.1:1 on a card.
+
+19. **The palette changed in Claude Design** (2026-09-11): primary is amber
+    `oklch(0.8 0.15 82)` with `#231404` on it, replacing the teal; `docs` is
+    a darker amber, `oklch(0.66 0.12 58)`; text on a docs tint uses the new
+    `--docs-soft`. Surfaces, text, success and destructive are unchanged.
+    High contrast moved to amber as well (`0.88 0.13 82`, docs `0.86 0.11 62`).
+    Every pair passes the contrast test; the favicon's "d" is now `#c87e41`.
 
 ### Next step
 

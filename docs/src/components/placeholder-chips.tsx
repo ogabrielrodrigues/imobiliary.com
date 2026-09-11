@@ -37,7 +37,7 @@ export function PlaceholderChips({
               <li key={field.name}>
                 <span
                   title={placeholderSyntax(field.name)}
-                  className="inline-block rounded-md border border-docs/40 bg-docs/12 px-2 py-1 font-mono text-xs text-docs"
+                  className="inline-block rounded-md border border-docs/40 bg-docs/12 px-2 py-1 font-mono text-xs text-docs-soft"
                 >
                   {placeholderSyntax(field.name)}
                 </span>
