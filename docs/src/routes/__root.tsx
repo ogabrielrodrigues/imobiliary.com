@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-router";
 
 import { CookieNotice } from "@/components/cookie-notice";
+import { MAIN_CONTENT_ID, RouteAnnouncer } from "@/components/route-announcer";
 import { bootScript } from "@/lib/accessibility-storage";
 import appCss from "@/styles/app.css?url";
 
@@ -68,7 +69,21 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
         <ScriptOnce>{bootScript()}</ScriptOnce>
       </head>
       <body>
+        {/*
+          The first thing a keyboard reaches: hidden until focused, then shown,
+          so a reader can skip the navigation on every page. Every layout gives
+          its <main> the id it points at.
+        */}
+        <a
+          href={`#${MAIN_CONTENT_ID}`}
+          // Every visual class sits behind focus:. Padding outside it leaks into
+          // the hidden state and gives sr-only a visible box.
+          className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-small focus:font-semibold focus:text-primary-foreground"
+        >
+          Pular para o conteúdo
+        </a>
         {children}
+        <RouteAnnouncer />
         {/* Every surface, signed in or not: the cookie is set either way. */}
         <CookieNotice />
         <Scripts />

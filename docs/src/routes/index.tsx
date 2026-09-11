@@ -5,6 +5,7 @@ import { LegalFooter } from "@/components/legal-page";
 import { currentUser } from "@/server/auth";
 import { CONTROLLER, unfilledLegalFields } from "@/domain/legal";
 import { absoluteUrl, pageSeo } from "@/lib/seo";
+import { MAIN_CONTENT_ID } from "@/components/route-announcer";
 
 export const Route = createFileRoute("/")({
   /**
@@ -103,7 +104,10 @@ function LandingPage() {
         </nav>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-6">
+      <main
+        id={MAIN_CONTENT_ID}
+        tabIndex={-1}
+        className="outline-none mx-auto w-full max-w-5xl flex-1 px-6">
         <section
           aria-labelledby="hero-title"
           className="flex flex-col items-start gap-6 py-20"

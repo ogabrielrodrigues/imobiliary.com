@@ -203,19 +203,33 @@ function PlaceholderField({
       type="button"
       onClick={() => onEdit(name)}
       aria-label={
-        filled ? `${label}: ${value}. Editar` : `${label}. Preencher`
+        filled
+          ? `${label}: ${value}. Editar`
+          : invalid
+            ? `${label}, obrigatório, não preenchido. Preencher`
+            : `${label}. Preencher`
       }
       className={cn(
         "mx-0.5 inline-block rounded-[4px] border px-1.5 py-0.5 align-baseline transition-colors",
         "focus-visible:ring-[3px] focus-visible:ring-ring/30",
         marksClass(marks),
         invalid
-          ? "border-destructive/60 bg-destructive/12 text-destructive"
+          ? "border-dashed border-destructive/60 bg-destructive/12 text-destructive"
           : filled
             ? "border-success/40 bg-success/12 text-foreground"
             : "border-docs/40 bg-docs/12 font-mono text-xs text-docs",
       )}
     >
+      {/*
+        Red alone is not a message: the dashed edge and the mark say
+        "required" to anyone who cannot tell the colours apart, and the
+        label above says it to a screen reader.
+      */}
+      {invalid && !filled && (
+        <span aria-hidden="true" className="mr-1 font-semibold">
+          !
+        </span>
+      )}
       {filled ? value : placeholderSyntax(name)}
     </button>
   );

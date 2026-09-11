@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { Brand } from "@/components/brand";
 import { LegalFooter } from "@/components/legal-page";
+import { MAIN_CONTENT_ID } from "@/components/route-announcer";
 
 /** The frame both credential screens sit in. */
 export function AuthLayout({
@@ -20,7 +21,10 @@ export function AuthLayout({
 }) {
   return (
     <div className="flex min-h-dvh flex-col">
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-8 px-6 py-16">
+      <main
+        id={MAIN_CONTENT_ID}
+        tabIndex={-1}
+        className="outline-none mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-8 px-6 py-16">
         <header className="flex flex-col gap-3">
           {/* Nobody is signed in on these screens, so home is the landing page. */}
           <Brand to="/" className="text-title-lg" />

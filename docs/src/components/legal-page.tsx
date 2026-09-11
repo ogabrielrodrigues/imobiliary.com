@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 
 import { Brand } from "@/components/brand";
 import { formatEffectiveDate, type LegalDocument } from "@/domain/legal";
+import { MAIN_CONTENT_ID } from "@/components/route-announcer";
 
 /**
  * The frame the legal texts sit in.
@@ -30,7 +31,10 @@ export function LegalPage({
         </nav>
       </header>
 
-      <main className="mx-auto w-full max-w-3xl flex-1 px-6">
+      <main
+        id={MAIN_CONTENT_ID}
+        tabIndex={-1}
+        className="outline-none mx-auto w-full max-w-3xl flex-1 px-6">
         <article className="flex flex-col gap-6 py-16">
           <header className="flex flex-col gap-2">
             <h1 className="text-headline font-semibold leading-[1.15] tracking-[-0.02em]">

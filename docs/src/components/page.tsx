@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 
 import { summaryOf, type Failure } from "@/application/result";
+import { MAIN_CONTENT_ID } from "@/components/route-announcer";
 
 /** The bar across the top of every screen inside the shell. */
 export function PageHeader({
@@ -27,12 +28,21 @@ export function PageHeader({
  * min-h-0 is what makes that work. A flex-1 item in a column container has a
  * vertical main axis, so its default min-height of auto refuses to shrink below
  * its content — it grows past the shell and overflow-y-auto never engages.
+ *
+ * It is also the <main> of every screen inside the app: the landmark a screen
+ * reader jumps to, the skip link's target, and where focus lands after a
+ * navigation. tabIndex -1 lets it take that focus without joining the tab
+ * order; it draws no ring, being a region and not a control.
  */
 export function PageBody({ children }: { readonly children: ReactNode }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
+    <main
+      id={MAIN_CONTENT_ID}
+      tabIndex={-1}
+      className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5 outline-none"
+    >
       {children}
-    </div>
+    </main>
   );
 }
 
