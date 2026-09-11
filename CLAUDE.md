@@ -243,7 +243,17 @@ Source: Claude Design project `18c3a8a6-2f1d-4bfb-9efa-98ff6b796b36`
 ("Design System Imobiliary Docs"), read via the `DesignSync` tool. Reproduced
 here because that access may not survive.
 
-Single **dark** theme — no light mode, no toggle. Figtree + JetBrains Mono.
+Three themes since 2026-09-11: **Escuro** (the default, reproduced below),
+**Claro** and **Papel** (`... -claro-.dc.html`, `... -papel-.dc.html` in the
+same project). Their values live in `docs/src/styles/app.css`, one block per
+`data-scheme`. **The token block at the end of both light files is out of
+date** — it repeats the dark accents; the swatches and components are right.
+Four places where the light designs fail WCAG AA were changed on purpose, and
+the Claude Design project should take the same values: text in the primary hue
+(`--primary-text`, the design's dark hover amber), the focus ring (same
+value), field borders (`#87837c` / `#887d68`, 3:1), and text on a
+destructive or success tint (`--destructive-soft` / `--success-soft`, which
+the design already draws). Figtree + JetBrains Mono.
 Spacing base 4px (Tailwind's own scale).
 
 ```css
@@ -315,7 +325,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-11 — accessibility and Ajustes done; the editor is what remains
+**Last updated:** 2026-09-11 — themes done; Fustat in a separate commit; the editor is what remains
 
 ### Done
 
@@ -600,9 +610,49 @@ _Update this section as work proceeds. It is what a fresh session reads first._
     High contrast moved to amber as well (`0.88 0.13 82`, docs `0.86 0.11 62`).
     Every pair passes the contrast test; the favicon's "d" is now `#c87e41`.
 
+20. **Themes: Escuro, Claro, Papel, and Seguir o sistema.** Plan in the plan
+    file's "Temas" section.
+    - **The system is resolved in JavaScript, not in CSS.**
+      `resolveAppearance` (`domain/accessibility.ts`) turns the stored
+      preferences plus what the system asks for into `data-scheme`,
+      `data-contrast` and `data-motion` on `<html>`; the head script repeats
+      it in miniature (tested against it in a `vm` sandbox across every
+      system combination) and `AppearanceSync` re-applies on a media-query
+      change or a `storage` event from another tab. The stylesheet only ever
+      sees concrete values, which is what removed the duplicated
+      "high contrast by the system" blocks.
+    - **There is no `dark` class any more.** `@custom-variant dark` matches
+      any page not in a light scheme, so shadcn's `dark:` variants keep
+      working with nothing to keep in sync.
+    - **Theme selectors are not tied to `:root`**, so any element with
+      `data-scheme` draws with that theme; the Aparência tab's previews are
+      real themes, not copied colours.
+    - New tokens: `--primary-text` (text in the primary hue; `text-primary`
+      is gone from the code), `--success-soft`, `--destructive-soft`.
+      **Never set text in `text-primary`** — in the light themes it is 1.8:1.
+    - High contrast keeps the reader's lightness: black in Escuro, white in
+      Claro and Papel. The contrast test covers five palettes.
+    - Ajustes gains **Aparência** as its first and default tab. Restoring the
+      accessibility defaults leaves the theme alone.
+    - Privacy policy 1.3: the local-storage record now names the theme.
+    - **Verification limit:** this harness's colour-scheme emulation fires no
+      `change` event (a page-level listener counted zero), so switching the
+      system with the page open could not be shown here; the cross-tab
+      `storage` path through the same code was.
+
 ### Next step
 
-**The block editor**, the last piece of the original plan. It needs the docx
+**Themes (Escuro, Claro, Papel) and the Fustat font — approved 2026-09-11, in
+progress.** The plan, with the AA deviations from the design and the reasons,
+is the "Temas: Escuro (padrão), Claro e Papel" section of
+`C:UsersEscritorio.claudeplansgostei-muito-da-documenta-o-splendid-cookie.md`.
+In short: the system preference is resolved in JS into `data-scheme`,
+`data-contrast` and `data-motion` on `<html>`; the `dark` class goes; a new
+Aparência tab comes first in Ajustes; high contrast turns light in the light
+themes. The font change from Figtree to Fustat is a separate commit so it can
+be reverted on its own.
+
+After that, **the block editor**, the last piece of the original plan. It needs the docx
 `build` module: blocks → `word/document.xml` → `writeZip`. Write the writer and
 **open its output in Word before building any interface around it** — that is
 the step that decides whether the whole idea works. Store the block tree as
@@ -712,6 +762,9 @@ a Resend key — the API refuses to start with neither.
   breakpoint), underlined links outside high contrast, and text spacing.
 - The accessibility head script is inline too, so it joins the CSP nonce
   item above; `ScriptOnce` already passes the router's nonce through.
+- **The Aparência tab and the themes inside the app are not yet seen in a
+  browser signed in**, like the rest of Ajustes. Public pages were verified
+  in all three themes and both high contrasts.
 - The published API reference lives at
   `https://claude.ai/code/artifact/e3eaf9ee-95d7-46a0-bd7f-d596a95345ee`.
   Update it by republishing `docgen-api/docs/api-reference.html` **with that
