@@ -1,5 +1,5 @@
 import { IconRefresh } from "@tabler/icons-react";
-import { useEffect, useId, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -11,7 +11,8 @@ import {
   type FontScale,
   type Motion,
 } from "@/domain/accessibility";
-import { loadPreferences, savePreferences } from "@/lib/accessibility-storage";
+import { loadPreferences, savePreferences, SYSTEM_QUERIES } from "@/lib/accessibility-storage";
+import { useMediaQuery } from "@/lib/media-query";
 
 /** The slider's steps, in order. The scale is ordinal, which is what makes a slider fit. */
 const FONT_STEPS: readonly { readonly value: FontScale; readonly label: string; readonly percent: string }[] = [
@@ -20,23 +21,6 @@ const FONT_STEPS: readonly { readonly value: FontScale; readonly label: string; 
   { value: 1.25, label: "Maior", percent: "125%" },
   { value: 1.5, label: "Máximo", percent: "150%" },
 ];
-
-/**
- * Whether a media query matches, kept current as the system setting changes.
- * The server has no system to ask and answers false; the browser corrects it
- * on hydration.
- */
-function useMediaQuery(query: string): boolean {
-  return useSyncExternalStore(
-    (onChange) => {
-      const list = window.matchMedia(query);
-      list.addEventListener("change", onChange);
-      return () => list.removeEventListener("change", onChange);
-    },
-    () => window.matchMedia(query).matches,
-    () => false,
-  );
-}
 
 /**
  * The accessibility preferences.
@@ -52,8 +36,8 @@ export function AccessibilityPanel() {
   // applied it before first paint — so only the controls catch up.
   const [preferences, setPreferences] = useState<AccessibilityPreferences>(DEFAULT_PREFERENCES);
   const [status, setStatus] = useState("");
-  const systemWantsContrast = useMediaQuery("(prefers-contrast: more)");
-  const systemReducesMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const systemWantsContrast = useMediaQuery(SYSTEM_QUERIES.prefersMoreContrast);
+  const systemReducesMotion = useMediaQuery(SYSTEM_QUERIES.prefersReducedMotion);
 
   useEffect(() => {
     setPreferences(loadPreferences());
@@ -105,7 +89,9 @@ export function AccessibilityPanel() {
           type="button"
           size="sm"
           variant="secondary"
-          onClick={() => update(DEFAULT_PREFERENCES)}
+          // The theme lives in Aparência and is not an accessibility setting,
+          // so restoring these defaults leaves it as it is.
+          onClick={() => update({ ...DEFAULT_PREFERENCES, theme: preferences.theme })}
         >
           <IconRefresh data-icon="inline-start" aria-hidden="true" />
           Restaurar padrões

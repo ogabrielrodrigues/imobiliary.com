@@ -136,7 +136,7 @@ function TermsOfUsePage() {
           </li>
           <li>
             adotar as medidas de segurança descritas na{" "}
-            <Link to="/privacidade" className="text-primary hover:underline">
+            <Link to="/privacidade" className="text-primary-text hover:underline">
               Política de Privacidade
             </Link>
             , e informá-lo sobre as que ainda não adotamos;

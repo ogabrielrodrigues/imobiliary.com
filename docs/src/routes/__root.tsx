@@ -7,6 +7,7 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 
+import { AppearanceSync } from "@/components/appearance-sync";
 import { CookieNotice } from "@/components/cookie-notice";
 import { MAIN_CONTENT_ID, RouteAnnouncer } from "@/components/route-announcer";
 import { bootScript } from "@/lib/accessibility-storage";
@@ -55,16 +56,17 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
     // screen readers pick the right voice and browsers offer the right
     // translation.
     //
-    // suppressHydrationWarning: the head script below may set data-* attributes
-    // on this element before React hydrates, on purpose.
-    <html lang="pt-BR" className="dark" suppressHydrationWarning>
+    // suppressHydrationWarning: the head script below sets data-* attributes
+    // on this element before React hydrates, on purpose. There is no theme
+    // class to render here: the theme is data-scheme, set by that script.
+    <html lang="pt-BR" suppressHydrationWarning>
       <head>
         <HeadContent />
         {/*
-          The accessibility preferences, applied before first paint so that
-          someone who asked for large text or high contrast never sees the page
-          without it. Inline, so it is covered by the CSP's 'unsafe-inline' for
-          now; it will need the nonce when that goes.
+          The theme and accessibility preferences, resolved and applied before
+          first paint so that someone who chose a light theme or large text
+          never sees the default first. Inline, so it is covered by the CSP's
+          'unsafe-inline' for now; it will need the nonce when that goes.
         */}
         <ScriptOnce>{bootScript()}</ScriptOnce>
       </head>
@@ -84,6 +86,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
         </a>
         {children}
         <RouteAnnouncer />
+        <AppearanceSync />
         {/* Every surface, signed in or not: the cookie is set either way. */}
         <CookieNotice />
         <Scripts />

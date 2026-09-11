@@ -3,11 +3,11 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 /**
- * Holds the palette to WCAG contrast.
+ * Holds every theme to WCAG contrast.
  *
  * It reads the stylesheet itself rather than a copy of its values, so a colour
  * changed in app.css is checked as it is shipped. Only the two notations the
- * palette uses are understood, hex and oklch; a token written any other way
+ * palettes use are understood, hex and oklch; a token written any other way
  * fails loudly instead of passing unchecked.
  */
 
@@ -16,8 +16,9 @@ type Rgb = readonly [number, number, number];
 const css = readFileSync(new URL("./app.css", import.meta.url), "utf8");
 
 /**
- * The custom properties declared in the first block matching `selector`.
- * Declarations hold no braces, so the block ends at the first closing one.
+ * The custom properties declared in the first block whose selector is exactly
+ * `selector`. Declarations hold no braces, so the block ends at the first
+ * closing one.
  */
 function tokens(selector: string): Map<string, string> {
   const start = css.indexOf(`${selector} {`);
@@ -28,6 +29,15 @@ function tokens(selector: string): Map<string, string> {
     map.set(match[1]!, match[2]!.trim());
   }
   return map;
+}
+
+/**
+ * Blocks layered the way the cascade layers them on <html>: later blocks
+ * override earlier ones, and a token a block leaves out falls through to the
+ * one below — so it is checked with the value the page would really use.
+ */
+function layered(...selectors: string[]): Map<string, string> {
+  return new Map(selectors.flatMap((selector) => [...tokens(selector)]));
 }
 
 function parse(value: string): Rgb {
@@ -87,52 +97,68 @@ function assertPalette(palette: Map<string, string>, textRatio: number) {
     if (got < want) failures.push(`${label}: ${got.toFixed(2)}:1, needs ${want}:1`);
   };
 
-  for (const text of ["foreground", "muted-foreground", "faint"]) {
+  // Everything that is set as text, on the page and on a card.
+  const texts = [
+    "foreground", "muted-foreground", "faint",
+    "primary-text", "destructive", "success", "docs",
+    "docs-soft", "success-soft", "destructive-soft",
+  ];
+  for (const text of texts) {
     for (const [ground, value] of Object.entries(grounds)) {
       check(`--${text} on --${ground}`, ratio(color(text), value), textRatio);
     }
   }
-  // Accents are text too — on the page, on a card, and inside the pills and
-  // banners that sit on their own tint, up to 15%.
-  for (const accent of ["primary", "destructive", "success", "docs"]) {
+  // Text set on an accent's own tint, up to 15%: pills, banners, chips, the
+  // destructive button.
+  const onTint = [
+    ["primary-text", "primary"],
+    ["docs-soft", "docs"],
+    ["success-soft", "success"],
+    ["destructive-soft", "destructive"],
+  ] as const;
+  for (const [text, accent] of onTint) {
     for (const [ground, value] of Object.entries(grounds)) {
-      check(`--${accent} on --${ground}`, ratio(color(accent), value), textRatio);
       const tint = over(color(accent), value, 0.15);
-      check(`--${accent} on its 15% tint over --${ground}`, ratio(color(accent), tint), textRatio);
+      check(`--${text} on the 15% --${accent} tint over --${ground}`, ratio(color(text), tint), textRatio);
     }
-  }
-  // Text set on a docs tint — chips, pills, the pinned-version warning — uses
-  // the lighter --docs-soft, as the design draws it.
-  for (const [ground, value] of Object.entries(grounds)) {
-    check(`--docs-soft on --${ground}`, ratio(color("docs-soft"), value), textRatio);
-    const tint = over(color("docs"), value, 0.15);
-    check(`--docs-soft on the 15% docs tint over --${ground}`, ratio(color("docs-soft"), tint), textRatio);
   }
   check("--primary-foreground on --primary", ratio(color("primary-foreground"), color("primary")), textRatio);
   // Non-text: a field's edge and the focus ring, 1.4.11.
   for (const [ground, value] of Object.entries(grounds)) {
     check(`--input-border on --${ground}`, ratio(color("input-border"), value), 3);
+    check(`--input-border on --input`, ratio(color("input-border"), color("input")), 3);
     check(`--ring on --${ground}`, ratio(color("ring"), value), 3);
   }
 
   assert.deepEqual(failures, []);
 }
 
+const DARK = ':root,\n[data-scheme="dark"]';
+const LIGHT = '[data-scheme="light"]';
+const PAPER = '[data-scheme="paper"]';
 const HIGH_CONTRAST = ':root[data-contrast="more"]';
-const HIGH_CONTRAST_BY_SYSTEM = ':root:not([data-contrast="standard"])';
+const HIGH_CONTRAST_LIGHT =
+  ':root[data-contrast="more"]:is([data-scheme="light"], [data-scheme="paper"])';
 
 describe("palette contrast", () => {
-  it("passes WCAG AA in the default theme", () => {
-    assertPalette(tokens(":root"), 4.5);
+  it("passes WCAG AA in Escuro", () => {
+    assertPalette(layered(DARK), 4.5);
   });
 
-  it("passes WCAG AAA in high contrast", () => {
-    // The high-contrast block overrides only what it declares; anything it
-    // leaves out falls through to the default theme and is checked as such.
-    assertPalette(new Map([...tokens(":root"), ...tokens(HIGH_CONTRAST)]), 7);
+  it("passes WCAG AA in Claro", () => {
+    assertPalette(layered(DARK, LIGHT), 4.5);
   });
 
-  it("is the same high contrast whether chosen or asked for by the system", () => {
-    assert.deepEqual(tokens(HIGH_CONTRAST_BY_SYSTEM), tokens(HIGH_CONTRAST));
+  it("passes WCAG AA in Papel", () => {
+    assertPalette(layered(DARK, PAPER), 4.5);
+  });
+
+  it("passes WCAG AAA in dark high contrast", () => {
+    assertPalette(layered(DARK, HIGH_CONTRAST), 7);
+  });
+
+  it("passes WCAG AAA in light high contrast, from both light themes", () => {
+    assertPalette(layered(DARK, LIGHT, HIGH_CONTRAST, HIGH_CONTRAST_LIGHT), 7);
+    assertPalette(layered(DARK, PAPER, HIGH_CONTRAST, HIGH_CONTRAST_LIGHT), 7);
   });
 });

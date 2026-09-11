@@ -78,7 +78,7 @@ function PrivacyPolicyPage() {
           Na prática: se um locatário nos pedir acesso ou exclusão dos dados que
           aparecem em um contrato, encaminharemos o pedido a você, porque a
           decisão é sua. As obrigações recíprocas estão nos{" "}
-          <Link to="/termos" className="text-primary hover:underline">
+          <Link to="/termos" className="text-primary-text hover:underline">
             Termos de Uso
           </Link>
           .
@@ -173,8 +173,9 @@ function PrivacyPolicyPage() {
         <P>
           Guardamos ainda, no armazenamento local do seu navegador, até dois
           registros: um indicando que você já dispensou o aviso de cookies, e
-          outro com as suas preferências de acessibilidade (tamanho do texto,
-          contraste e animações), se você alterar alguma em Ajustes. Nenhum
+          outro com as suas preferências de aparência e acessibilidade (tema,
+          tamanho do texto, contraste e animações), se você alterar alguma em
+          Ajustes. Nenhum
           deles identifica ninguém, e nenhum é enviado a nós.
         </P>
         <P>

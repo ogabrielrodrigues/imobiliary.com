@@ -78,7 +78,7 @@ function SignInPage() {
       footer={
         <>
           Ainda não tem conta?{" "}
-          <Link to="/criar-conta" className="font-medium text-primary">
+          <Link to="/criar-conta" className="font-medium text-primary-text">
             Criar conta
           </Link>
         </>

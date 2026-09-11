@@ -85,7 +85,7 @@ function SignUpPage() {
       footer={
         <>
           Já tem conta?{" "}
-          <Link to="/entrar" className="font-medium text-primary">
+          <Link to="/entrar" className="font-medium text-primary-text">
             Entrar
           </Link>
         </>
@@ -128,11 +128,11 @@ function SignUpPage() {
           />
           <span>
             Li e aceito os{" "}
-            <Link to="/termos" className="font-medium text-primary hover:underline">
+            <Link to="/termos" className="font-medium text-primary-text hover:underline">
               Termos de Uso
             </Link>{" "}
             e a{" "}
-            <Link to="/privacidade" className="font-medium text-primary hover:underline">
+            <Link to="/privacidade" className="font-medium text-primary-text hover:underline">
               Política de Privacidade
             </Link>
             .

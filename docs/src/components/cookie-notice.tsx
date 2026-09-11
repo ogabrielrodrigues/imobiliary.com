@@ -112,7 +112,7 @@ export function CookieNotice() {
           cookies de análise, publicidade ou terceiros.{" "}
           <Link
             to="/privacidade"
-            className="font-medium text-primary hover:underline"
+            className="font-medium text-primary-text hover:underline"
           >
             Saiba o que guardamos
           </Link>

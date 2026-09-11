@@ -214,7 +214,7 @@ function PlaceholderField({
         "focus-visible:ring-[3px] focus-visible:ring-ring/30",
         marksClass(marks),
         invalid
-          ? "border-dashed border-destructive/60 bg-destructive/12 text-destructive"
+          ? "border-dashed border-destructive/60 bg-destructive/12 text-destructive-soft"
           : filled
             ? "border-success/40 bg-success/12 text-foreground"
             : "border-docs/40 bg-docs/12 font-mono text-xs text-docs-soft",

@@ -71,7 +71,7 @@ export function LoadFailure({ failure }: { readonly failure: Failure }) {
       {failure.kind === "authentication" && (
         <Link
           to="/entrar"
-          className="rounded-md text-small font-semibold text-primary hover:underline"
+          className="rounded-md text-small font-semibold text-primary-text hover:underline"
         >
           Entrar novamente
         </Link>
@@ -127,9 +127,9 @@ export function StatusPill({
   readonly children: ReactNode;
 }) {
   const tones = {
-    success: "bg-success/15 border-success/35 text-success",
+    success: "bg-success/15 border-success/35 text-success-soft",
     docs: "bg-docs/15 border-docs/35 text-docs-soft",
-    primary: "bg-primary/15 border-primary/35 text-primary",
+    primary: "bg-primary/15 border-primary/35 text-primary-text",
     neutral: "bg-muted border-border-strong text-muted-foreground",
   } as const;
 

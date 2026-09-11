@@ -66,7 +66,7 @@ function ForgotPasswordPage() {
         footer={
           <>
             Lembrou a senha?{" "}
-            <Link to="/entrar" className="font-medium text-primary">
+            <Link to="/entrar" className="font-medium text-primary-text">
               Entrar
             </Link>
           </>
@@ -103,7 +103,7 @@ function ForgotPasswordPage() {
       footer={
         <>
           Lembrou a senha?{" "}
-          <Link to="/entrar" className="font-medium text-primary">
+          <Link to="/entrar" className="font-medium text-primary-text">
             Entrar
           </Link>
         </>

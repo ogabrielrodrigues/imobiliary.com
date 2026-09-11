@@ -146,7 +146,7 @@ function NewTemplatePage() {
           {summary != null && (
             <p
               role="alert"
-              className="flex items-start gap-2.5 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-small text-destructive"
+              className="flex items-start gap-2.5 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-small text-destructive-soft"
             >
               <IconAlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
               <span>{summary}</span>

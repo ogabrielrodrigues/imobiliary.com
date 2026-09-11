@@ -308,7 +308,7 @@ function GenerateScreen({
         {summary != null && (
           <p
             role="alert"
-            className="flex items-start gap-2.5 max-w-3xl rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-small text-destructive"
+            className="flex items-start gap-2.5 max-w-3xl rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-small text-destructive-soft"
           >
             <IconAlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
             <span>{summary}</span>
@@ -653,7 +653,7 @@ function Checklist({
                       "inline-block rounded-md border px-2 py-1 font-mono text-xs",
                       missing.has(field.name)
                         ? "border-docs/40 bg-docs/12 text-docs-soft"
-                        : "border-success/40 bg-success/12 text-success",
+                        : "border-success/40 bg-success/12 text-success-soft",
                     )}
                   >
                     {placeholderSyntax(field.name)}

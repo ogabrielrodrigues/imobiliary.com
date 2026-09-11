@@ -99,7 +99,7 @@ function ResetPasswordPage() {
         footer={
           <>
             Pode{" "}
-            <Link to="/esqueci-senha" className="font-medium text-primary">
+            <Link to="/esqueci-senha" className="font-medium text-primary-text">
               pedir um novo link
             </Link>{" "}
             a qualquer momento.
@@ -122,7 +122,7 @@ function ResetPasswordPage() {
       footer={
         <>
           O link expirou?{" "}
-          <Link to="/esqueci-senha" className="font-medium text-primary">
+          <Link to="/esqueci-senha" className="font-medium text-primary-text">
             Pedir outro
           </Link>
         </>

@@ -1,8 +1,9 @@
-import { IconAccessible, IconShieldCheck, IconUser } from "@tabler/icons-react";
+import { IconAccessible, IconPalette, IconShieldCheck, IconUser } from "@tabler/icons-react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 
 import { PageBody, PageHeader } from "@/components/page";
 import { AccessibilityPanel } from "@/components/settings/accessibility-panel";
+import { AppearancePanel } from "@/components/settings/appearance-panel";
 import { DeletePanel } from "@/components/settings/delete-panel";
 import { ExportPanel } from "@/components/settings/export-panel";
 import { PasswordPanel } from "@/components/settings/password-panel";
@@ -10,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CONTROLLER } from "@/domain/legal";
 
 const TABS = [
+  { value: "aparencia", label: "Aparência", icon: IconPalette },
   { value: "acessibilidade", label: "Acessibilidade", icon: IconAccessible },
   { value: "seguranca", label: "Segurança", icon: IconShieldCheck },
   { value: "dados", label: "Meus dados", icon: IconUser },
@@ -17,7 +19,7 @@ const TABS = [
 
 type Tab = (typeof TABS)[number]["value"];
 
-const DEFAULT_TAB: Tab = "acessibilidade";
+const DEFAULT_TAB: Tab = "aparencia";
 
 interface SettingsSearch {
   readonly aba?: Tab;
@@ -69,6 +71,10 @@ function SettingsPage() {
             ))}
           </TabsList>
 
+          <TabsContent value="aparencia" className="flex flex-col gap-4">
+            <AppearancePanel />
+          </TabsContent>
+
           <TabsContent value="acessibilidade" className="flex flex-col gap-4">
             <AccessibilityPanel />
           </TabsContent>
@@ -89,7 +95,7 @@ function SettingsPage() {
               levar consigo e eliminar seus dados. As duas coisas abaixo são
               imediatas: não passam por pedido nem por análise. Os detalhes do
               que guardamos estão na{" "}
-              <Link to="/privacidade" className="text-primary hover:underline">
+              <Link to="/privacidade" className="text-primary-text hover:underline">
                 Política de Privacidade
               </Link>
               .

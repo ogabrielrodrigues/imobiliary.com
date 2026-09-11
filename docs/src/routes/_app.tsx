@@ -107,7 +107,7 @@ function Sidebar({ user }: { readonly user: User }) {
               {/* The active entry's icon takes the accent the dot used to carry. */}
               <item.icon
                 aria-hidden="true"
-                className={cn("size-4 shrink-0", active && "text-primary")}
+                className={cn("size-4 shrink-0", active && "text-primary-text")}
               />
               {item.label}
             </Link>
@@ -134,7 +134,7 @@ function Sidebar({ user }: { readonly user: User }) {
           >
             <IconSettings
               aria-hidden="true"
-              className={cn("size-4 shrink-0", pathname.startsWith("/ajustes") && "text-primary")}
+              className={cn("size-4 shrink-0", pathname.startsWith("/ajustes") && "text-primary-text")}
             />
             Ajustes
           </Link>
