@@ -6,6 +6,11 @@ import { cn } from "@/lib/utils"
  * text-size preference, and an unchecked track with --input-border, since the
  * stock one — the field colour on a card — sits at about 1.1:1 and the control
  * would be all but invisible (1.4.11 asks for 3:1).
+ *
+ * The unchecked thumb is --input-border too in the light themes. The stock
+ * thumb is the page background, which only the dark theme replaced: in Claro
+ * and Papel it was a pale knob on a pale track, and an "off" switch read as
+ * an empty field. A grey knob is what says "switch, and it is off".
  */
 function Switch({
   className,
@@ -26,7 +31,7 @@ function Switch({
     >
       <SwitchPrimitive.Thumb
         data-slot="switch-thumb"
-        className="pointer-events-none block rounded-full bg-background ring-0 transition-transform group-data-[size=default]/switch:size-4 group-data-[size=sm]/switch:size-3 group-data-[size=default]/switch:data-checked:translate-x-[calc(100%-2px)] group-data-[size=sm]/switch:data-checked:translate-x-[calc(100%-2px)] dark:data-checked:bg-primary-foreground group-data-[size=default]/switch:data-unchecked:translate-x-0 group-data-[size=sm]/switch:data-unchecked:translate-x-0 dark:data-unchecked:bg-foreground"
+        className="pointer-events-none block rounded-full bg-background ring-0 transition-transform group-data-[size=default]/switch:size-4 group-data-[size=sm]/switch:size-3 group-data-[size=default]/switch:data-checked:translate-x-[calc(100%-2px)] group-data-[size=sm]/switch:data-checked:translate-x-[calc(100%-2px)] dark:data-checked:bg-primary-foreground group-data-[size=default]/switch:data-unchecked:translate-x-0 group-data-[size=sm]/switch:data-unchecked:translate-x-0 data-unchecked:bg-input-border dark:data-unchecked:bg-foreground"
       />
     </SwitchPrimitive.Root>
   )
