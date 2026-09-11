@@ -103,9 +103,10 @@ component base (not Radix), `-t start` the framework template.
   light `:root`, a `.dark` block, and an `@theme inline` that replaced the font
   with Geist and the colours with greys. `src/styles/app.css` has since been
   rewritten by hand: the design palette lives once in `:root`, `@theme inline`
-  maps it onto Tailwind's colour utilities, and `<html>` carries `class="dark"`
-  so the `dark:` variants shadcn's components are written with resolve as their
-  authors intended rather than falling through to a light branch. **Re-running
+  maps it onto Tailwind's colour utilities, and the `dark:` variants shadcn's
+  components are written with resolve through `@custom-variant dark`, which
+  matches any page not in a light `data-scheme` (there is no `dark` class since
+  the themes, item 20). **Re-running
   `shadcn init` would clobber this again** — only run `shadcn add`.
 - **Vite needs `resolve.dedupe: ["react", "react-dom"]`.** There is only one
   React on disk, but dependency pre-bundling still handed out a second module
@@ -137,7 +138,7 @@ component base (not Radix), `-t start` the framework template.
   loaded face, so the platform rendered in the system font the whole time;
   `document.fonts` showed zero loaded faces. Always put the "… Variable"
   name first, and check `document.fonts` after changing a font.
-- **The fonts are self-hosted**, via `@fontsource-variable/figtree` and
+- **The fonts are self-hosted**, via `@fontsource-variable/fustat` and
   `@fontsource-variable/jetbrains-mono`, imported in `src/styles/app.css`. They
   were on Google Fonts until the LGPD pass: that sent every visitor's address to
   a third party and was the only external host the browser touched. Putting one
@@ -258,7 +259,9 @@ the Claude Design project should take the same values: text in the primary hue
 (`--primary-text`, the design's dark hover amber), the focus ring (same
 value), field borders (`#87837c` / `#887d68`, 3:1), and text on a
 destructive or success tint (`--destructive-soft` / `--success-soft`, which
-the design already draws). Figtree + JetBrains Mono.
+the design already draws). **Fustat** + JetBrains Mono: the design says
+Figtree, and Fustat replaced it at the user's request (2026-09-11) in a commit
+of its own, so reverting that commit alone restores Figtree.
 Spacing base 4px (Tailwind's own scale).
 
 ```css
@@ -645,6 +648,13 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       system with the page open could not be shown here; the cross-tab
       `storage` path through the same code was.
 
+21. **Fustat instead of Figtree**, in its own commit so it can be reverted
+    alone. Just before it, a separate fix: the stylesheet had asked for
+    "Figtree", but the Fontsource package registers "Figtree Variable", so no
+    face ever loaded and the platform rendered in the system font; the same
+    was true of JetBrains Mono. Both names are now the "… Variable" ones, and
+    the browser lists the faces as loaded.
+
 ### Next step
 
 **Themes (Escuro, Claro, Papel) and the Fustat font — approved 2026-09-11, in
@@ -770,6 +780,9 @@ a Resend key — the API refuses to start with neither.
 - **The Aparência tab and the themes inside the app are not yet seen in a
   browser signed in**, like the rest of Ajustes. Public pages were verified
   in all three themes and both high contrasts.
+- **The favicon's "d" is still the Figtree glyph.** It is a path drawn from
+  the font, so it did not change with Fustat. Redraw it from Fustat's glyph
+  at weight 600 if the brand mark should follow the interface font.
 - The published API reference lives at
   `https://claude.ai/code/artifact/e3eaf9ee-95d7-46a0-bd7f-d596a95345ee`.
   Update it by republishing `docgen-api/docs/api-reference.html` **with that

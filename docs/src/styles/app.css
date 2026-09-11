@@ -14,7 +14,7 @@
   Variable fonts: one file covers every weight the design uses, so this costs
   fewer requests than the four static cuts it replaces.
 */
-@import "@fontsource-variable/figtree";
+@import "@fontsource-variable/fustat";
 @import "@fontsource-variable/jetbrains-mono";
 
 /*
@@ -196,8 +196,12 @@
     so the page silently fell back to the system font for as long as that was
     written. The plain names stay second, for a machine that has the font
     installed and a stylesheet that somehow failed to load.
+
+    Fustat replaced Figtree on 2026-09-11, at the user's request and ahead of
+    the design system, which still says Figtree. It was its own commit, so
+    reverting that one commit brings Figtree back.
   */
-  --font-sans: "Figtree Variable", "Figtree", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Fustat Variable", "Fustat", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
 
   --color-background: var(--background);
