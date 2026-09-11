@@ -6,7 +6,7 @@ import {
   useNavigate,
   useRouterState,
 } from "@tanstack/react-router";
-import { IconSettings } from "@tabler/icons-react";
+import { IconFileText, IconFiles, IconLogout, IconSettings } from "@tabler/icons-react";
 
 import { Brand } from "@/components/brand";
 import { Button } from "@/components/ui/button";
@@ -37,8 +37,8 @@ export const Route = createFileRoute("/_app")({
 });
 
 const NAV = [
-  { to: "/templates", label: "Templates" },
-  { to: "/documentos", label: "Documentos" },
+  { to: "/templates", label: "Templates", icon: IconFileText },
+  { to: "/documentos", label: "Documentos", icon: IconFiles },
 ] as const;
 
 function AppShell() {
@@ -104,12 +104,10 @@ function Sidebar({ user }: { readonly user: User }) {
                   : "text-muted-foreground hover:bg-row-hover hover:text-foreground",
               )}
             >
-              <span
+              {/* The active entry's icon takes the accent the dot used to carry. */}
+              <item.icon
                 aria-hidden="true"
-                className={cn(
-                  "size-1.5 rounded-full",
-                  active ? "bg-primary" : "bg-border-strong",
-                )}
+                className={cn("size-4 shrink-0", active && "text-primary")}
               />
               {item.label}
             </Link>
@@ -134,7 +132,10 @@ function Sidebar({ user }: { readonly user: User }) {
                 : "text-muted-foreground hover:bg-row-hover hover:text-foreground",
             )}
           >
-            <IconSettings aria-hidden="true" className="size-4 shrink-0" />
+            <IconSettings
+              aria-hidden="true"
+              className={cn("size-4 shrink-0", pathname.startsWith("/ajustes") && "text-primary")}
+            />
             Ajustes
           </Link>
         </nav>
@@ -159,8 +160,9 @@ function Sidebar({ user }: { readonly user: User }) {
           type="button"
           variant="ghost"
           onClick={onSignOut}
-          className="h-8 justify-start px-2.5 text-small text-muted-foreground"
+          className="h-8 justify-start gap-2.5 px-2.5 text-small text-muted-foreground"
         >
+          <IconLogout aria-hidden="true" className="size-4 shrink-0" />
           Sair
         </Button>
       </div>

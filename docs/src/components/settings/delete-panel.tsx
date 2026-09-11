@@ -1,3 +1,4 @@
+import { IconAlertCircle, IconTrash } from "@tabler/icons-react";
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
@@ -72,6 +73,7 @@ export function DeletePanel() {
       </p>
 
       <Button type="button" size="sm" variant="destructive" onClick={ask}>
+        <IconTrash data-icon="inline-start" aria-hidden="true" />
         Excluir minha conta
       </Button>
 
@@ -104,8 +106,9 @@ export function DeletePanel() {
             />
 
             {failure && failure.kind !== "validation" && (
-              <p role="alert" className="text-caption text-destructive">
-                {summaryOf(failure)}
+              <p role="alert" className="flex items-start gap-1.5 text-caption text-destructive">
+                <IconAlertCircle aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+                <span>{summaryOf(failure)}</span>
               </p>
             )}
 
@@ -116,6 +119,7 @@ export function DeletePanel() {
                 disabled={pending || confirmation !== ACCOUNT_DELETION_CONFIRMATION}
                 onClick={onConfirm}
               >
+                <IconTrash data-icon="inline-start" aria-hidden="true" />
                 {pending ? "Excluindo…" : "Excluir definitivamente"}
               </AlertDialogAction>
             </AlertDialogFooter>

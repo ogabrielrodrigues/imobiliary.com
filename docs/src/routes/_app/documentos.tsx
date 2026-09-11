@@ -1,3 +1,4 @@
+import { IconAlertCircle, IconDownload, IconFiles } from "@tabler/icons-react";
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 
@@ -57,9 +58,10 @@ function DocumentsPage() {
         {summary != null && (
           <p
             role="alert"
-            className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-small text-destructive"
+            className="flex items-start gap-2.5 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-small text-destructive"
           >
-            {summary}
+            <IconAlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+            <span>{summary}</span>
           </p>
         )}
 
@@ -67,6 +69,7 @@ function DocumentsPage() {
           <LoadFailure failure={result.failure} />
         ) : result.value.length === 0 ? (
           <EmptyState
+            icon={<IconFiles />}
             title="Nenhum documento gerado"
             description="Abra um modelo e preencha os campos para gerar seu primeiro documento."
             action={
@@ -174,6 +177,7 @@ function DocumentRow({
           disabled={saving}
           onClick={() => onDownload(document.id)}
         >
+          <IconDownload data-icon="inline-start" aria-hidden="true" />
           {saving ? "Preparando…" : "Baixar"}
         </Button>
       </td>

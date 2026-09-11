@@ -1,3 +1,4 @@
+import { IconAlertCircle, IconCircleCheck } from "@tabler/icons-react";
 import { useState, type FormEvent } from "react";
 
 import { messageFor, summaryOf, type Failure } from "@/application/result";
@@ -53,14 +54,16 @@ export function PasswordPanel() {
       </p>
 
       {changed && (
-        <p role="status" className="text-caption text-success">
-          Senha alterada. Enviamos um aviso para o seu e-mail.
+        <p role="status" className="flex items-start gap-1.5 text-caption text-success">
+          <IconCircleCheck aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+          <span>Senha alterada. Enviamos um aviso para o seu e-mail.</span>
         </p>
       )}
       {failure && messageFor(failure, "currentPassword") === undefined &&
         messageFor(failure, "newPassword") === undefined && (
-          <p role="alert" className="text-caption text-destructive">
-            {summaryOf(failure)}
+          <p role="alert" className="flex items-start gap-1.5 text-caption text-destructive">
+            <IconAlertCircle aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+            <span>{summaryOf(failure)}</span>
           </p>
         )}
 

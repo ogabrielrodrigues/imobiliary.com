@@ -1,3 +1,4 @@
+import { IconAlertCircle, IconUpload } from "@tabler/icons-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -53,7 +54,7 @@ export function Dropzone({
           </button>
         </div>
         {error !== undefined && (
-          <p className="text-xs text-destructive">{error}</p>
+          <p className="flex items-start gap-1.5 text-xs text-destructive"><IconAlertCircle aria-hidden="true" className="mt-px size-3.5 shrink-0" /><span>{error}</span></p>
         )}
       </div>
     );
@@ -84,9 +85,9 @@ export function Dropzone({
       >
         <span
           aria-hidden="true"
-          className="flex size-10 items-center justify-center rounded-md border border-border-strong bg-muted font-mono text-label font-medium text-docs"
+          className="flex size-10 items-center justify-center rounded-md border border-border-strong bg-muted text-docs"
         >
-          docx
+          <IconUpload className="size-5" />
         </span>
         <span className="text-sm font-medium">Arraste o modelo .docx</span>
         <span className="text-caption text-faint">
@@ -100,7 +101,7 @@ export function Dropzone({
           className="sr-only"
         />
       </label>
-      {error !== undefined && <p className="text-xs text-destructive">{error}</p>}
+      {error !== undefined && <p className="flex items-start gap-1.5 text-xs text-destructive"><IconAlertCircle aria-hidden="true" className="mt-px size-3.5 shrink-0" /><span>{error}</span></p>}
     </div>
   );
 }

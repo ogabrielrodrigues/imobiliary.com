@@ -1,3 +1,4 @@
+import { IconAlertCircle, IconDownload } from "@tabler/icons-react";
 import { useState } from "react";
 
 import { summaryOf, type Failure } from "@/application/result";
@@ -50,12 +51,14 @@ export function ExportPanel() {
       </p>
 
       {failure && (
-        <p role="alert" className="text-caption text-destructive">
-          {summaryOf(failure)}
+        <p role="alert" className="flex items-start gap-1.5 text-caption text-destructive">
+          <IconAlertCircle aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+          <span>{summaryOf(failure)}</span>
         </p>
       )}
 
       <Button type="button" size="sm" disabled={pending} onClick={onExport}>
+        <IconDownload data-icon="inline-start" aria-hidden="true" />
         {pending ? "Preparando…" : "Baixar meus dados"}
       </Button>
     </section>

@@ -1,3 +1,4 @@
+import { IconRefresh } from "@tabler/icons-react";
 import { useEffect, useId, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -106,6 +107,7 @@ export function AccessibilityPanel() {
           variant="secondary"
           onClick={() => update(DEFAULT_PREFERENCES)}
         >
+          <IconRefresh data-icon="inline-start" aria-hidden="true" />
           Restaurar padrões
         </Button>
         {/* Always in the DOM, so a screen reader hears each confirmation. */}

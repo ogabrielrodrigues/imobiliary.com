@@ -1,3 +1,4 @@
+import { IconAlertCircle, IconUpload } from "@tabler/icons-react";
 import { useState } from "react";
 import {
   createFileRoute,
@@ -111,6 +112,7 @@ function NewTemplatePage() {
                   setFile(null);
                 }}
               >
+                <IconUpload data-icon="inline-start" aria-hidden="true" />
                 Enviar outro
               </Button>
             </div>
@@ -144,9 +146,10 @@ function NewTemplatePage() {
           {summary != null && (
             <p
               role="alert"
-              className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-small text-destructive"
+              className="flex items-start gap-2.5 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-small text-destructive"
             >
-              {summary}
+              <IconAlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+              <span>{summary}</span>
             </p>
           )}
 
@@ -181,6 +184,7 @@ function NewTemplatePage() {
             disabled={pending}
             className="self-start"
           >
+            <IconUpload data-icon="inline-start" aria-hidden="true" />
             {pending ? "Enviando…" : "Enviar modelo"}
           </Button>
         </form>

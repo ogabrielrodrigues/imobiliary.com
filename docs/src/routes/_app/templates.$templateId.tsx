@@ -6,7 +6,7 @@ import {
   useRouter,
 } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
-import { IconTrash } from "@tabler/icons-react";
+import { IconAlertCircle, IconAlertTriangle, IconDownload, IconFilePlus, IconPlus, IconTrash } from "@tabler/icons-react";
 
 import { messageFor, summaryOf, type Failure } from "@/application/result";
 import { DocumentPreview } from "@/components/document-preview";
@@ -238,6 +238,7 @@ function GenerateScreen({
               variant="secondary"
               onClick={() => setPublishing((open) => !open)}
             >
+              <IconPlus data-icon="inline-start" aria-hidden="true" />
               Nova versão
             </Button>
             <Link
@@ -247,6 +248,7 @@ function GenerateScreen({
               Voltar
             </Link>
             <Button type="button" disabled={pending} onClick={onGenerate}>
+              <IconFilePlus data-icon="inline-start" aria-hidden="true" />
               {pending ? "Gerando…" : "Gerar documento"}
             </Button>
           </>
@@ -279,7 +281,9 @@ function GenerateScreen({
         </div>
 
         {pinned && (
-          <p className="max-w-3xl rounded-md border border-docs/35 bg-docs/10 px-4 py-3 text-small text-docs">
+          <p className="flex max-w-3xl items-start gap-2.5 rounded-md border border-docs/35 bg-docs/10 px-4 py-3 text-small text-docs">
+            <IconAlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+            <span>
             Você está vendo a versão {shown}. A atual é a{" "}
             {template.latestVersion}, e o documento gerado aqui usará a{" "}
             {shown}.{" "}
@@ -290,6 +294,7 @@ function GenerateScreen({
             >
               Ver a versão atual
             </button>
+            </span>
           </p>
         )}
 
@@ -303,9 +308,10 @@ function GenerateScreen({
         {summary != null && (
           <p
             role="alert"
-            className="max-w-3xl rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-small text-destructive"
+            className="flex items-start gap-2.5 max-w-3xl rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-small text-destructive"
           >
-            {summary}
+            <IconAlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+            <span>{summary}</span>
           </p>
         )}
 
@@ -492,8 +498,9 @@ function PublishVersion({
       />
 
       {failure && messageFor(failure, "file") === undefined && (
-        <p role="alert" className="text-caption text-destructive">
-          {summaryOf(failure)}
+        <p role="alert" className="flex items-start gap-1.5 text-caption text-destructive">
+          <IconAlertCircle aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+          <span>{summaryOf(failure)}</span>
         </p>
       )}
 
@@ -581,8 +588,9 @@ function DeleteTemplate({ template }: { readonly template: Template }) {
             </AlertDialogHeader>
 
             {failure && (
-              <p role="alert" className="text-caption text-destructive">
-                {summaryOf(failure)}
+              <p role="alert" className="flex items-start gap-1.5 text-caption text-destructive">
+                <IconAlertCircle aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+                <span>{summaryOf(failure)}</span>
               </p>
             )}
 
@@ -756,6 +764,7 @@ function GeneratedCard({
           disabled={saving}
           onClick={() => onDownload(document)}
         >
+          <IconDownload data-icon="inline-start" aria-hidden="true" />
           {saving ? "Preparando…" : "Baixar"}
         </Button>
         <Button type="button" size="sm" variant="ghost" onClick={onDismiss}>

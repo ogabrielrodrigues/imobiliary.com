@@ -1,3 +1,4 @@
+import { IconAlertCircle } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 
 import { Brand } from "@/components/brand";
@@ -43,9 +44,10 @@ export function AuthLayout({
         {summary != null && (
           <p
             role="alert"
-            className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-small text-destructive"
+            className="flex items-start gap-2.5 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-small text-destructive"
           >
-            {summary}
+            <IconAlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+            <span>{summary}</span>
           </p>
         )}
 

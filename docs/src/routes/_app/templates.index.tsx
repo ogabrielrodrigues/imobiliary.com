@@ -1,3 +1,4 @@
+import { IconFileText, IconUpload } from "@tabler/icons-react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 
 import {
@@ -27,7 +28,7 @@ function TemplatesPage() {
       <PageHeader
         title="Templates"
         actions={
-          <Button nativeButton={false} render={<Link to="/templates/novo" />}>Enviar modelo</Button>
+          <Button nativeButton={false} render={<Link to="/templates/novo" />}><IconUpload data-icon="inline-start" aria-hidden="true" />Enviar modelo</Button>
         }
       />
       <PageBody>
@@ -35,10 +36,11 @@ function TemplatesPage() {
           <LoadFailure failure={result.failure} />
         ) : result.value.length === 0 ? (
           <EmptyState
+            icon={<IconFileText />}
             title="Nenhum template ainda"
             description="Envie um .docx com campos no formato {{.campo}} para começar. A plataforma descobre os campos sozinha."
             action={
-              <Button size="sm" nativeButton={false} render={<Link to="/templates/novo" />}>Enviar modelo</Button>
+              <Button size="sm" nativeButton={false} render={<Link to="/templates/novo" />}><IconUpload data-icon="inline-start" aria-hidden="true" />Enviar modelo</Button>
             }
           />
         ) : (

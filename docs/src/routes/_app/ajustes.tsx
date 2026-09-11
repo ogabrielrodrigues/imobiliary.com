@@ -1,3 +1,4 @@
+import { IconAccessible, IconShieldCheck, IconUser } from "@tabler/icons-react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 
 import { PageBody, PageHeader } from "@/components/page";
@@ -9,9 +10,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CONTROLLER } from "@/domain/legal";
 
 const TABS = [
-  { value: "acessibilidade", label: "Acessibilidade" },
-  { value: "seguranca", label: "Segurança" },
-  { value: "dados", label: "Meus dados" },
+  { value: "acessibilidade", label: "Acessibilidade", icon: IconAccessible },
+  { value: "seguranca", label: "Segurança", icon: IconShieldCheck },
+  { value: "dados", label: "Meus dados", icon: IconUser },
 ] as const;
 
 type Tab = (typeof TABS)[number]["value"];
@@ -62,6 +63,7 @@ function SettingsPage() {
           <TabsList aria-label="Seções de ajustes" className="self-start">
             {TABS.map((tab) => (
               <TabsTrigger key={tab.value} value={tab.value} className="px-3">
+                <tab.icon data-icon="inline-start" aria-hidden="true" />
                 {tab.label}
               </TabsTrigger>
             ))}

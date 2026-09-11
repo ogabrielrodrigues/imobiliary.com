@@ -1,3 +1,4 @@
+import { IconAlertCircle } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 
@@ -58,7 +59,10 @@ export function LoadFailure({ failure }: { readonly failure: Failure }) {
       role="alert"
       className="flex flex-col items-start gap-3 rounded-lg border border-border bg-card px-5 py-6 text-sm text-muted-foreground"
     >
-      {summaryOf(failure) ?? "Não foi possível carregar."}
+      <span className="flex items-start gap-2.5">
+        <IconAlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-destructive" />
+        <span>{summaryOf(failure) ?? "Não foi possível carregar."}</span>
+      </span>
       {/*
         A session that expired mid-visit is the one failure the user can act on,
         and without a way out this card is a dead end: the cookie is cleared by
@@ -78,16 +82,27 @@ export function LoadFailure({ failure }: { readonly failure: Failure }) {
 
 /** The card shown when a list is legitimately empty. */
 export function EmptyState({
+  icon,
   title,
   description,
   action,
 }: {
+  /** Decorative; the title says what the state is. */
+  readonly icon?: ReactNode;
   readonly title: string;
   readonly description: string;
   readonly action?: ReactNode;
 }) {
   return (
     <div className="flex flex-col items-start gap-3 rounded-lg border border-border bg-card px-5 py-6">
+      {icon && (
+        <span
+          aria-hidden="true"
+          className="flex size-9 items-center justify-center rounded-md border border-border-strong bg-muted text-muted-foreground [&_svg]:size-5"
+        >
+          {icon}
+        </span>
+      )}
       <p className="text-sm font-semibold">{title}</p>
       <p className="max-w-prose text-caption leading-relaxed text-muted-foreground">
         {description}
