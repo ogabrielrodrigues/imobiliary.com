@@ -1,7 +1,8 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import {
   DEFAULT_PREFERENCES,
   type AccessibilityPreferences,
@@ -10,13 +11,6 @@ import {
   type Motion,
 } from "@/domain/accessibility";
 import { loadPreferences, savePreferences } from "@/lib/accessibility-storage";
-import { cn } from "@/lib/utils";
-
-interface Option<T> {
-  readonly value: T;
-  readonly label: string;
-  readonly description: string;
-}
 
 /** The slider's steps, in order. The scale is ordinal, which is what makes a slider fit. */
 const FONT_STEPS: readonly { readonly value: FontScale; readonly label: string; readonly percent: string }[] = [
@@ -26,47 +20,39 @@ const FONT_STEPS: readonly { readonly value: FontScale; readonly label: string; 
   { value: 1.5, label: "Máximo", percent: "150%" },
 ];
 
-const CONTRAST_OPTIONS: readonly Option<Contrast>[] = [
-  {
-    value: "system",
-    label: "Seguir o sistema",
-    description: "Alto contraste quando o seu sistema operacional pedir.",
-  },
-  { value: "standard", label: "Padrão", description: "As cores de sempre." },
-  {
-    value: "more",
-    label: "Alto contraste",
-    description: "Fundo preto, texto branco, bordas visíveis e links sublinhados.",
-  },
-];
-
-const MOTION_OPTIONS: readonly Option<Motion>[] = [
-  {
-    value: "system",
-    label: "Seguir o sistema",
-    description: "Reduz as animações quando o seu sistema operacional pedir.",
-  },
-  {
-    value: "reduce",
-    label: "Reduzir sempre",
-    description: "Sem transições nem animações, em qualquer caso.",
-  },
-];
+/**
+ * Whether a media query matches, kept current as the system setting changes.
+ * The server has no system to ask and answers false; the browser corrects it
+ * on hydration.
+ */
+function useMediaQuery(query: string): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const list = window.matchMedia(query);
+      list.addEventListener("change", onChange);
+      return () => list.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia(query).matches,
+    () => false,
+  );
+}
 
 /**
  * The accessibility preferences.
  *
  * A change applies the moment it is made and is saved on its own: the page
  * itself is the preview, and a Save button would only be one more thing to
- * find. Native radio groups, because a fieldset and its legend are announced
- * correctly by every screen reader without any help from us.
+ * find. Text size is a scale, so it is a slider; contrast and motion are on or
+ * off, so they are switches.
  */
 export function AccessibilityPanel() {
   // Storage does not exist on the server; the stored choice is read once the
   // panel is in the browser. The page is already showing it — the head script
-  // applied it before first paint — so only the selected radios catch up.
+  // applied it before first paint — so only the controls catch up.
   const [preferences, setPreferences] = useState<AccessibilityPreferences>(DEFAULT_PREFERENCES);
   const [status, setStatus] = useState("");
+  const systemWantsContrast = useMediaQuery("(prefers-contrast: more)");
+  const systemReducesMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
 
   useEffect(() => {
     setPreferences(loadPreferences());
@@ -84,7 +70,7 @@ export function AccessibilityPanel() {
   return (
     <section
       aria-labelledby="accessibility-title"
-      className="flex max-w-2xl flex-col gap-5 rounded-lg border border-border bg-card px-5 py-4"
+      className="flex max-w-2xl flex-col gap-6 rounded-lg border border-border bg-card px-5 py-4"
     >
       <div className="flex flex-col gap-1.5">
         <h2 id="accessibility-title" className="text-sm font-semibold">
@@ -100,18 +86,16 @@ export function AccessibilityPanel() {
         value={preferences.fontScale}
         onCommit={(fontScale) => update({ ...preferences, fontScale })}
       />
-      <RadioGroup
-        legend="Contraste"
-        name="contrast"
-        options={CONTRAST_OPTIONS}
+
+      <ContrastControl
         value={preferences.contrast}
+        systemWantsMore={systemWantsContrast}
         onChange={(contrast) => update({ ...preferences, contrast })}
       />
-      <RadioGroup
-        legend="Animações"
-        name="motion"
-        options={MOTION_OPTIONS}
+
+      <MotionControl
         value={preferences.motion}
+        systemReduces={systemReducesMotion}
         onChange={(motion) => update({ ...preferences, motion })}
       />
 
@@ -148,7 +132,6 @@ function FontSizeSlider({
   readonly value: FontScale;
   readonly onCommit: (value: FontScale) => void;
 }) {
-  const id = useId();
   const committed = Math.max(0, FONT_STEPS.findIndex((step) => step.value === value));
   const [pending, setPending] = useState<number | null>(null);
   const index = pending ?? committed;
@@ -160,9 +143,7 @@ function FontSizeSlider({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-baseline justify-between gap-3">
-        <span id={`${id}-label`} className="text-small font-medium text-foreground">
-          Tamanho do texto
-        </span>
+        <span className="text-small font-medium text-foreground">Tamanho do texto</span>
         {/* The thumb announces this itself, so it is hidden from screen readers. */}
         <span aria-hidden="true" className="text-caption text-muted-foreground tabular-nums">
           {current.label} · {current.percent}
@@ -199,64 +180,125 @@ function FontSizeSlider({
   );
 }
 
-function RadioGroup<T extends string | number>({
-  legend,
-  name,
-  options,
+/**
+ * High contrast: a switch, and whether to leave the decision to the system.
+ *
+ * Three stored states behind two controls. While the system decides, the switch
+ * is disabled and shows what the system is asking for right now, so the reader
+ * sees the effect they are getting and not an unexplained "off".
+ */
+function ContrastControl({
   value,
+  systemWantsMore,
   onChange,
 }: {
-  readonly legend: string;
-  readonly name: string;
-  readonly options: readonly Option<T>[];
-  readonly value: T;
-  readonly onChange: (value: T) => void;
+  readonly value: Contrast;
+  readonly systemWantsMore: boolean;
+  readonly onChange: (value: Contrast) => void;
+}) {
+  const followsSystem = value === "system";
+  const on = followsSystem ? systemWantsMore : value === "more";
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      <SwitchRow
+        label="Alto contraste"
+        description="Fundo preto, texto branco, bordas visíveis e links sublinhados."
+        checked={on}
+        disabled={followsSystem}
+        onCheckedChange={(checked) => onChange(checked ? "more" : "standard")}
+      />
+      <label className="flex cursor-pointer items-center gap-2 text-caption text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={followsSystem}
+          onChange={(event) => {
+            // Read before any state update: React clears the event afterwards.
+            const checked = event.currentTarget.checked;
+            // Leaving the system's hands keeps what it was showing, so the
+            // page does not change under the reader at the moment they choose.
+            onChange(checked ? "system" : systemWantsMore ? "more" : "standard");
+          }}
+          className="size-4 shrink-0 accent-primary"
+        />
+        Seguir o sistema operacional
+        {followsSystem && (
+          <span className="text-faint">
+            — agora {systemWantsMore ? "pedindo alto contraste" : "sem pedido de alto contraste"}
+          </span>
+        )}
+      </label>
+    </div>
+  );
+}
+
+/**
+ * Reduced motion, as one switch. Off still honours the system: there is no
+ * setting that forces motion back on against it.
+ */
+function MotionControl({
+  value,
+  systemReduces,
+  onChange,
+}: {
+  readonly value: Motion;
+  readonly systemReduces: boolean;
+  readonly onChange: (value: Motion) => void;
+}) {
+  return (
+    <SwitchRow
+      label="Reduzir animações sempre"
+      description={
+        systemReduces
+          ? "Seu sistema operacional já pede menos movimento, e isso é respeitado mesmo com esta opção desligada."
+          : "Sem transições nem animações. Desligada, seguimos o que o seu sistema operacional pedir."
+      }
+      checked={value === "reduce"}
+      onCheckedChange={(checked) => onChange(checked ? "reduce" : "system")}
+    />
+  );
+}
+
+/** A labelled switch with a description, the whole row clickable. */
+function SwitchRow({
+  label,
+  description,
+  checked,
+  disabled = false,
+  onCheckedChange,
+}: {
+  readonly label: ReactNode;
+  readonly description: ReactNode;
+  readonly checked: boolean;
+  readonly disabled?: boolean;
+  readonly onCheckedChange: (checked: boolean) => void;
 }) {
   const id = useId();
 
   return (
-    <fieldset className="flex flex-col gap-2">
-      <legend className="mb-2 text-small font-medium text-foreground">{legend}</legend>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {options.map((option) => {
-          const optionId = `${id}-${String(option.value)}`;
-          const checked = option.value === value;
-          return (
-            <label
-              key={String(option.value)}
-              htmlFor={optionId}
-              className={cn(
-                "flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2.5 transition-colors",
-                "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring",
-                checked
-                  ? "border-primary bg-primary/10"
-                  : "border-input-border hover:bg-row-hover",
-              )}
-            >
-              <input
-                id={optionId}
-                type="radio"
-                name={name}
-                checked={checked}
-                onChange={() => onChange(option.value)}
-                aria-describedby={`${optionId}-description`}
-                className="mt-1 size-4 shrink-0 accent-primary"
-              />
-              <span className="flex flex-col gap-0.5">
-                <span className="text-small font-medium text-foreground">
-                  {option.label}
-                </span>
-                <span
-                  id={`${optionId}-description`}
-                  className="text-caption text-muted-foreground"
-                >
-                  {option.description}
-                </span>
-              </span>
-            </label>
-          );
-        })}
-      </div>
-    </fieldset>
+    <label
+      className={
+        disabled
+          ? "flex items-start justify-between gap-4"
+          : "flex cursor-pointer items-start justify-between gap-4"
+      }
+    >
+      <span className="flex flex-col gap-0.5">
+        <span id={`${id}-label`} className="text-small font-medium text-foreground">
+          {label}
+        </span>
+        <span id={`${id}-description`} className="text-caption text-muted-foreground">
+          {description}
+        </span>
+      </span>
+      <Switch
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={(next) => onCheckedChange(next)}
+        aria-labelledby={`${id}-label`}
+        aria-describedby={`${id}-description`}
+        className="mt-0.5"
+      />
+    </label>
   );
 }

@@ -569,6 +569,19 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       do not run in a background tab. The required chip says "obrigatório"
       in its label and has a dashed edge and a "!", not colour alone.
     - Privacy policy 1.2: section 5 lists the second local-storage record.
+    - **The controls, at the user's request:** text size is a 4-step shadcn
+      **Slider** (an ordinal scale), applied on release — resizing the page
+      mid-drag moves the slider out from under the pointer. Contrast and motion
+      are **Switches**, because they are on/off: contrast has a "Seguir o
+      sistema" checkbox beside it (three stored states, two controls; while
+      the system decides, the switch is disabled and shows what the system is
+      asking for), and motion is one switch whose off state still honours the
+      system.
+    - **shadcn wrappers adjusted:** `slider.tsx` takes `thumbProps` (Base UI
+      puts `getAriaLabel`/`getAriaValueText` on the thumb) and must get
+      `value` as an **array** — a scalar renders two thumbs. `switch.tsx` is
+      in rem and its unchecked track uses `--input-border`; the stock one was
+      about 1.1:1 on a card.
 
 ### Next step
 
