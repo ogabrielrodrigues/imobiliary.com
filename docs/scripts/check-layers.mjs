@@ -42,15 +42,22 @@ const RULES = [
     because: "the server layer is the composition root",
   },
   {
+    layer: "queries",
+    mayImport: ["domain", "application", "server", "queries"],
+    because:
+      "a query describes how to fetch through a server function and how to " +
+      "cache it; it knows nothing of the screens that read it",
+  },
+  {
     layer: "routes",
-    mayImport: ["domain", "application", "server", "components", "lib", "routes"],
+    mayImport: ["domain", "application", "server", "queries", "components", "lib", "routes"],
     because:
       "a route must reach the API through a server function, never by " +
       "importing infrastructure and shipping it to the browser",
   },
   {
     layer: "components",
-    mayImport: ["domain", "application", "server", "components", "lib", "routes"],
+    mayImport: ["domain", "application", "server", "queries", "components", "lib", "routes"],
     because:
       "a component must not import infrastructure, which would risk bundling " +
       "server-only code into the page",

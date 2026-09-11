@@ -1,5 +1,6 @@
 import { IconAlertCircle, IconTrash } from "@tabler/icons-react";
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 
 import { summaryOf, type Failure } from "@/application/result";
@@ -20,6 +21,7 @@ import { ACCOUNT_DELETION_CONFIRMATION, deleteAccount } from "@/server/auth";
 /** Erasure, article 18, VI. */
 export function DeletePanel() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const [open, setOpen] = useState(false);
   // Mounted only once asked for: Base UI renders its root through a portal,
@@ -47,8 +49,9 @@ export function DeletePanel() {
         return;
       }
       // The session is already cleared server-side, so there is nothing to
-      // sign out of — only somewhere to go.
+      // sign out of — only somewhere to go, and a cache to forget.
       await navigate({ to: "/" });
+      queryClient.clear();
     } finally {
       setPending(false);
     }

@@ -8,6 +8,7 @@ import {
   IconUpload,
 } from "@tabler/icons-react";
 import { useState, type ReactNode } from "react";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 
 import { summaryOf, type Failure } from "@/application/result";
@@ -29,7 +30,7 @@ import {
 import { saveFile } from "@/lib/download";
 import { relativeDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { getDashboard } from "@/server/dashboard";
+import { dashboardQuery } from "@/queries/options";
 import { downloadDocument } from "@/server/documents";
 
 interface DashboardSearch {
@@ -54,14 +55,23 @@ export const Route = createFileRoute("/_app/dashboard")({
   // Without this the router treats a new window as the same match and serves
   // the cached figures.
   loaderDeps: ({ search }) => ({ periodo: search.periodo ?? DEFAULT_STATS_PERIOD }),
-  loader: ({ deps }) =>
-    getDashboard({ data: { days: deps.periodo, timeZone: viewerTimeZone() } }),
+  /**
+   * The zone is chosen here and handed to the component, never recomputed
+   * there. A server render uses the default and the browser would pick its
+   * own: two different keys, and hydration would fetch everything again.
+   */
+  loader: async ({ context, deps }) => {
+    const timeZone = viewerTimeZone();
+    await context.queryClient.ensureQueryData(dashboardQuery(deps.periodo, timeZone));
+    return { days: deps.periodo, timeZone };
+  },
   head: () => ({ meta: [{ title: "Dashboard | Imobiliary Docs" }] }),
   component: DashboardPage,
 });
 
 function DashboardPage() {
-  const result = Route.useLoaderData();
+  const { days, timeZone } = Route.useLoaderData();
+  const { data: result } = useSuspenseQuery(dashboardQuery(days, timeZone));
 
   return (
     <>

@@ -22,6 +22,20 @@ export interface DocumentListItem {
   readonly templateName: string | null;
 }
 
+/**
+ * One page of the documents list.
+ *
+ * The API reports no total, so whether a next page exists is learned by asking
+ * for one row more than is shown.
+ */
+export interface DocumentPage {
+  readonly items: readonly DocumentListItem[];
+  /** Zero-based. */
+  readonly page: number;
+  readonly pageSize: number;
+  readonly hasNext: boolean;
+}
+
 /** Everything the dashboard shows: the figures, and the latest documents. */
 export interface DashboardView {
   readonly stats: DashboardStats;

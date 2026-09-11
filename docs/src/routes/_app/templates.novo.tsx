@@ -1,11 +1,7 @@
 import { IconAlertCircle, IconUpload } from "@tabler/icons-react";
 import { useState } from "react";
-import {
-  createFileRoute,
-  Link,
-  useNavigate,
-  useRouter,
-} from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 
 import { messageFor, summaryOf, type Failure } from "@/application/result";
 import { Dropzone } from "@/components/dropzone";
@@ -15,6 +11,7 @@ import { PageBody, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { validateTemplateFile } from "@/domain/template";
 import type { Template } from "@/domain/template";
+import { invalidateAfter } from "@/queries/options";
 import { createTemplate } from "@/server/templates";
 
 export const Route = createFileRoute("/_app/templates/novo")({
@@ -24,7 +21,7 @@ export const Route = createFileRoute("/_app/templates/novo")({
 
 function NewTemplatePage() {
   const navigate = useNavigate();
-  const router = useRouter();
+  const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [pending, setPending] = useState(false);
@@ -66,6 +63,8 @@ function NewTemplatePage() {
       const result = await createTemplate({ data: form });
       if (result.ok) {
         setCreated(result.value);
+        // The listing may be cached from before this upload existed.
+        void invalidateAfter(queryClient, "templateCreated");
         return;
       }
       setFailure(result.failure);
@@ -94,13 +93,7 @@ function NewTemplatePage() {
             <div className="flex gap-2">
               <Button
                 type="button"
-                onClick={async () => {
-                  // The listing was loaded before this upload existed, and
-                  // its loader result is cached, so without invalidating it
-                  // the template just created would be missing from it.
-                  await router.invalidate();
-                  await navigate({ to: "/templates" });
-                }}
+                onClick={() => navigate({ to: "/templates" })}
               >
                 Ver meus modelos
               </Button>

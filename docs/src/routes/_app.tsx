@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   createFileRoute,
   Link,
@@ -132,11 +133,15 @@ function MobileBar({ user }: { readonly user: User }) {
 /** What the sidebar holds, shared by the fixed sidebar and the drawer. */
 function SidebarContent({ user }: { readonly user: User }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
 
   async function onSignOut() {
     await logout({ data: undefined });
     await navigate({ to: "/entrar" });
+    // Nothing cached for this account may outlive its session: the next person
+    // to sign in on this tab would otherwise see it for up to the stale time.
+    queryClient.clear();
   }
 
   return (

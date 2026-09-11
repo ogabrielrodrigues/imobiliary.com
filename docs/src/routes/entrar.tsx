@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   createFileRoute,
   Link,
@@ -42,6 +43,7 @@ export const Route = createFileRoute("/entrar")({
 
 function SignInPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [failure, setFailure] = useState<Failure | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -61,6 +63,8 @@ function SignInPage() {
       });
 
       if (result.ok) {
+        // Whatever this tab cached belonged to whoever was here before.
+        queryClient.clear();
         await navigate({ to: "/dashboard" });
         return;
       }

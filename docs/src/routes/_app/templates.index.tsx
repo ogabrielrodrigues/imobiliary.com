@@ -1,4 +1,5 @@
 import { IconFileText, IconUpload } from "@tabler/icons-react";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 
 import {
@@ -12,16 +13,16 @@ import {
 import { Button } from "@/components/ui/button";
 import type { Template } from "@/domain/template";
 import { relativeDate } from "@/lib/format";
-import { listTemplates } from "@/server/templates";
+import { templateListQuery } from "@/queries/options";
 
 export const Route = createFileRoute("/_app/templates/")({
   head: () => ({ meta: [{ title: "Templates | Imobiliary Docs" }] }),
-  loader: () => listTemplates(),
+  loader: ({ context }) => context.queryClient.ensureQueryData(templateListQuery()),
   component: TemplatesPage,
 });
 
 function TemplatesPage() {
-  const result = Route.useLoaderData();
+  const { data: result } = useSuspenseQuery(templateListQuery());
 
   return (
     <>

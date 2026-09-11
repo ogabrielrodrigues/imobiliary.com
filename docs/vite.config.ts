@@ -13,7 +13,10 @@ export default defineConfig({
     // still hand out a second module instance — enough for React's dispatcher
     // to come back null and every hook to fail with "more than one copy of
     // React". Deduping pins every importer, Base UI included, to one instance.
-    dedupe: ["react", "react-dom"],
+    // React Query joins them for the same reason: the router integration
+    // provides the QueryClient through a context, and a second instance of the
+    // package would be a second context that no hook can see.
+    dedupe: ["react", "react-dom", "@tanstack/react-query"],
   },
   plugins: [
     // Tailwind runs first so the generated stylesheet is in place before the

@@ -1,5 +1,6 @@
 import { IconAlertCircle, IconDownload, IconFiles } from "@tabler/icons-react";
 import { useState } from "react";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { summaryOf, type Failure } from "@/application/result";
@@ -14,16 +15,18 @@ import { Button } from "@/components/ui/button";
 import { formatBytes } from "@/domain/template";
 import { saveFile } from "@/lib/download";
 import { shortDateTime } from "@/lib/format";
-import { downloadDocument, listDocuments } from "@/server/documents";
+import { documentPageQuery } from "@/queries/options";
+import { downloadDocument } from "@/server/documents";
 
 export const Route = createFileRoute("/_app/documentos")({
   head: () => ({ meta: [{ title: "Documentos | Imobiliary Docs" }] }),
-  loader: () => listDocuments(),
+  loader: ({ context }) => context.queryClient.ensureQueryData(documentPageQuery(0)),
   component: DocumentsPage,
 });
 
 function DocumentsPage() {
-  const result = Route.useLoaderData();
+  const { data: page } = useSuspenseQuery(documentPageQuery(0));
+  const result = page.ok ? { ok: true as const, value: page.value.items } : page;
 
   // Tracks which row is being fetched, so only that button says so.
   const [saving, setSaving] = useState<string | null>(null);

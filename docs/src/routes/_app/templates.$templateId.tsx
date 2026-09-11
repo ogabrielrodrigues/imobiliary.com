@@ -1,10 +1,6 @@
 import { useState, type FormEvent } from "react";
-import {
-  createFileRoute,
-  Link,
-  useNavigate,
-  useRouter,
-} from "@tanstack/react-router";
+import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { IconAlertCircle, IconAlertTriangle, IconDownload, IconFilePlus, IconPlus, IconTrash } from "@tabler/icons-react";
 
@@ -42,12 +38,10 @@ import {
 } from "@/domain/template";
 import { saveFile } from "@/lib/download";
 import { relativeDate } from "@/lib/format";
+import { queryKeys } from "@/queries/keys";
+import { invalidateAfter, templateContentQuery } from "@/queries/options";
 import { downloadDocument, generateDocument } from "@/server/documents";
-import {
-  deleteTemplate,
-  getTemplateContent,
-  publishTemplateVersion,
-} from "@/server/templates";
+import { deleteTemplate, publishTemplateVersion } from "@/server/templates";
 
 /** The search parameters this screen understands. */
 interface TemplateSearch {
@@ -71,19 +65,18 @@ export const Route = createFileRoute("/_app/templates/$templateId")({
   // Without this the router treats a change of search as the same match and
   // serves the cached data, so the loader would never see the new version.
   loaderDeps: ({ search }) => ({ versao: search.versao }),
-  loader: ({ params, deps }) =>
-    getTemplateContent({
-      data: {
-        id: params.templateId,
-        ...(deps.versao === undefined ? {} : { version: deps.versao }),
-      },
-    }),
+  loader: ({ context, params, deps }) =>
+    context.queryClient.ensureQueryData(
+      templateContentQuery(params.templateId, deps.versao),
+    ),
   head: () => ({ meta: [{ title: "Gerar documento | Imobiliary Docs" }] }),
   component: TemplateDetailPage,
 });
 
 function TemplateDetailPage() {
-  const result = Route.useLoaderData();
+  const { templateId } = Route.useParams();
+  const { versao } = Route.useSearch();
+  const { data: result } = useSuspenseQuery(templateContentQuery(templateId, versao));
 
   if (!result.ok) {
     return (
@@ -125,6 +118,7 @@ function GenerateScreen({
   readonly previewUnavailable: boolean;
 }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   // The schema the API published is the authority on what must be sent; the
   // preview's own reading only decides where the fields sit on the page.
@@ -179,6 +173,8 @@ function GenerateScreen({
 
       if (result.ok) {
         setGenerated(result.value);
+        // The new row belongs in Documentos and in the dashboard's counts.
+        void invalidateAfter(queryClient, "documentGenerated");
         return;
       }
       setFailure(result.failure);
@@ -418,12 +414,16 @@ function PublishVersion({
   readonly template: Template;
   readonly onDone: () => void;
 }) {
-  const router = useRouter();
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
 
   const [file, setFile] = useState<File | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
-  const [pending, setPending] = useState(false);
+
+  const publish = useMutation({
+    mutationFn: (form: FormData) => publishTemplateVersion({ data: form }),
+  });
+  const pending = publish.isPending;
 
   function onPick(chosen: File | null) {
     setFile(chosen);
@@ -451,30 +451,25 @@ function PublishVersion({
     form.set("templateId", template.id);
     form.set("file", file, file.name);
 
-    setPending(true);
     setFailure(null);
 
-    try {
-      const result = await publishTemplateVersion({ data: form });
-      if (!result.ok) {
-        setFailure(result.failure);
-        return;
-      }
-
-      // Clear any pin first, so the screen lands on the version just published,
-      // then invalidate: navigating to a search that is already empty is a
-      // no-op and would not re-run the loader on its own.
-      await navigate({
-        to: "/templates/$templateId",
-        params: { templateId: template.id },
-        search: {},
-        replace: true,
-      });
-      await router.invalidate();
-      onDone();
-    } finally {
-      setPending(false);
+    const result = await publish.mutateAsync(form);
+    if (!result.ok) {
+      setFailure(result.failure);
+      return;
     }
+
+    // Mark the template stale before leaving any pin, so the screen lands on
+    // the version just published: the "latest" entry cached for this template
+    // still describes the one before.
+    await invalidateAfter(queryClient, "versionPublished");
+    await navigate({
+      to: "/templates/$templateId",
+      params: { templateId: template.id },
+      search: {},
+      replace: true,
+    });
+    onDone();
   }
 
   return (
@@ -523,7 +518,7 @@ function PublishVersion({
  * downloadable — which is the part a person needs to know before deciding.
  */
 function DeleteTemplate({ template }: { readonly template: Template }) {
-  const router = useRouter();
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
 
   const [open, setOpen] = useState(false);
@@ -534,7 +529,11 @@ function DeleteTemplate({ template }: { readonly template: Template }) {
   // lose. Mounting stays true afterwards so the closing animation still runs.
   const [mounted, setMounted] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
-  const [pending, setPending] = useState(false);
+
+  const remove = useMutation({
+    mutationFn: (id: string) => deleteTemplate({ data: id }),
+  });
+  const pending = remove.isPending;
 
   function ask() {
     setMounted(true);
@@ -542,24 +541,20 @@ function DeleteTemplate({ template }: { readonly template: Template }) {
   }
 
   async function onConfirm() {
-    setPending(true);
     setFailure(null);
 
-    try {
-      const result = await deleteTemplate({ data: template.id });
-      if (!result.ok) {
-        setFailure(result.failure);
-        return;
-      }
-
-      // Navigate before invalidating: re-running this route's loader while
-      // still on it would fetch a template the API now answers 404 for, and
-      // flash a failure screen on the way out.
-      await navigate({ to: "/templates" });
-      await router.invalidate();
-    } finally {
-      setPending(false);
+    const result = await remove.mutateAsync(template.id);
+    if (!result.ok) {
+      setFailure(result.failure);
+      return;
     }
+
+    // Leave first, then drop this template's entries: refetching them while
+    // still on the screen would ask for a template the API now answers 404
+    // for, and flash a failure on the way out.
+    await navigate({ to: "/templates" });
+    queryClient.removeQueries({ queryKey: [...queryKeys.templates, template.id] });
+    await invalidateAfter(queryClient, "templateDeleted");
   }
 
   return (

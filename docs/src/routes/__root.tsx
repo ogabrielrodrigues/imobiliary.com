@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
+import type { QueryClient } from "@tanstack/react-query";
 import {
-  createRootRoute,
+  createRootRouteWithContext,
   HeadContent,
   Outlet,
   ScriptOnce,
@@ -13,7 +14,12 @@ import { MAIN_CONTENT_ID, RouteAnnouncer } from "@/components/route-announcer";
 import { bootScript } from "@/lib/accessibility-storage";
 import appCss from "@/styles/app.css?url";
 
-export const Route = createRootRoute({
+/** What every route's loader receives, set where the router is built. */
+export interface RouterContext {
+  readonly queryClient: QueryClient;
+}
+
+export const Route = createRootRouteWithContext<RouterContext>()({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
