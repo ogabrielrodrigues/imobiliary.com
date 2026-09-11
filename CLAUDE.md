@@ -799,8 +799,6 @@ a Resend key — the API refuses to start with neither.
   longer be served from a shared cache without varying on that cookie. A
   crawler arrives anonymous and still gets the HTML it always got, so search
   is unaffected — but this matters the day a CDN goes in front of it.
-- `docgen-api/docs/api-reference.html` changed when the versions endpoint was
-  added, and the published artifact below still carries the older text.
 - **`'unsafe-inline'` is still in the CSP `script-src`.** Removing it needs a
   per-request nonce threaded through the framework's own script tags.
   Mitigated by the framework escaping its inline state and by the absence of
@@ -823,7 +821,8 @@ a Resend key — the API refuses to start with neither.
 - **The favicon's "d" is still the Figtree glyph.** It is a path drawn from
   the font, so it did not change with Fustat. Redraw it from Fustat's glyph
   at weight 600 if the brand mark should follow the interface font.
-- The published API reference lives at
+- The published API reference (republished 2026-09-11, with `/v1/me/stats`,
+  the versions endpoint and registration's 202) lives at
   `https://claude.ai/code/artifact/e3eaf9ee-95d7-46a0-bd7f-d596a95345ee`.
   Update it by republishing `docgen-api/docs/api-reference.html` **with that
   URL**, or a second artifact is created instead.
