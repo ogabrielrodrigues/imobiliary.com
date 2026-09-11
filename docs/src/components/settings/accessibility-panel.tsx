@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
 import {
   DEFAULT_PREFERENCES,
   type AccessibilityPreferences,
@@ -17,11 +18,12 @@ interface Option<T> {
   readonly description: string;
 }
 
-const FONT_OPTIONS: readonly Option<FontScale>[] = [
-  { value: 1, label: "Padrão", description: "O tamanho do seu navegador." },
-  { value: 1.125, label: "Grande", description: "12,5% maior." },
-  { value: 1.25, label: "Maior", description: "25% maior." },
-  { value: 1.5, label: "Máximo", description: "50% maior." },
+/** The slider's steps, in order. The scale is ordinal, which is what makes a slider fit. */
+const FONT_STEPS: readonly { readonly value: FontScale; readonly label: string; readonly percent: string }[] = [
+  { value: 1, label: "Padrão", percent: "100%" },
+  { value: 1.125, label: "Grande", percent: "112,5%" },
+  { value: 1.25, label: "Maior", percent: "125%" },
+  { value: 1.5, label: "Máximo", percent: "150%" },
 ];
 
 const CONTRAST_OPTIONS: readonly Option<Contrast>[] = [
@@ -94,12 +96,9 @@ export function AccessibilityPanel() {
         </p>
       </div>
 
-      <RadioGroup
-        legend="Tamanho do texto"
-        name="fontScale"
-        options={FONT_OPTIONS}
+      <FontSizeSlider
         value={preferences.fontScale}
-        onChange={(fontScale) => update({ ...preferences, fontScale })}
+        onCommit={(fontScale) => update({ ...preferences, fontScale })}
       />
       <RadioGroup
         legend="Contraste"
@@ -131,6 +130,72 @@ export function AccessibilityPanel() {
         </p>
       </div>
     </section>
+  );
+}
+
+/**
+ * Text size as a four-step slider.
+ *
+ * The step's name follows the thumb while it moves, but the size is applied
+ * only when it is released: resizing the whole page mid-drag would move the
+ * slider out from under the pointer. With the keyboard every arrow press is a
+ * release, so each step applies at once.
+ */
+function FontSizeSlider({
+  value,
+  onCommit,
+}: {
+  readonly value: FontScale;
+  readonly onCommit: (value: FontScale) => void;
+}) {
+  const id = useId();
+  const committed = Math.max(0, FONT_STEPS.findIndex((step) => step.value === value));
+  const [pending, setPending] = useState<number | null>(null);
+  const index = pending ?? committed;
+  const current = FONT_STEPS[index] ?? FONT_STEPS[0]!;
+
+  const stepAt = (next: number | readonly number[]) =>
+    Array.isArray(next) ? (next[0] ?? 0) : (next as number);
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <span id={`${id}-label`} className="text-small font-medium text-foreground">
+          Tamanho do texto
+        </span>
+        {/* The thumb announces this itself, so it is hidden from screen readers. */}
+        <span aria-hidden="true" className="text-caption text-muted-foreground tabular-nums">
+          {current.label} · {current.percent}
+        </span>
+      </div>
+
+      <Slider
+        min={0}
+        max={FONT_STEPS.length - 1}
+        step={1}
+        value={[index]}
+        onValueChange={(next) => setPending(stepAt(next))}
+        onValueCommitted={(next) => {
+          setPending(null);
+          const step = FONT_STEPS[stepAt(next)];
+          if (step) onCommit(step.value);
+        }}
+        thumbProps={{
+          getAriaLabel: () => "Tamanho do texto",
+          getAriaValueText: (_formatted, raw) => {
+            const step = FONT_STEPS[raw];
+            return step ? `${step.label}, ${step.percent}` : String(raw);
+          },
+        }}
+        className="py-2"
+      />
+
+      <div aria-hidden="true" className="flex justify-between text-label text-faint">
+        {FONT_STEPS.map((step) => (
+          <span key={step.value}>{step.label}</span>
+        ))}
+      </div>
+    </div>
   );
 }
 
