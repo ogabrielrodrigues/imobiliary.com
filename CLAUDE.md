@@ -120,6 +120,8 @@ component base (not Radix), `-t start` the framework template.
   once the handler returns, so `setValues(c => ({ ...c, [k]: e.currentTarget
   .value }))` throws and takes the page down. Capture the value first. This
   cost a blank screen once.
+- **Type sizes are rem tokens and `cn` is `@/lib/utils`.** See item 18 of
+  the Status; both have bitten once.
 - Dependencies it pulled in: `@base-ui/react` (the point of `-b base`),
   `class-variance-authority`, `cn`, `lucide-react`, `tw-animate-css`, and
   `shadcn` itself for `shadcn/tailwind.css`.
@@ -303,7 +305,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-11 — security sweep done and fixed; the editor is what remains
+**Last updated:** 2026-09-11 — accessibility and Ajustes done; the editor is what remains
 
 ### Done
 
@@ -526,21 +528,51 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       `CONTROLLER`; bump `REVIEWED` yearly or `Expires` lapses), and a
       deployment section in the root README.
 
+18. **Accessibility, and the Ajustes page.** Plan in the plan file's
+    "Acessibilidade e a página de Ajustes" section.
+    - **The type scale is in rem** (`--text-micro` … `--text-display` in
+      `app.css`, each equal to the design's px at 16px). 78 px sizes were
+      converted; at 100% the computed styles of the public pages hash
+      identically before and after. **Never write `text-[Npx]` again** — a px
+      size ignores both the browser's font setting and the preference.
+    - **`cn` comes from `@/lib/utils`, never from `"cn"`.** It is created
+      with the scale in its font-size group; the stock one read `text-small`
+      as a colour and silently dropped it next to `text-foreground` — every
+      field label lost its size. `utils.test.ts` fails if a token is added to
+      the stylesheet but not to `FONT_SIZES`. **A shadcn component added later
+      imports `"cn"` and must be repointed**, as `tabs.tsx` was.
+    - **Contrast is tested** by `styles/contrast.test.ts`, which reads
+      `app.css` itself: AA for the default theme, AAA (7:1) for high contrast,
+      3:1 for field borders and the ring, and accents over their own 15% tint.
+      The audit that preceded it used an OKLCH conversion without the sRGB
+      transfer function and reported four accent failures that did not exist;
+      a commit lightened them before the error was caught, and the next one
+      (`5b1826f`) restored the design's values. Only two failures were real:
+      the destructive button's 20% tint (now 12%) and field borders
+      (`--input-border`, 3.7:1). **The Claude Design project should get those
+      two changes.**
+    - **Preferences** (text size, contrast, motion) live in localStorage under
+      `imobiliary_docs_accessibility`, parsed field by field. A script in the
+      head, emitted with the router's `ScriptOnce` (which removes itself and
+      already carries the SSR nonce), applies them as `data-*` on `<html>`
+      before first paint; `<html>` has `suppressHydrationWarning` for that.
+      A test runs the script in a `vm` sandbox against the parser's cases.
+    - **`/ajustes`** has shadcn Tabs (Acessibilidade / Segurança / Meus dados)
+      with the tab in `?aba=`, switched with `replace`. The panels live in
+      `components/settings/`. `/meus-dados` redirects to `?aba=dados`. The
+      sidebar entry, with the gear icon, sits in its own "Conta" nav.
+    - **Screen readers:** a skip link, `<main id="conteudo" tabIndex={-1}>` on
+      every layout (`PageBody` is the app's), and `RouteAnnouncer`, which on
+      a change of *path* announces the title and moves focus to `<main>` —
+      unless focus is already inside it, because the auth forms autofocus
+      their first field. It uses a timer, not `requestAnimationFrame`: frames
+      do not run in a background tab. The required chip says "obrigatório"
+      in its label and has a dashed edge and a "!", not colour alone.
+    - Privacy policy 1.2: section 5 lists the second local-storage record.
+
 ### Next step
 
-**Accessibility and the Ajustes page — approved 2026-09-11, in progress.** The
-plan, with its rationale and verification, is the "Acessibilidade e a página de
-Ajustes" section of
-`C:UsersEscritorio.claudeplansgostei-muito-da-documenta-o-splendid-cookie.md`.
-In order: px type sizes to rem tokens (81 of them, which is why a font-size
-setting would otherwise do nothing), default palette fixed to pass AA with a
-contrast test, preferences in localStorage applied before first paint,
-`/ajustes` with Tabs (Acessibilidade / Segurança / Meus dados, tab in the URL,
-`/meus-dados` redirects), then skip link, `<main>`, route announcer and the
-required-chip label. Out of scope, to record as open items: collapsible
-sidebar (reflow), underlined links, text spacing.
-
-After that, **the block editor**, the last piece of the original plan. It needs the docx
+**The block editor**, the last piece of the original plan. It needs the docx
 `build` module: blocks → `word/document.xml` → `writeZip`. Write the writer and
 **open its output in Word before building any interface around it** — that is
 the step that decides whether the whole idea works. Store the block tree as
@@ -640,6 +672,16 @@ a Resend key — the API refuses to start with neither.
   any raw-HTML sink, but it is the one hardening item the sweep left open.
 - **No CI.** `pnpm security` is run by hand. It was written to be called by a
   CI job unchanged, the day there is one.
+- **The signed-in screens of the accessibility work are not yet verified in a
+  browser**: `/ajustes` and its tabs, the sidebar entry, the `/meus-dados`
+  redirect, the required-chip label and `<main>` inside the app. The
+  verifying session had no signed-in browser, and signing in is the user's to
+  do. Everything public was verified, and the code typechecks and is tested.
+- Accessibility, deliberately out of scope for now: a collapsible sidebar
+  (reflow at 320px, WCAG 1.4.10 — the sidebar is a fixed 13rem with no
+  breakpoint), underlined links outside high contrast, and text spacing.
+- The accessibility head script is inline too, so it joins the CSP nonce
+  item above; `ScriptOnce` already passes the router's nonce through.
 - The published API reference lives at
   `https://claude.ai/code/artifact/e3eaf9ee-95d7-46a0-bd7f-d596a95345ee`.
   Update it by republishing `docgen-api/docs/api-reference.html` **with that
