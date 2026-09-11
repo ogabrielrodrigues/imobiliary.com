@@ -65,7 +65,7 @@ export function DeletePanel() {
       <p className="text-small leading-relaxed text-muted-foreground">
         Apaga sua conta e tudo que pertence a ela: modelos, versões, documentos
         gerados, os valores preenchidos neles e os arquivos armazenados. A
-        exclusão é imediata e definitiva — não há como desfazer, e nós não
+        exclusão é imediata e definitiva: não há como desfazer, e nós não
         guardamos cópia.
       </p>
       <p className="text-caption text-faint">

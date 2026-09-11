@@ -12,7 +12,7 @@ import { pageSeo } from "@/lib/seo";
 export const Route = createFileRoute("/privacidade")({
   head: () =>
     pageSeo({
-      title: "Política de Privacidade — Imobiliary Docs",
+      title: "Política de Privacidade | Imobiliary Docs",
       description:
         "Como o Imobiliary Docs trata dados pessoais: o que guardamos, por " +
         "quanto tempo, com quem compartilhamos e como exercer seus direitos.",
@@ -36,7 +36,7 @@ function PrivacyPolicyPage() {
       <P>
         Esta política explica como o {CONTROLLER.tradeName} trata dados
         pessoais, em conformidade com a Lei n.º 13.709/2018 (LGPD). Ela descreve
-        o que o sistema realmente faz — não o que seria desejável que fizesse.
+        o que o sistema realmente faz, não o que seria desejável que fizesse.
       </P>
 
       <LegalSection title="1. Quem trata seus dados">
@@ -47,7 +47,7 @@ function PrivacyPolicyPage() {
         </P>
         <P>
           Encarregado pelo tratamento de dados pessoais (art. 41):{" "}
-          {CONTROLLER.officerName} — {CONTROLLER.officerEmail}.
+          {CONTROLLER.officerName}, {CONTROLLER.officerEmail}.
         </P>
       </LegalSection>
 
@@ -61,15 +61,15 @@ function PrivacyPolicyPage() {
             <strong className="text-foreground">
               Somos controladores dos dados da sua conta
             </strong>{" "}
-            — nome, e-mail, senha e registros de acesso. Nós decidimos coletá-los
+            (nome, e-mail, senha e registros de acesso). Nós decidimos coletá-los
             para que a plataforma funcione.
           </li>
           <li>
             <strong className="text-foreground">
               Somos operadores do conteúdo dos seus documentos
             </strong>{" "}
-            — os valores que você preenche em um contrato, como o nome e o CPF
-            de um locatário ou fiador. Quem decide coletar esses dados é você;
+            (os valores que você preenche em um contrato, como o nome e o CPF
+            de um locatário ou fiador). Quem decide coletar esses dados é você;
             nós apenas os armazenamos e processamos por sua conta e ordem. Sobre
             eles, <strong className="text-foreground">você é o controlador</strong>.
           </li>
@@ -88,7 +88,7 @@ function PrivacyPolicyPage() {
       <LegalSection title="3. Que dados tratamos">
         <P>
           <strong className="text-foreground">Da sua conta:</strong> nome,
-          e-mail e senha. A senha nunca é armazenada — guardamos apenas um hash
+          e-mail e senha. A senha nunca é armazenada: guardamos apenas um hash
           argon2id, do qual o valor original não pode ser recuperado. Registramos
           também quando a senha foi alterada pela última vez, para invalidar
           acessos emitidos antes disso.
@@ -137,11 +137,11 @@ function PrivacyPolicyPage() {
         <LegalList>
           <li>
             Criar e manter sua conta, autenticar seus acessos e gerar os
-            documentos que você pede — <em>execução de contrato</em> (art. 7º,
+            documentos que você pede: <em>execução de contrato</em> (art. 7º,
             V).
           </li>
           <li>
-            Limitar tentativas abusivas de acesso e proteger a plataforma —{" "}
+            Limitar tentativas abusivas de acesso e proteger a plataforma:{" "}
             <em>legítimo interesse</em> (art. 7º, IX), restrito ao mínimo
             necessário.
           </li>
@@ -168,13 +168,13 @@ function PrivacyPolicyPage() {
           o que impede que qualquer script da página o leia, e{" "}
           <code className="font-mono text-docs">SameSite=Lax</code>. Ele é
           estritamente necessário: sem ele não há login, e por isso não pedimos
-          consentimento para usá-lo — informamos.
+          consentimento para usá-lo; apenas informamos.
         </P>
         <P>
           Guardamos ainda, no armazenamento local do seu navegador, até dois
           registros: um indicando que você já dispensou o aviso de cookies, e
-          outro com as suas preferências de acessibilidade — tamanho do texto,
-          contraste e animações —, se você alterar alguma em Ajustes. Nenhum
+          outro com as suas preferências de acessibilidade (tamanho do texto,
+          contraste e animações), se você alterar alguma em Ajustes. Nenhum
           deles identifica ninguém, e nenhum é enviado a nós.
         </P>
         <P>
@@ -193,7 +193,7 @@ function PrivacyPolicyPage() {
         <LegalList>
           <li>
             <strong className="text-foreground">Resend</strong> (Resend, Inc.,
-            Estados Unidos), que entrega nossos e-mails de segurança — o link de
+            Estados Unidos), que entrega nossos e-mails de segurança: o link de
             redefinição de senha e o aviso de que a senha foi alterada. Recebe
             seu endereço de e-mail e seu primeiro nome, apenas quando uma dessas
             mensagens precisa ser enviada. Atua como <em>operador</em>, sob
@@ -228,7 +228,7 @@ function PrivacyPolicyPage() {
             <strong className="text-foreground">
               Conta, modelos e documentos:
             </strong>{" "}
-            enquanto sua conta existir. Não há prazo de expurgo automático — os
+            enquanto sua conta existir. Não há prazo de expurgo automático: os
             dados permanecem até que você os exclua.
           </li>
           <li>
@@ -239,7 +239,7 @@ function PrivacyPolicyPage() {
             <strong className="text-foreground">
               Links de redefinição de senha:
             </strong>{" "}
-            30 minutos, ou até serem usados — o que vier primeiro. Guardamos
+            30 minutos, ou até serem usados, o que vier primeiro. Guardamos
             apenas um resumo criptográfico do link, nunca ele próprio.
           </li>
           <li>
@@ -251,7 +251,7 @@ function PrivacyPolicyPage() {
           Quando você exclui a conta, apagamos os registros e também os arquivos
           armazenados. Uma exceção técnica: se um arquivo seu for
           byte-a-byte idêntico ao de outra conta, ele é fisicamente um só, e
-          permanece enquanto a outra conta precisar dele — os seus registros, em
+          permanece enquanto a outra conta precisar dele. Os seus registros, em
           qualquer caso, são apagados.
         </P>
       </LegalSection>

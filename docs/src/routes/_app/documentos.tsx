@@ -17,7 +17,7 @@ import { shortDateTime } from "@/lib/format";
 import { downloadDocument, listDocuments } from "@/server/documents";
 
 export const Route = createFileRoute("/_app/documentos")({
-  head: () => ({ meta: [{ title: "Documentos — Imobiliary Docs" }] }),
+  head: () => ({ meta: [{ title: "Documentos | Imobiliary Docs" }] }),
   loader: () => listDocuments(),
   component: DocumentsPage,
 });

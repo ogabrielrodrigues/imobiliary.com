@@ -41,7 +41,7 @@ export function ExportPanel() {
       </h2>
       <p className="text-small leading-relaxed text-muted-foreground">
         Um arquivo com tudo o que guardamos: sua conta, seus modelos, todas as
-        versões e todos os documentos gerados — incluindo os valores que você
+        versões e todos os documentos gerados, incluindo os valores que você
         preencheu em cada um. Modelos que você excluiu aparecem marcados como
         tal, porque continuam armazenados até a exclusão da conta.
       </p>

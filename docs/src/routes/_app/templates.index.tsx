@@ -15,7 +15,7 @@ import { relativeDate } from "@/lib/format";
 import { listTemplates } from "@/server/templates";
 
 export const Route = createFileRoute("/_app/templates/")({
-  head: () => ({ meta: [{ title: "Templates — Imobiliary Docs" }] }),
+  head: () => ({ meta: [{ title: "Templates | Imobiliary Docs" }] }),
   loader: () => listTemplates(),
   component: TemplatesPage,
 });

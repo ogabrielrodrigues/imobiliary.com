@@ -38,7 +38,7 @@ export function Brand({
   return (
     <Link
       to={to}
-      aria-label="Imobiliary Docs — início"
+      aria-label="Imobiliary Docs, página inicial"
       className={cn(classes, "rounded-md transition-opacity hover:opacity-80")}
     >
       {wordmark}

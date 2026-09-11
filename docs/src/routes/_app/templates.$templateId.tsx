@@ -78,7 +78,7 @@ export const Route = createFileRoute("/_app/templates/$templateId")({
         ...(deps.versao === undefined ? {} : { version: deps.versao }),
       },
     }),
-  head: () => ({ meta: [{ title: "Gerar documento — Imobiliary Docs" }] }),
+  head: () => ({ meta: [{ title: "Gerar documento | Imobiliary Docs" }] }),
   component: TemplateDetailPage,
 });
 
@@ -336,7 +336,7 @@ function GenerateScreen({
             <>
               <p className="text-caption text-faint">
                 Clique em um campo no documento para preenchê-lo. Esta é uma
-                leitura simplificada do modelo — o arquivo gerado mantém a
+                leitura simplificada do modelo: o arquivo gerado mantém a
                 formatação original do Word.
               </p>
               <DocumentPreview
@@ -395,7 +395,7 @@ function VersionPicker({
         {versions.map((version) => (
           <option key={version.id} value={version.version}>
             v{version.version}
-            {version.version === latest ? " · atual" : ""} —{" "}
+            {version.version === latest ? " · atual" : ""} ·{" "}
             {relativeDate(version.createdAt)}
           </option>
         ))}

@@ -35,7 +35,7 @@ export const Route = createFileRoute("/_app/ajustes")({
    */
   validateSearch: (search: Record<string, unknown>): SettingsSearch =>
     isTab(search["aba"]) ? { aba: search["aba"] } : {},
-  head: () => ({ meta: [{ title: "Ajustes — Imobiliary Docs" }] }),
+  head: () => ({ meta: [{ title: "Ajustes | Imobiliary Docs" }] }),
   component: SettingsPage,
 });
 
@@ -87,7 +87,7 @@ function SettingsPage() {
             <p className="max-w-2xl text-small leading-relaxed text-muted-foreground">
               A Lei n.º 13.709/2018 (LGPD) garante a você o direito de acessar,
               levar consigo e eliminar seus dados. As duas coisas abaixo são
-              imediatas — não passam por pedido nem por análise. Os detalhes do
+              imediatas: não passam por pedido nem por análise. Os detalhes do
               que guardamos estão na{" "}
               <Link to="/privacidade" className="text-primary hover:underline">
                 Política de Privacidade

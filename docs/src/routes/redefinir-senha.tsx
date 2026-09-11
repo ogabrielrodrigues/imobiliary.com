@@ -30,7 +30,7 @@ export const Route = createFileRoute("/redefinir-senha")({
   },
   head: () => ({
     meta: [
-      { title: "Redefinir senha — Imobiliary Docs" },
+      { title: "Redefinir senha | Imobiliary Docs" },
       // A page reached only from a private link has nothing to offer a
       // crawler, and its address carries a secret.
       { name: "robots", content: "noindex, nofollow" },

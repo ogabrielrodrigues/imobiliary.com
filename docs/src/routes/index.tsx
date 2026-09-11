@@ -24,7 +24,7 @@ export const Route = createFileRoute("/")({
   loader: () => currentUser(),
   head: () => ({
     ...pageSeo({
-      title: "Imobiliary Docs — contratos a partir dos seus modelos",
+      title: "Imobiliary Docs | contratos a partir dos seus modelos",
       description:
         "Envie um modelo do Word com campos marcados. A plataforma descobre " +
         "os campos sozinha e gera o documento preenchido, pronto para baixar.",
@@ -124,7 +124,7 @@ function LandingPage() {
           <p className="max-w-xl text-lead leading-relaxed text-muted-foreground">
             Envie um modelo <code className="font-mono text-docs">.docx</code>{" "}
             com os campos marcados. A plataforma descobre quais são, monta o
-            formulário e devolve o documento pronto — com a formatação do Word
+            formulário e devolve o documento pronto, com a formatação do Word
             intacta.
           </p>
           {/*

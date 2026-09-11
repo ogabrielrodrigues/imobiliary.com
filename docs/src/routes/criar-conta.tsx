@@ -31,7 +31,7 @@ export const Route = createFileRoute("/criar-conta")({
   },
   head: () =>
     pageSeo({
-      title: "Criar conta — Imobiliary Docs",
+      title: "Criar conta | Imobiliary Docs",
       description:
         "Crie sua conta para enviar modelos do Word e gerar documentos preenchidos.",
       path: "/criar-conta",

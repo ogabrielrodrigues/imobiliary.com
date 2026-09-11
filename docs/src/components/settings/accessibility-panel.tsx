@@ -226,7 +226,7 @@ function ContrastControl({
         Seguir o sistema operacional
         {followsSystem && (
           <span className="text-faint">
-            — agora {systemWantsMore ? "pedindo alto contraste" : "sem pedido de alto contraste"}
+            (agora {systemWantsMore ? "pedindo alto contraste" : "sem pedido de alto contraste"})
           </span>
         )}
       </label>

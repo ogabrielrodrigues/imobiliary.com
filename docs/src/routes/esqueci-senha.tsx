@@ -20,7 +20,7 @@ export const Route = createFileRoute("/esqueci-senha")({
   },
   head: () => ({
     meta: [
-      { title: "Esqueci minha senha — Imobiliary Docs" },
+      { title: "Esqueci minha senha | Imobiliary Docs" },
       {
         name: "description",
         content:

@@ -12,7 +12,7 @@ import { pageSeo } from "@/lib/seo";
 export const Route = createFileRoute("/termos")({
   head: () =>
     pageSeo({
-      title: "Termos de Uso — Imobiliary Docs",
+      title: "Termos de Uso | Imobiliary Docs",
       description:
         "As regras de uso do Imobiliary Docs, incluindo as obrigações de " +
         "tratamento de dados pessoais entre você e a plataforma.",
@@ -95,7 +95,7 @@ function TermsOfUsePage() {
         <P>
           Os modelos que você envia e os documentos que você gera são seus. Não
           reivindicamos nenhuma titularidade sobre eles e não os usamos para
-          qualquer finalidade além de prestar o serviço a você — não os
+          qualquer finalidade além de prestar o serviço a você: não os
           analisamos, não os usamos para treinar sistemas e não os
           disponibilizamos a ninguém.
         </P>
@@ -113,7 +113,7 @@ function TermsOfUsePage() {
           </strong>{" "}
           dos documentos que importarem para você. Nossa responsabilidade por
           perdas decorrentes do uso da plataforma limita-se, no máximo, aos
-          valores pagos por você nos doze meses anteriores ao evento — salvo nos
+          valores pagos por você nos doze meses anteriores ao evento, salvo nos
           casos em que a lei não admita limitação.
         </P>
       </LegalSection>
@@ -121,7 +121,7 @@ function TermsOfUsePage() {
       <LegalSection title="6. Tratamento de dados pessoais (art. 39 da LGPD)">
         <P>
           Esta seção rege o tratamento, por nós, dos dados pessoais que você
-          insere nos documentos — tipicamente dados de locatários, fiadores e
+          insere nos documentos, tipicamente dados de locatários, fiadores e
           proprietários. Quanto a esses dados,{" "}
           <strong className="text-foreground">
             você é o controlador e nós somos o operador
@@ -153,7 +153,7 @@ function TermsOfUsePage() {
             não subcontratar terceiros para tratar esses dados sem informá-lo
             previamente. Hoje há um único subcontratado, o Resend, que entrega
             nossos e-mails de segurança e recebe apenas o seu endereço e o seu
-            primeiro nome — nunca o conteúdo dos seus documentos;
+            primeiro nome, nunca o conteúdo dos seus documentos;
           </li>
           <li>
             eliminar esses dados quando você encerrar a conta ou solicitar sua
@@ -209,7 +209,7 @@ function TermsOfUsePage() {
 
       <LegalSection title="10. Contato">
         <P>
-          {CONTROLLER.legalName} — {CONTROLLER.address}. Dúvidas sobre estes
+          {CONTROLLER.legalName}, {CONTROLLER.address}. Dúvidas sobre estes
           termos ou sobre privacidade: {CONTROLLER.privacyEmail}. Encarregado
           pelo tratamento de dados: {CONTROLLER.officerName},{" "}
           {CONTROLLER.officerEmail}.

@@ -18,7 +18,7 @@ import type { Template } from "@/domain/template";
 import { createTemplate } from "@/server/templates";
 
 export const Route = createFileRoute("/_app/templates/novo")({
-  head: () => ({ meta: [{ title: "Enviar modelo — Imobiliary Docs" }] }),
+  head: () => ({ meta: [{ title: "Enviar modelo | Imobiliary Docs" }] }),
   component: NewTemplatePage,
 });
 
@@ -84,7 +84,7 @@ function NewTemplatePage() {
               <h2 className="text-lg font-semibold">{created.name}</h2>
               <p className="text-small text-muted-foreground">
                 Versão {created.latestVersion} publicada. Estes são os campos
-                que encontramos no documento — são exatamente os que você
+                que encontramos no documento: são exatamente os que você
                 preencherá ao gerar.
               </p>
             </div>
@@ -176,7 +176,7 @@ function NewTemplatePage() {
             Marque os campos no Word com{" "}
             <code className="font-mono text-docs">{"{{.nome_do_campo}}"}</code>,
             em minúsculas e sem acentos. Não importa se o Word quebrou o campo
-            ao meio enquanto você digitava — nós remontamos.
+            ao meio enquanto você digitava: nós remontamos.
           </p>
 
           <Button

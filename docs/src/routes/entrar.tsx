@@ -29,7 +29,7 @@ export const Route = createFileRoute("/entrar")({
   },
   head: () =>
     pageSeo({
-      title: "Entrar — Imobiliary Docs",
+      title: "Entrar | Imobiliary Docs",
       description:
         "Acesse sua conta para gerar documentos a partir dos seus modelos.",
       path: "/entrar",
