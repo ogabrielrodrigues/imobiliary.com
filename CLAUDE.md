@@ -779,6 +779,30 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       there is no local copy and the tool only replaces whole files, so fixing
       "Mínimo de 8 caracteres" in place means rewriting ~30 KB of hand-authored
       HTML per file. That is the user's call.
+      **The user decided (2026-09-14): leave the original design files as they
+      are and correct only in the code.** Never rewrite an existing design file.
+
+26. **Document names, and whole listings** (plan: "Nome do documento, listas
+    completas, histórico com lotes e geração por CSV", phases 1 and 2).
+    - **Naming** (`b4c25e8`): the generation screen has "Nome do documento",
+      suggested as `<template> - <value>`; "Completar com" chooses the field
+      (default: the first ending in `_nome`), the date, or nothing, remembered
+      per template in localStorage `imobiliary_docs_document_name` (privacy
+      policy 1.4). Rules in `domain/document-name.ts`. **The API silently
+      replaces any character other than letters, digits, space, `.`, `-`, `_`
+      with `_` and cuts at 100 bytes**; suggestions are cleaned the same way and
+      a typed name that breaks the rule is an error on the field, so what is
+      shown is what is stored. Names are displayed without `.docx`.
+    - The remembered choice is applied in an effect, not during render: the
+      server cannot read localStorage, and reading it in render hydrates a
+      different select.
+    - **Whole listings** (`d4daaca`): `collectPages`
+      (`application/paging.ts`) reads until a short page, capped at 1000 and
+      reported as truncated. Used by the template list, the versions of the
+      generation screen, and the template-name lookups in Documentos and the
+      dashboard. A template pinned beyond its 100th version opens again.
+    - Next in that plan: phase 3, batches, a template filter and a history
+      endpoint in the API.
 
 ### Next step
 
