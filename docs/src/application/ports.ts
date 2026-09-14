@@ -140,6 +140,8 @@ export interface DocumentGateway {
   get(ctx: CallContext, id: string): Promise<GeneratedDocument>;
   generate(ctx: CallContext, input: GenerateInput): Promise<GeneratedDocument>;
   download(ctx: CallContext, id: string): Promise<FileContent>;
+  /** Erases one document, its values and its file when nothing else uses it. */
+  remove(ctx: CallContext, id: string): Promise<void>;
 }
 
 /**

@@ -44,6 +44,21 @@ export const generateDocument = createServerFn({ method: "POST" })
   );
 
 /**
+ * Erases one generated document: the row, the values filled into it, and the
+ * stored file unless another document holds the same bytes. A real delete.
+ */
+export const deleteDocument = createServerFn({ method: "POST" })
+  .validator((id: string) => id)
+  .handler(
+    async ({ data }): Promise<Result<null>> =>
+      attempt(async () => {
+        assertSameOrigin();
+        await sessions().authorize(callContext(), (ctx) => docgen().documents.remove(ctx, data));
+        return null;
+      }),
+  );
+
+/**
  * Fetches a generated document's bytes so the browser can save them.
  *
  * The bytes travel as a `Uint8Array`, which Start's serialiser sends in its

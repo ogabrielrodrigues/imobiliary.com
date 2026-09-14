@@ -443,6 +443,10 @@ function createDocumentGateway(http: Transport): DocumentGateway {
         bytes: new Uint8Array(await response.arrayBuffer()),
       };
     },
+
+    async remove(ctx: CallContext, id: string): Promise<void> {
+      await http.send(ctx, "DELETE", `/v1/documents/${encodeSegment(id)}`);
+    },
   };
 }
 

@@ -66,7 +66,7 @@ import { shortDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { queryKeys } from "@/queries/keys";
 import { batchDocumentsQuery, historyPageQuery, invalidateAfter } from "@/queries/options";
-import { downloadDocument } from "@/server/documents";
+import { deleteDocument, downloadDocument } from "@/server/documents";
 import { deleteBatch, downloadBatch } from "@/server/history";
 
 interface DocumentsSearch {
@@ -590,12 +590,15 @@ function DocumentCard({
         <time dateTime={document.createdAt.toISOString()}>{shortDateTime(document.createdAt)}</time>
         <span className="font-mono tabular-nums">{formatBytes(document.size)}</span>
       </span>
-      <DownloadButton
-        busy={downloads.saving === `document:${document.id}`}
-        onClick={() => void downloads.document(document.id)}
-        label={`Baixar ${name}`}
-        className="h-10 self-start"
-      />
+      <span className="flex items-center gap-2">
+        <DownloadButton
+          busy={downloads.saving === `document:${document.id}`}
+          onClick={() => void downloads.document(document.id)}
+          label={`Baixar ${name}`}
+          className="h-10"
+        />
+        <DeleteDocument id={document.id} name={name} />
+      </span>
     </li>
   );
 }
@@ -639,11 +642,14 @@ function DocumentRow({
       </TableCell>
 
       <TableCell className="px-5 py-3.5 text-right">
-        <DownloadButton
-          busy={downloads.saving === `document:${document.id}`}
-          onClick={() => void downloads.document(document.id)}
-          label={`Baixar ${name}`}
-        />
+        <span className="inline-flex items-center gap-1.5">
+          <DownloadButton
+            busy={downloads.saving === `document:${document.id}`}
+            onClick={() => void downloads.document(document.id)}
+            label={`Baixar ${name}`}
+          />
+          <DeleteDocument id={document.id} name={name} />
+        </span>
       </TableCell>
     </TableRow>
   );
@@ -892,29 +898,40 @@ function BatchDocumentCards({
 }
 
 /**
- * Deleting a batch, behind a confirmation that says what goes with it: every
- * document in it. Unlike a template, nothing of a batch stays behind.
+ * A trash button behind a confirmation that says what goes with it.
+ *
+ * The dialog is mounted only once asked for: Base UI renders its root through
+ * a portal, which does not survive hydration here.
  */
-function DeleteBatch({ batch }: { readonly batch: Batch }) {
-  const queryClient = useQueryClient();
+function DeleteButton({
+  label,
+  title,
+  description,
+  confirm,
+  run,
+  onDeleted,
+}: {
+  readonly label: string;
+  readonly title: string;
+  readonly description: string;
+  readonly confirm: string;
+  readonly run: () => Promise<Result<null>>;
+  readonly onDeleted: () => Promise<void>;
+}) {
   const [open, setOpen] = useState(false);
-  // Mounted only once asked for: Base UI renders its root through a portal,
-  // which does not survive hydration here.
   const [mounted, setMounted] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
-
-  const remove = useMutation({ mutationFn: (id: string) => deleteBatch({ data: id }) });
+  const remove = useMutation({ mutationFn: run });
 
   async function onConfirm() {
     setFailure(null);
-    const result = await remove.mutateAsync(batch.id);
+    const result = await remove.mutateAsync();
     if (!result.ok) {
       setFailure(result.failure);
       return;
     }
     setOpen(false);
-    queryClient.removeQueries({ queryKey: queryKeys.batchDocuments(batch.id) });
-    await invalidateAfter(queryClient, "batchChanged");
+    await onDeleted();
   }
 
   return (
@@ -923,8 +940,9 @@ function DeleteBatch({ batch }: { readonly batch: Batch }) {
         type="button"
         variant="ghost"
         size="icon-sm"
-        aria-label={`Excluir o lote ${batch.name}`}
+        aria-label={label}
         onClick={() => {
+          setFailure(null);
           setMounted(true);
           setOpen(true);
         }}
@@ -938,12 +956,8 @@ function DeleteBatch({ batch }: { readonly batch: Batch }) {
         <AlertDialog open={open} onOpenChange={setOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Excluir o lote “{batch.name}”?</AlertDialogTitle>
-              <AlertDialogDescription>
-                {batch.documents === 0
-                  ? "O lote está vazio e sai do histórico."
-                  : `Os ${batchCount(batch.documents)} deste lote são apagados junto, com os valores preenchidos neles. Não há como desfazer.`}
-              </AlertDialogDescription>
+              <AlertDialogTitle>{title}</AlertDialogTitle>
+              <AlertDialogDescription>{description}</AlertDialogDescription>
             </AlertDialogHeader>
 
             {failure && (
@@ -956,12 +970,52 @@ function DeleteBatch({ batch }: { readonly batch: Batch }) {
             <AlertDialogFooter>
               <AlertDialogCancel disabled={remove.isPending}>Cancelar</AlertDialogCancel>
               <AlertDialogAction variant="destructive" disabled={remove.isPending} onClick={onConfirm}>
-                {remove.isPending ? "Excluindo…" : "Excluir lote"}
+                {remove.isPending ? "Excluindo…" : confirm}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       )}
     </>
+  );
+}
+
+/** Deleting a batch: every document in it goes too. */
+function DeleteBatch({ batch }: { readonly batch: Batch }) {
+  const queryClient = useQueryClient();
+  return (
+    <DeleteButton
+      label={`Excluir o lote ${batch.name}`}
+      title={`Excluir o lote “${batch.name}”?`}
+      description={
+        batch.documents === 0
+          ? "O lote está vazio e sai do histórico."
+          : `Os ${batchCount(batch.documents)} deste lote são apagados junto, com os valores preenchidos neles. Não há como desfazer.`
+      }
+      confirm="Excluir lote"
+      run={() => deleteBatch({ data: batch.id })}
+      onDeleted={async () => {
+        queryClient.removeQueries({ queryKey: queryKeys.batchDocuments(batch.id) });
+        await invalidateAfter(queryClient, "batchChanged");
+      }}
+    />
+  );
+}
+
+/**
+ * Deleting one document, loose or inside a batch. The values filled into it go
+ * with it; the template it came from is untouched.
+ */
+function DeleteDocument({ id, name }: { readonly id: string; readonly name: string }) {
+  const queryClient = useQueryClient();
+  return (
+    <DeleteButton
+      label={`Excluir ${name}`}
+      title={`Excluir “${name}”?`}
+      description="O documento e os valores preenchidos nele são apagados. O modelo não muda. Não há como desfazer."
+      confirm="Excluir documento"
+      run={() => deleteDocument({ data: id })}
+      onDeleted={() => invalidateAfter(queryClient, "documentDeleted")}
+    />
   );
 }

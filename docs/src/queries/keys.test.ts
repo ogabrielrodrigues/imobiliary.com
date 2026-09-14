@@ -61,6 +61,13 @@ describe("what each change makes stale", () => {
     assert.ok(coveredBy("templateDeleted", queryKeys.dashboardView(90, "UTC")));
   });
 
+  it("deleting a document refreshes the history, batch lists and the dashboard", () => {
+    assert.ok(coveredBy("documentDeleted", queryKeys.historyPage(0, "t1")));
+    assert.ok(coveredBy("documentDeleted", queryKeys.batchDocuments("b1")));
+    assert.ok(coveredBy("documentDeleted", queryKeys.dashboardView(30, "UTC")));
+    assert.ok(!coveredBy("documentDeleted", queryKeys.templateList()));
+  });
+
   it("changing a batch refreshes the history, its documents and the dashboard", () => {
     assert.ok(coveredBy("batchChanged", queryKeys.historyPage(0, undefined)));
     assert.ok(coveredBy("batchChanged", queryKeys.batchDocuments("b1")));

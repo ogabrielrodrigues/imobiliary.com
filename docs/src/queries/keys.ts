@@ -41,6 +41,8 @@ export const staleAfter = {
   templateDeleted: [queryKeys.templates, queryKeys.documents, queryKeys.history, queryKeys.dashboard],
   documentGenerated: [queryKeys.documents, queryKeys.history, queryKeys.dashboard],
   batchChanged: [queryKeys.documents, queryKeys.history, queryKeys.dashboard],
+  // A deleted document leaves the history, a batch's count and its list.
+  documentDeleted: [queryKeys.documents, queryKeys.history, queryKeys.dashboard],
 } as const satisfies Record<string, readonly (readonly unknown[])[]>;
 
 export type Change = keyof typeof staleAfter;
