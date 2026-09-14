@@ -55,6 +55,11 @@
       "key": "template_version",
       "value": "1",
       "type": "string"
+    },
+    {
+      "key": "batch_id",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -270,8 +275,16 @@
                 "stats"
               ],
               "query": [
-                { "key": "days", "value": "30", "description": "7, 30 or 90" },
-                { "key": "tz", "value": "America/Sao_Paulo", "description": "IANA time zone; days are counted in it" }
+                {
+                  "key": "days",
+                  "value": "30",
+                  "description": "7, 30 or 90"
+                },
+                {
+                  "key": "tz",
+                  "value": "America/Sao_Paulo",
+                  "description": "IANA time zone; days are counted in it"
+                }
               ]
             },
             "description": "Counts of templates and documents, documents per day across the window, and the five templates used most in it. Deleted templates still rank, marked deleted."
@@ -614,6 +627,192 @@
               ]
             },
             "description": "Streams the .docx. Save the response to a file and open it in Word."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Batches",
+      "item": [
+        {
+          "name": "Create batch",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/batches",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "batches"
+              ]
+            },
+            "description": "Creates an empty batch for the template's latest version (add \"version\" to pin one). Copy its id into batch_id, then generate each document into it.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"template_id\": \"{{template_id}}\",\n  \"name\": \"Aditamentos de setembro\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Generate into a batch",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/documents",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "documents"
+              ]
+            },
+            "description": "One request per document. The batch's template version is used; another template or version answers 422 on batch_id.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"template_id\": \"{{template_id}}\",\n  \"batch_id\": \"{{batch_id}}\",\n  \"filename\": \"Service agreement - Acme.docx\",\n  \"data\": {\n    \"customer_name\": \"Acme & Sons <Ltd>\",\n    \"plan\": \"Premium\",\n    \"amount\": \"R$ 1,500.00\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get batch",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/batches/{{batch_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "batches",
+                "{{batch_id}}"
+              ]
+            },
+            "description": "The batch, with how many documents it holds and their total size."
+          },
+          "response": []
+        },
+        {
+          "name": "History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/history?limit=20&offset=0",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "Documents generated on their own and batches, mixed, newest first. Add template_id to narrow it to one template."
+          },
+          "response": []
+        },
+        {
+          "name": "List the documents of a batch",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/documents?batch_id={{batch_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "documents"
+              ],
+              "query": [
+                {
+                  "key": "batch_id",
+                  "value": "{{batch_id}}"
+                }
+              ]
+            },
+            "description": "The documents inside one batch. template_id filters by template the same way."
+          },
+          "response": []
+        },
+        {
+          "name": "Download batch as ZIP",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/batches/{{batch_id}}/download",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "batches",
+                "{{batch_id}}",
+                "download"
+              ]
+            },
+            "description": "Every document of the batch in one archive, in generation order. Save the response to a file."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete batch",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/batches/{{batch_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "batches",
+                "{{batch_id}}"
+              ]
+            },
+            "description": "Erases the batch, its documents and the files nothing else refers to."
           },
           "response": []
         }

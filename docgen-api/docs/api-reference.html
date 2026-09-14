@@ -541,6 +541,15 @@
     </div>
 
     <div class="nav-group">
+      <div class="nav-title">Batches</div>
+      <a href="#create-batch"><span class="verb verb-post">POST</span><code>/batches</code></a>
+      <a href="#history"><span class="verb verb-get">GET</span><code>/history</code></a>
+      <a href="#get-batch"><span class="verb verb-get">GET</span><code>/batches/{id}</code></a>
+      <a href="#download-batch"><span class="verb verb-get">GET</span><code>/batches/{id}/download</code></a>
+      <a href="#delete-batch"><span class="verb verb-delete">DEL</span><code>/batches/{id}</code></a>
+    </div>
+
+    <div class="nav-group">
       <div class="nav-title">Reference</div>
       <a href="#errors">Errors</a>
       <a href="#limits">Rate limits</a>
@@ -1033,6 +1042,10 @@ Your plan is {{.plan}} at {{.amount}} per month.</code></pre>
             <div><span class="field-name">data</span><br><span class="field-type">object · <span class="req">required</span></span></div>
             <div class="field-desc">One string value per placeholder, up to 10 000 bytes each.</div>
           </div>
+          <div class="field">
+            <div><span class="field-name">batch_id</span><br><span class="field-type">uuid</span></div>
+            <div class="field-desc">Joins the document to a <a href="#create-batch">batch</a> of the same template. The batch's version is used; another template or version is a 422 on <code>batch_id</code>.</div>
+          </div>
         </div>
         <div class="pair">
           <div>
@@ -1057,7 +1070,8 @@ Your plan is {{.plan}} at {{.amount}} per month.</code></pre>
   <span class="key">"size"</span>: 1393,
   <span class="key">"data"</span>: { … },
   <span class="key">"created_at"</span>: <span class="str">"2026-09-08T23:57:32Z"</span>,
-  <span class="key">"download_url"</span>: <span class="str">"/v1/documents/01a08374-…/download"</span>
+  <span class="key">"download_url"</span>: <span class="str">"/v1/documents/01a08374-…/download"</span>,
+  <span class="key">"batch_id"</span>: null
 }</code></pre>
           </div>
         </div>
@@ -1078,7 +1092,17 @@ Your plan is {{.plan}} at {{.amount}} per month.</code></pre>
           <span class="chip chip-get">GET</span>
           <span class="path">/v1/documents</span>
         </div>
-        <p>Returns <code>{"items": […]}</code>, newest first, with the same <code>limit</code> and <code>offset</code> parameters.</p>
+        <p>Returns <code>{"items": […]}</code>, newest first, with the same <code>limit</code> and <code>offset</code> parameters. It includes the documents inside batches; for the history that shows a batch as one entry, see <a href="#history"><code>GET /v1/history</code></a>.</p>
+        <div class="fields">
+          <div class="field">
+            <div><span class="field-name">template_id</span><br><span class="field-type">query · uuid</span></div>
+            <div class="field-desc">Only the documents generated from this template.</div>
+          </div>
+          <div class="field">
+            <div><span class="field-name">batch_id</span><br><span class="field-type">query · uuid</span></div>
+            <div class="field-desc">Only the documents of this batch.</div>
+          </div>
+        </div>
       </div>
 
       <div class="endpoint" id="get-document">
@@ -1104,6 +1128,119 @@ Cache-Control: private, max-age=31536000, immutable</code></pre>
         <p>
           A generated document never changes, so the response is marked immutable and can be
           cached indefinitely.
+        </p>
+      </div>
+    </section>
+
+    <section id="endpoints-batches">
+      <h2>Batch endpoints</h2>
+      <p>
+        A batch is a set of documents generated together from one template version, typically one
+        per row of a spreadsheet. It is shown as one entry in the history and downloads as one
+        archive. Generation itself does not change: create the batch, then generate each document
+        with <a href="#generate"><code>POST /v1/documents</code></a> passing its
+        <code>batch_id</code>. Each document succeeds or fails on its own.
+      </p>
+
+      <div class="endpoint" id="create-batch">
+        <div class="sig">
+          <span class="chip chip-post">POST</span>
+          <span class="path">/v1/batches</span>
+        </div>
+        <p>Creates an empty batch, answering <span class="status">201</span>.</p>
+        <div class="fields">
+          <div class="field">
+            <div><span class="field-name">template_id</span><br><span class="field-type">uuid · <span class="req">required</span></span></div>
+            <div class="field-desc">The template every document of the batch comes from.</div>
+          </div>
+          <div class="field">
+            <div><span class="field-name">version</span><br><span class="field-type">integer</span></div>
+            <div class="field-desc">Pins the version. Omit to use the latest at creation; the batch keeps it even after a newer one is published.</div>
+          </div>
+          <div class="field">
+            <div><span class="field-name">name</span><br><span class="field-type">string · <span class="req">required</span></span></div>
+            <div class="field-desc">Up to 120 characters. Shown in the history, and the archive's filename.</div>
+          </div>
+        </div>
+        <div class="pair">
+          <div>
+            <div class="pair-label">Request</div>
+            <pre><code>{
+  <span class="key">"template_id"</span>: <span class="str">"01a08374-6a08-…"</span>,
+  <span class="key">"name"</span>: <span class="str">"Aditamentos de setembro"</span>
+}</code></pre>
+          </div>
+          <div>
+            <div class="pair-label">201 Created</div>
+            <pre><code>{
+  <span class="key">"id"</span>: <span class="str">"01a0c2f1-7d3e-…"</span>,
+  <span class="key">"template_id"</span>: <span class="str">"01a08374-6a08-…"</span>,
+  <span class="key">"template_version"</span>: 2,
+  <span class="key">"name"</span>: <span class="str">"Aditamentos de setembro"</span>,
+  <span class="key">"documents"</span>: 0,
+  <span class="key">"size"</span>: 0,
+  <span class="key">"created_at"</span>: <span class="str">"2026-09-14T17:20:04Z"</span>,
+  <span class="key">"download_url"</span>: <span class="str">"/v1/batches/01a0c2f1-…/download"</span>
+}</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="endpoint" id="history">
+        <div class="sig">
+          <span class="chip chip-get">GET</span>
+          <span class="path">/v1/history</span>
+        </div>
+        <p>
+          Documents generated on their own and batches, mixed, newest first, with
+          <code>limit</code>, <code>offset</code> and an optional <code>template_id</code>. Each item
+          says its <code>kind</code> and carries either a <code>document</code> or a
+          <code>batch</code>. The documents inside a batch do not appear loose: list them with
+          <code>GET /v1/documents?batch_id=</code>.
+        </p>
+        <pre><code>{
+  <span class="key">"items"</span>: [
+    { <span class="key">"kind"</span>: <span class="str">"document"</span>, <span class="key">"document"</span>: { … } },
+    { <span class="key">"kind"</span>: <span class="str">"batch"</span>, <span class="key">"batch"</span>: { <span class="key">"name"</span>: <span class="str">"Aditamentos de setembro"</span>, <span class="key">"documents"</span>: 48, … } }
+  ]
+}</code></pre>
+      </div>
+
+      <div class="endpoint" id="get-batch">
+        <div class="sig">
+          <span class="chip chip-get">GET</span>
+          <span class="path">/v1/batches/<em>{id}</em></span>
+        </div>
+        <p>The batch, with how many documents it holds so far and their total size.</p>
+      </div>
+
+      <div class="endpoint" id="download-batch">
+        <div class="sig">
+          <span class="chip chip-get">GET</span>
+          <span class="path">/v1/batches/<em>{id}</em>/download</span>
+        </div>
+        <p>
+          Streams a ZIP with every document of the batch, in the order they were generated.
+          Documents may share a filename but entries of one archive may not, so a repeated name
+          gets a suffix: <code>contrato (2).docx</code>.
+        </p>
+        <pre><code>Content-Type: application/zip
+Content-Disposition: attachment; filename="Aditamentos de setembro.zip"
+Cache-Control: no-store</code></pre>
+        <p>
+          It is charged to the per-account write budget, like the account export: one request may
+          gather hundreds of files.
+        </p>
+      </div>
+
+      <div class="endpoint" id="delete-batch">
+        <div class="sig">
+          <span class="chip chip-delete">DELETE</span>
+          <span class="path">/v1/batches/<em>{id}</em></span>
+        </div>
+        <p>
+          Erases the batch, every document in it with the values filled in, and each stored file
+          nothing else refers to, answering <span class="status">204</span>. A real delete.
         </p>
       </div>
     </section>
@@ -1169,7 +1306,7 @@ Cache-Control: private, max-age=31536000, immutable</code></pre>
           <tbody>
             <tr><td>Global</td><td>Client IP</td><td>Every request</td><td>10/s, burst 60</td></tr>
             <tr><td>Credentials</td><td>Client IP</td><td><code>/v1/auth/*</code></td><td>0.2/s, burst 10</td></tr>
-            <tr><td>Write</td><td>Account</td><td>Uploading and generating</td><td>2/s, burst 20</td></tr>
+            <tr><td>Write</td><td>Account</td><td>Uploading, generating, deleting, creating and downloading batches, and the account export</td><td>2/s, burst 20</td></tr>
           </tbody>
         </table>
       </div>

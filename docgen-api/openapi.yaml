@@ -61,6 +61,11 @@ tags:
     description: Uploaded DOCX models and their immutable versions.
   - name: Documents
     description: Rendered documents.
+  - name: Batches
+    description: |
+      Documents generated together from one template version, typically one
+      per row of a spreadsheet, shown as one entry in the history and
+      downloaded as one archive.
   - name: Dashboard
     description: Aggregate figures about the account's own activity.
   - name: Privacy
@@ -647,11 +652,16 @@ paths:
     get:
       tags: [Documents]
       summary: List documents
-      description: Newest first.
+      description: |
+        Newest first, including the documents inside batches. Narrow it with
+        `template_id` or `batch_id`. For the history that shows a batch as one
+        entry, see `GET /v1/history`.
       operationId: listDocuments
       parameters:
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Offset"
+        - $ref: "#/components/parameters/TemplateFilter"
+        - $ref: "#/components/parameters/BatchFilter"
       responses:
         "200":
           description: A page of documents.
@@ -682,6 +692,11 @@ paths:
 
         Values are XML-escaped before substitution, so `&`, `<` and `>` are safe
         to send and appear literally in the finished document.
+
+        With `batch_id` the document joins a batch of the same account and
+        template, and is rendered from the batch's version. A batch of another
+        template or version, or one that does not exist, is a `422` on
+        `batch_id`.
       operationId: generateDocument
       requestBody:
         required: true
@@ -777,6 +792,130 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /v1/history:
+    get:
+      tags: [Batches]
+      summary: Generation history
+      description: |
+        Documents generated on their own and batches, mixed, newest first. The
+        documents inside a batch do not appear loose here: list them with
+        `GET /v1/documents?batch_id=`.
+      operationId: getHistory
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+        - $ref: "#/components/parameters/TemplateFilter"
+      responses:
+        "200":
+          description: A page of the history.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/HistoryItem" }
+                required: [items]
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /v1/batches:
+    post:
+      tags: [Batches]
+      summary: Create a batch
+      description: |
+        Records an empty batch for one template version. Then generate each
+        document with `POST /v1/documents`, passing `batch_id`: generation
+        stays one synchronous request per document, so each one succeeds or
+        fails on its own.
+      operationId: createBatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateBatchRequest" }
+      responses:
+        "201":
+          description: The new, empty batch.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Batch" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: The template, or the pinned version, does not exist.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/batches/{id}:
+    parameters:
+      - $ref: "#/components/parameters/BatchId"
+    get:
+      tags: [Batches]
+      summary: Get a batch
+      operationId: getBatch
+      responses:
+        "200":
+          description: The batch and what it holds.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Batch" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+    delete:
+      tags: [Batches, Privacy]
+      summary: Delete a batch and its documents
+      description: |
+        Removes the batch, every document in it with the values filled in, and
+        each rendered file nothing else refers to. A real delete.
+      operationId: deleteBatch
+      responses:
+        "204":
+          description: The batch and its documents were erased.
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/batches/{id}/download:
+    parameters:
+      - $ref: "#/components/parameters/BatchId"
+    get:
+      tags: [Batches]
+      summary: Download a batch as a ZIP
+      description: |
+        Streams a ZIP with every document of the batch, in the order they were
+        generated. Entries are stored, not compressed again. Documents may share
+        a filename, entries of one archive may not: a repeated name gets a
+        suffix, `contrato (2).docx`.
+
+        It is charged to the per-account write budget, like the account export,
+        because one request may gather hundreds of files.
+      operationId: downloadBatch
+      responses:
+        "200":
+          description: The archive.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                examples: ['attachment; filename="Aditamentos de setembro.zip"']
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -804,6 +943,30 @@ components:
         type: integer
         minimum: 0
         default: 0
+    TemplateFilter:
+      name: template_id
+      in: query
+      required: false
+      description: Only entries generated from this template.
+      schema:
+        type: string
+        format: uuid
+    BatchFilter:
+      name: batch_id
+      in: query
+      required: false
+      description: Only the documents of this batch.
+      schema:
+        type: string
+        format: uuid
+    BatchId:
+      name: id
+      in: path
+      required: true
+      description: Batch identifier.
+      schema:
+        type: string
+        format: uuid
     TemplateId:
       name: id
       in: path
@@ -1042,6 +1205,12 @@ components:
           description: |
             Suggested download name. Sanitised, and given a `.docx` extension if
             it lacks one. Defaults to `document.docx`.
+        batch_id:
+          type: string
+          format: uuid
+          description: |
+            Joins the document to a batch of the same template. The batch's
+            version is used; a different `version` is a `422`.
         data:
           type: object
           description: |
@@ -1088,13 +1257,27 @@ components:
         documents:
           type: array
           items: { $ref: "#/components/schemas/Document" }
+        batches:
+          type: array
+          description: |
+            Every batch. A batch's name is text the account holder typed, and
+            often names the people its documents are about.
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              template_id: { type: string, format: uuid }
+              template_version: { type: integer }
+              name: { type: string }
+              created_at: { type: string, format: date-time }
+            required: [id, template_id, template_version, name, created_at]
         notes:
           type: object
           additionalProperties: { type: string }
           description: |
             What the export does not contain, stated in the export itself so
             a reader is not left to assume it is everything.
-      required: [exported_at, account, templates, documents, notes]
+      required: [exported_at, account, templates, documents, batches, notes]
 
     Document:
       type: object
@@ -1114,8 +1297,56 @@ components:
         download_url:
           type: string
           description: Path to the download endpoint, relative to the server.
+        batch_id:
+          description: The batch the document was generated in, or null.
+          anyOf:
+            - { type: string, format: uuid }
+            - type: "null"
       required:
-        [id, template_id, template_version, filename, size, data, created_at, download_url]
+        [id, template_id, template_version, filename, size, data, created_at, download_url, batch_id]
+
+    CreateBatchRequest:
+      type: object
+      properties:
+        template_id: { type: string, format: uuid }
+        version:
+          type: integer
+          minimum: 1
+          description: |
+            Pins the version every document of the batch is generated from.
+            Omit to use the latest at creation.
+        name:
+          type: string
+          maxLength: 120
+          description: Shown in the history, and the archive's filename.
+      required: [template_id, name]
+      examples:
+        - template_id: 01a08374-6a08-746a-ade6-08aac54590b0
+          name: Aditamentos de setembro
+
+    Batch:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        template_id: { type: string, format: uuid }
+        template_version: { type: integer }
+        name: { type: string }
+        documents: { type: integer, description: Documents generated in it so far. }
+        size: { type: integer, description: Total size in bytes of those documents. }
+        created_at: { type: string, format: date-time }
+        download_url:
+          type: string
+          description: Path to the archive endpoint, relative to the server.
+      required: [id, template_id, template_version, name, documents, size, created_at, download_url]
+
+    HistoryItem:
+      type: object
+      description: One entry of the history. `kind` says which field is present.
+      properties:
+        kind: { type: string, enum: [document, batch] }
+        document: { $ref: "#/components/schemas/Document" }
+        batch: { $ref: "#/components/schemas/Batch" }
+      required: [kind]
 
     FieldError:
       type: object
