@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
@@ -27,6 +27,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { placeholdersOf, type Block, type Marks } from "@/domain/block";
 import type { EditingState } from "@/components/document-preview";
 import type { ReactNode } from "react";
@@ -518,16 +519,25 @@ function DocumentNameRow({
   readonly onRestore: () => void;
   readonly children: ReactNode;
 }) {
+  const selectId = useId();
+
   return (
     <div className="flex max-w-3xl flex-col gap-2">
       <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
         <div className="min-w-64 flex-1">{children}</div>
-        <label className="flex flex-col gap-1.5 text-small">
-          <span className="font-medium text-foreground">Completar com</span>
+        {/*
+          Built exactly like FormField beside it: the same Label (leading-none)
+          and gap above, and the Input's own height, padding, text size and
+          focus ring. A label with the default line height sat a few pixels
+          taller and pushed the select below the name field.
+        */}
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor={selectId}>Completar com</Label>
           <select
+            id={selectId}
             value={encodeNameSource(source)}
             onChange={(event) => onSourceChange(event.currentTarget.value)}
-            className="h-9.5 rounded-md border border-input-border bg-input px-2.5 text-small text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/20"
+            className="h-9.5 min-w-48 rounded-md border border-input-border bg-input px-3 text-sm text-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/20"
           >
             {groupPlaceholders(placeholders).map((group) =>
               group.label === null ? (
@@ -549,7 +559,7 @@ function DocumentNameRow({
             <option value="date">Data de hoje</option>
             <option value="none">Nada, só o nome do modelo</option>
           </select>
-        </label>
+        </div>
       </div>
       {canRestore && (
         <button
