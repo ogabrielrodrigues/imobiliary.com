@@ -143,6 +143,8 @@ func newTestServer(t *testing.T, opts serverOptions) *testServer {
 	}
 
 	templatesRepo := sqlite.NewTemplateRepository(db)
+	batchesRepo := sqlite.NewBatchRepository(db)
+	documentsRepo := sqlite.NewDocumentRepository(db)
 	cache := usecase.NewTemplateCache(16)
 
 	mailbox := &testMailbox{}
@@ -163,7 +165,8 @@ func newTestServer(t *testing.T, opts serverOptions) *testServer {
 	})
 	documents := usecase.NewDocuments(usecase.DocumentsConfig{
 		Templates: templatesRepo,
-		Documents: sqlite.NewDocumentRepository(db),
+		Documents: documentsRepo,
+		Batches:   batchesRepo,
 		Blobs:     blobs,
 		Cache:     cache,
 	})
@@ -184,7 +187,8 @@ func newTestServer(t *testing.T, opts serverOptions) *testServer {
 	privacy := usecase.NewPrivacy(usecase.PrivacyConfig{
 		Users:     sqlite.NewUserRepository(db),
 		Templates: templatesRepo,
-		Documents: sqlite.NewDocumentRepository(db),
+		Documents: documentsRepo,
+		Batches:   batchesRepo,
 		Blobs:     blobs,
 		Logger:    testLogger(),
 	})
@@ -201,12 +205,18 @@ func newTestServer(t *testing.T, opts serverOptions) *testServer {
 	})
 
 	server := adapterhttp.NewServer(adapterhttp.Options{
-		Identity:        identity,
-		Templates:       templates,
-		Documents:       documents,
-		Privacy:         privacy,
-		Passwords:       passwords,
-		Stats:           usecase.NewStats(usecase.StatsConfig{Repo: sqlite.NewStatsRepository(db)}),
+		Identity:  identity,
+		Templates: templates,
+		Documents: documents,
+		Privacy:   privacy,
+		Passwords: passwords,
+		Stats:     usecase.NewStats(usecase.StatsConfig{Repo: sqlite.NewStatsRepository(db)}),
+		Batches: usecase.NewBatches(usecase.BatchesConfig{
+			Templates: templatesRepo,
+			Batches:   batchesRepo,
+			Documents: documentsRepo,
+			Blobs:     blobs,
+		}),
 		Limiters:        limiters,
 		Logger:          testLogger(),
 		Health:          db.Ping,

@@ -21,6 +21,9 @@ type generateRequest struct {
 	Version  *int              `json:"version,omitempty"`
 	Filename string            `json:"filename,omitempty"`
 	Data     map[string]string `json:"data"`
+	// BatchID joins the document to a batch created with POST /v1/batches, of
+	// the same template. The batch's version is used.
+	BatchID string `json:"batch_id,omitempty"`
 }
 
 // documentResponse presents a generated document. The download URL is included
@@ -34,9 +37,16 @@ type documentResponse struct {
 	Data            map[string]string `json:"data"`
 	CreatedAt       time.Time         `json:"created_at"`
 	DownloadURL     string            `json:"download_url"`
+	// BatchID is null for a document generated on its own.
+	BatchID *string `json:"batch_id"`
 }
 
 func newDocumentResponse(d *domain.Document) documentResponse {
+	var batchID *string
+	if d.BatchID != nil {
+		id := d.BatchID.String()
+		batchID = &id
+	}
 	return documentResponse{
 		ID:              d.ID.String(),
 		TemplateID:      d.TemplateID.String(),
@@ -46,6 +56,7 @@ func newDocumentResponse(d *domain.Document) documentResponse {
 		Data:            d.Data,
 		CreatedAt:       d.CreatedAt,
 		DownloadURL:     "/v1/documents/" + d.ID.String() + "/download",
+		BatchID:         batchID,
 	}
 }
 
@@ -69,12 +80,25 @@ func (s *Server) handleGenerateDocument(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	var batchID *uuid.UUID
+	if body.BatchID != "" {
+		id, err := uuid.Parse(body.BatchID)
+		if err != nil {
+			v := &domain.ValidationError{}
+			v.Add("batch_id", "must be a valid identifier")
+			writeError(w, s.logger, v)
+			return
+		}
+		batchID = &id
+	}
+
 	doc, err := s.documents.Generate(r.Context(), usecase.GenerateRequest{
 		OwnerID:    userFrom(r.Context()).ID,
 		TemplateID: templateID,
 		Version:    body.Version,
 		Filename:   body.Filename,
 		Data:       body.Data,
+		BatchID:    batchID,
 	})
 	if err != nil {
 		writeError(w, s.logger, err)
@@ -99,9 +123,19 @@ func (s *Server) handleGetDocument(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListDocuments(w http.ResponseWriter, r *http.Request) {
-	limit, offset := pagination(r)
+	var filter domain.DocumentFilter
+	var err error
+	if filter.TemplateID, err = queryID(r, "template_id"); err != nil {
+		writeError(w, s.logger, err)
+		return
+	}
+	if filter.BatchID, err = queryID(r, "batch_id"); err != nil {
+		writeError(w, s.logger, err)
+		return
+	}
 
-	docs, err := s.documents.List(r.Context(), userFrom(r.Context()).ID, limit, offset)
+	limit, offset := pagination(r)
+	docs, err := s.documents.List(r.Context(), userFrom(r.Context()).ID, filter, limit, offset)
 	if err != nil {
 		writeError(w, s.logger, err)
 		return

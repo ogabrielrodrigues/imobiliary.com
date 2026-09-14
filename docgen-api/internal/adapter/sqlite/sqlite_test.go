@@ -373,7 +373,7 @@ func TestDocumentRepositoryIsolatesOwners(t *testing.T) {
 		t.Errorf("a stranger could read the document: %v", err)
 	}
 
-	list, err := documents.List(ctx, stranger.ID, 10, 0)
+	list, err := documents.List(ctx, stranger.ID, domain.DocumentFilter{}, 10, 0)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}

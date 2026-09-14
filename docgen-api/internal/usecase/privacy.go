@@ -25,6 +25,7 @@ type Privacy struct {
 	users     UserRepository
 	templates TemplateRepository
 	documents DocumentRepository
+	batches   BatchRepository
 	blobs     BlobStore
 	logger    *slog.Logger
 }
@@ -34,6 +35,7 @@ type PrivacyConfig struct {
 	Users     UserRepository
 	Templates TemplateRepository
 	Documents DocumentRepository
+	Batches   BatchRepository
 	Blobs     BlobStore
 	Logger    *slog.Logger
 }
@@ -48,6 +50,7 @@ func NewPrivacy(cfg PrivacyConfig) *Privacy {
 		users:     cfg.Users,
 		templates: cfg.Templates,
 		documents: cfg.Documents,
+		batches:   cfg.Batches,
 		blobs:     cfg.Blobs,
 		logger:    logger,
 	}
@@ -63,6 +66,9 @@ type AccountExport struct {
 	User       *domain.User
 	Templates  []TemplateExport
 	Documents  []domain.Document
+	// Batches are held too: a batch's name is text the account holder typed,
+	// and it often names the people its documents are about.
+	Batches []domain.Batch
 }
 
 // TemplateExport pairs a template with every version it has ever had.
@@ -104,7 +110,7 @@ func (s *Privacy) Export(ctx context.Context, userID uuid.UUID, now time.Time) (
 
 	var documents []domain.Document
 	for offset := 0; ; offset += exportPageSize {
-		page, err := s.documents.List(ctx, userID, exportPageSize, offset)
+		page, err := s.documents.List(ctx, userID, domain.DocumentFilter{}, exportPageSize, offset)
 		if err != nil {
 			return nil, err
 		}
@@ -114,11 +120,19 @@ func (s *Privacy) Export(ctx context.Context, userID uuid.UUID, now time.Time) (
 		}
 	}
 
+	var batches []domain.Batch
+	if s.batches != nil {
+		if batches, err = s.batches.AllForOwner(ctx, userID); err != nil {
+			return nil, err
+		}
+	}
+
 	return &AccountExport{
 		ExportedAt: now.UTC(),
 		User:       user,
 		Templates:  exported,
 		Documents:  documents,
+		Batches:    batches,
 	}, nil
 }
 

@@ -39,6 +39,7 @@ type Options struct {
 	Privacy   *usecase.Privacy
 	Passwords *usecase.Passwords
 	Stats     *usecase.Stats
+	Batches   *usecase.Batches
 	Limiters  Limiters
 	Logger    *slog.Logger
 	// Health reports whether dependencies are reachable.
@@ -57,6 +58,7 @@ type Server struct {
 	privacy   *usecase.Privacy
 	passwords *usecase.Passwords
 	stats     *usecase.Stats
+	batches   *usecase.Batches
 	limiters  Limiters
 	logger    *slog.Logger
 	health    func(context.Context) error
@@ -75,6 +77,7 @@ func NewServer(opts Options) *Server {
 		privacy:           opts.Privacy,
 		passwords:         opts.Passwords,
 		stats:             opts.Stats,
+		batches:           opts.Batches,
 		limiters:          opts.Limiters,
 		logger:            opts.Logger,
 		health:            opts.Health,
@@ -157,6 +160,15 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /v1/documents/{id}", read(s.handleGetDocument))
 	mux.Handle("GET /v1/documents/{id}/download", read(s.handleDownloadDocument))
 	mux.Handle("DELETE /v1/documents/{id}", write(s.handleDeleteDocument, s.maxRequestBytes))
+
+	// Batches: documents generated together. Creating one and deleting one are
+	// writes. The archive is a read, but it may gather hundreds of files, so it
+	// is charged to the write budget like the account export.
+	mux.Handle("POST /v1/batches", write(s.handleCreateBatch, s.maxRequestBytes))
+	mux.Handle("GET /v1/batches/{id}", read(s.handleGetBatch))
+	mux.Handle("GET /v1/batches/{id}/download", write(s.handleDownloadBatch, s.maxRequestBytes))
+	mux.Handle("DELETE /v1/batches/{id}", write(s.handleDeleteBatch, s.maxRequestBytes))
+	mux.Handle("GET /v1/history", read(s.handleHistory))
 
 	// Outermost first: a panic anywhere below is caught, every request is
 	// logged, and the global per-IP limit is charged before any work is done.

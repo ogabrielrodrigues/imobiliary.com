@@ -27,7 +27,16 @@ type exportResponse struct {
 	Account    userResponse      `json:"account"`
 	Templates  []exportTemplate  `json:"templates"`
 	Documents  []exportDocument  `json:"documents"`
+	Batches    []exportBatch     `json:"batches"`
 	Notes      map[string]string `json:"notes"`
+}
+
+type exportBatch struct {
+	ID              string    `json:"id"`
+	TemplateID      string    `json:"template_id"`
+	TemplateVersion int       `json:"template_version"`
+	Name            string    `json:"name"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 type exportTemplate struct {
@@ -58,6 +67,7 @@ type exportDocument struct {
 	// holder.
 	Data      map[string]string `json:"data"`
 	CreatedAt time.Time         `json:"created_at"`
+	BatchID   *string           `json:"batch_id"`
 }
 
 func newExportResponse(e *usecase.AccountExport) exportResponse {
@@ -94,6 +104,18 @@ func newExportResponse(e *usecase.AccountExport) exportResponse {
 			Size:            d.Size,
 			Data:            d.Data,
 			CreatedAt:       d.CreatedAt,
+			BatchID:         newDocumentResponse(d).BatchID,
+		})
+	}
+
+	batches := make([]exportBatch, 0, len(e.Batches))
+	for _, b := range e.Batches {
+		batches = append(batches, exportBatch{
+			ID:              b.ID.String(),
+			TemplateID:      b.TemplateID.String(),
+			TemplateVersion: b.TemplateVersion,
+			Name:            b.Name,
+			CreatedAt:       b.CreatedAt,
 		})
 	}
 
@@ -102,6 +124,7 @@ func newExportResponse(e *usecase.AccountExport) exportResponse {
 		Account:    newUserResponse(e.User),
 		Templates:  templates,
 		Documents:  documents,
+		Batches:    batches,
 		// Stated in the export itself so a reader knows what it does not
 		// contain, rather than assuming it is everything.
 		Notes: map[string]string{

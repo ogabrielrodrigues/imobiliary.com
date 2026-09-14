@@ -74,6 +74,7 @@ func run(logger *slog.Logger) error {
 	sessions := sqlite.NewSessionRepository(db)
 	templates := sqlite.NewTemplateRepository(db)
 	documents := sqlite.NewDocumentRepository(db)
+	batches := sqlite.NewBatchRepository(db)
 
 	cache := usecase.NewTemplateCache(templateCacheSize)
 
@@ -105,6 +106,7 @@ func run(logger *slog.Logger) error {
 	documentService := usecase.NewDocuments(usecase.DocumentsConfig{
 		Templates: templates,
 		Documents: documents,
+		Batches:   batches,
 		Blobs:     blobs,
 		Cache:     cache,
 	})
@@ -126,6 +128,7 @@ func run(logger *slog.Logger) error {
 		Users:     users,
 		Templates: templates,
 		Documents: documents,
+		Batches:   batches,
 		Blobs:     blobs,
 		Logger:    logger,
 	})
@@ -142,12 +145,18 @@ func run(logger *slog.Logger) error {
 	}()
 
 	server := adapterhttp.NewServer(adapterhttp.Options{
-		Identity:          identity,
-		Templates:         templateService,
-		Documents:         documentService,
-		Privacy:           privacyService,
-		Passwords:         passwordService,
-		Stats:             usecase.NewStats(usecase.StatsConfig{Repo: sqlite.NewStatsRepository(db)}),
+		Identity:  identity,
+		Templates: templateService,
+		Documents: documentService,
+		Privacy:   privacyService,
+		Passwords: passwordService,
+		Stats:     usecase.NewStats(usecase.StatsConfig{Repo: sqlite.NewStatsRepository(db)}),
+		Batches: usecase.NewBatches(usecase.BatchesConfig{
+			Templates: templates,
+			Batches:   batches,
+			Documents: documents,
+			Blobs:     blobs,
+		}),
 		Limiters:          limiters,
 		Logger:            logger,
 		Health:            db.Ping,

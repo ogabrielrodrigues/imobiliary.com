@@ -3,6 +3,7 @@ package usecase
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -31,6 +32,7 @@ const maxPooledBuffer = 4 << 20
 type Documents struct {
 	templates TemplateRepository
 	documents DocumentRepository
+	batches   BatchRepository
 	blobs     BlobStore
 	cache     *TemplateCache
 	now       Clock
@@ -40,9 +42,11 @@ type Documents struct {
 type DocumentsConfig struct {
 	Templates TemplateRepository
 	Documents DocumentRepository
-	Blobs     BlobStore
-	Cache     *TemplateCache
-	Now       Clock
+	// Batches is consulted only when a generation names a batch.
+	Batches BatchRepository
+	Blobs   BlobStore
+	Cache   *TemplateCache
+	Now     Clock
 }
 
 // NewDocuments wires the Documents use case.
@@ -53,6 +57,7 @@ func NewDocuments(cfg DocumentsConfig) *Documents {
 	return &Documents{
 		templates: cfg.Templates,
 		documents: cfg.Documents,
+		batches:   cfg.Batches,
 		blobs:     cfg.Blobs,
 		cache:     cfg.Cache,
 		now:       cfg.Now,
@@ -63,15 +68,27 @@ func NewDocuments(cfg DocumentsConfig) *Documents {
 type GenerateRequest struct {
 	OwnerID    uuid.UUID
 	TemplateID uuid.UUID
-	// Version pins a specific template version. When nil the latest is used.
+	// Version pins a specific template version. When nil the latest is used,
+	// or the batch's version when BatchID is set.
 	Version  *int
 	Filename string
 	Data     map[string]string
+	// BatchID joins the document to a batch of the same account, template and
+	// version.
+	BatchID *uuid.UUID
 }
 
 // Generate renders a document and stores it.
 func (s *Documents) Generate(ctx context.Context, req GenerateRequest) (*domain.Document, error) {
-	version, err := s.resolveVersion(ctx, req)
+	if req.BatchID != nil {
+		pinned, err := s.batchVersion(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		req.Version = &pinned
+	}
+
+	version, err := resolveVersion(ctx, s.templates, req.OwnerID, req.TemplateID, req.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -116,6 +133,7 @@ func (s *Documents) Generate(ctx context.Context, req GenerateRequest) (*domain.
 		Size:              size,
 		Data:              req.Data,
 		CreatedAt:         s.now().UTC(),
+		BatchID:           req.BatchID,
 	}
 	if err := s.documents.Create(ctx, doc); err != nil {
 		return nil, err
@@ -128,9 +146,42 @@ func (s *Documents) Get(ctx context.Context, ownerID, id uuid.UUID) (*domain.Doc
 	return s.documents.ByID(ctx, ownerID, id)
 }
 
-// List returns a page of the caller's documents.
-func (s *Documents) List(ctx context.Context, ownerID uuid.UUID, limit, offset int) ([]domain.Document, error) {
-	return s.documents.List(ctx, ownerID, limit, offset)
+// List returns a page of the caller's documents, optionally narrowed to a
+// template or a batch.
+func (s *Documents) List(ctx context.Context, ownerID uuid.UUID, filter domain.DocumentFilter, limit, offset int) ([]domain.Document, error) {
+	return s.documents.List(ctx, ownerID, filter, limit, offset)
+}
+
+// batchVersion checks that a generation may join the batch it names, and
+// returns the template version the batch was created for.
+//
+// A batch describes its documents, so every one of them must come from the
+// batch's own template and version. A batch of another account is reported as
+// not existing, the same answer an unknown identifier gets.
+func (s *Documents) batchVersion(ctx context.Context, req GenerateRequest) (int, error) {
+	invalid := func(format string, args ...any) error {
+		v := &domain.ValidationError{}
+		v.Addf("batch_id", format, args...)
+		return v
+	}
+
+	if s.batches == nil {
+		return 0, invalid("batches are not available")
+	}
+	batch, err := s.batches.ByID(ctx, req.OwnerID, *req.BatchID)
+	if errors.Is(err, domain.ErrNotFound) {
+		return 0, invalid("does not exist")
+	}
+	if err != nil {
+		return 0, err
+	}
+	if batch.TemplateID != req.TemplateID {
+		return 0, invalid("belongs to another template")
+	}
+	if req.Version != nil && *req.Version != batch.TemplateVersion {
+		return 0, invalid("was created for version %d of this template", batch.TemplateVersion)
+	}
+	return batch.TemplateVersion, nil
 }
 
 // Open returns a document together with a readable handle on its bytes. The
@@ -169,12 +220,13 @@ func (s *Documents) Delete(ctx context.Context, ownerID, id uuid.UUID) error {
 	return nil
 }
 
-// resolveVersion picks the template version a request refers to.
-func (s *Documents) resolveVersion(ctx context.Context, req GenerateRequest) (*domain.TemplateVersion, error) {
-	if req.Version == nil {
-		return s.templates.LatestVersion(ctx, req.OwnerID, req.TemplateID)
+// resolveVersion picks the template version a request refers to: the pinned
+// one, or the latest when version is nil.
+func resolveVersion(ctx context.Context, templates TemplateRepository, ownerID, templateID uuid.UUID, version *int) (*domain.TemplateVersion, error) {
+	if version == nil {
+		return templates.LatestVersion(ctx, ownerID, templateID)
 	}
-	return s.templates.Version(ctx, req.OwnerID, req.TemplateID, *req.Version)
+	return templates.Version(ctx, ownerID, templateID, *version)
 }
 
 // compiledTemplate returns the parsed template for a version, compiling and
@@ -208,9 +260,16 @@ const defaultFilename = "document.docx"
 // header value carrying a quote or a newline could otherwise be used to inject
 // headers of the attacker's choosing.
 func sanitizeFilename(name string) string {
+	return sanitizeName(name, ".docx", defaultFilename)
+}
+
+// sanitizeName applies the filename rules with any extension: letters, digits,
+// space, ".", "-" and "_" are kept, anything else becomes "_", the name is cut
+// at 100 bytes, and the extension is added when missing.
+func sanitizeName(name, extension, fallback string) string {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return defaultFilename
+		return fallback
 	}
 
 	var b strings.Builder
@@ -230,10 +289,10 @@ func sanitizeFilename(name string) string {
 
 	cleaned := strings.TrimSpace(b.String())
 	if cleaned == "" || cleaned == "." || cleaned == ".." {
-		return defaultFilename
+		return fallback
 	}
-	if !strings.HasSuffix(strings.ToLower(cleaned), ".docx") {
-		cleaned += ".docx"
+	if !strings.HasSuffix(strings.ToLower(cleaned), extension) {
+		cleaned += extension
 	}
 	return cleaned
 }

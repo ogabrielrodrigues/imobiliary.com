@@ -23,11 +23,19 @@ func NewDocumentRepository(db *DB) *DocumentRepository {
 }
 
 const documentColumns = "id, owner_id, template_id, template_version_id, template_version, " +
-	"filename, blob_hash, size, data, created_at"
+	"filename, blob_hash, size, data, created_at, batch_id"
+
+// nullableID stores an optional identifier as a blob or as NULL.
+func nullableID(id *uuid.UUID) any {
+	if id == nil {
+		return nil
+	}
+	return idOf(*id)
+}
 
 // Create records a generated document.
 func (r *DocumentRepository) Create(ctx context.Context, d *domain.Document) error {
-	const query = `INSERT INTO documents (` + documentColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	const query = `INSERT INTO documents (` + documentColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	data, err := json.Marshal(d.Data)
 	if err != nil {
@@ -37,7 +45,7 @@ func (r *DocumentRepository) Create(ctx context.Context, d *domain.Document) err
 	_, err = r.db.write.ExecContext(ctx, query,
 		idOf(d.ID), idOf(d.OwnerID), idOf(d.TemplateID), idOf(d.TemplateVersionID),
 		d.TemplateVersion, d.Filename, d.BlobHash, d.Size, string(data),
-		formatTime(d.CreatedAt),
+		formatTime(d.CreatedAt), nullableID(d.BatchID),
 	)
 	if err != nil {
 		return fmt.Errorf("sqlite: create document: %w", err)
@@ -52,13 +60,26 @@ func (r *DocumentRepository) ByID(ctx context.Context, ownerID, id uuid.UUID) (*
 	return scanDocumentRow(r.db.read.QueryRowContext(ctx, query, idOf(id), idOf(ownerID)))
 }
 
-// List returns a page of the documents owned by ownerID, newest first. The
-// ordering comes free from the identifier: UUIDv7 sorts by creation time.
-func (r *DocumentRepository) List(ctx context.Context, ownerID uuid.UUID, limit, offset int) ([]domain.Document, error) {
-	const query = `SELECT ` + documentColumns + ` FROM documents
-		WHERE owner_id = ? ORDER BY id DESC LIMIT ? OFFSET ?`
+// List returns a page of the documents owned by ownerID, newest first,
+// optionally narrowed to a template or a batch. The ordering comes free from
+// the identifier: UUIDv7 sorts by creation time.
+func (r *DocumentRepository) List(ctx context.Context, ownerID uuid.UUID, filter domain.DocumentFilter, limit, offset int) ([]domain.Document, error) {
+	// The clauses are fixed strings chosen by which filters are set; every
+	// value travels as a bound parameter.
+	query := `SELECT ` + documentColumns + ` FROM documents WHERE owner_id = ?`
+	args := []any{idOf(ownerID)}
+	if filter.TemplateID != nil {
+		query += ` AND template_id = ?`
+		args = append(args, idOf(*filter.TemplateID))
+	}
+	if filter.BatchID != nil {
+		query += ` AND batch_id = ?`
+		args = append(args, idOf(*filter.BatchID))
+	}
+	query += ` ORDER BY id DESC LIMIT ? OFFSET ?`
+	args = append(args, limit, offset)
 
-	rows, err := r.db.read.QueryContext(ctx, query, idOf(ownerID), limit, offset)
+	rows, err := r.db.read.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("sqlite: list documents: %w", err)
 	}
@@ -85,12 +106,13 @@ func scanDocumentRow(row rowScanner) (*domain.Document, error) {
 		rawOwnerID      []byte
 		rawTemplateID   []byte
 		rawVersionID    []byte
+		rawBatchID      []byte
 		data, createdAt string
 	)
 
 	err := row.Scan(
 		&rawID, &rawOwnerID, &rawTemplateID, &rawVersionID, &d.TemplateVersion,
-		&d.Filename, &d.BlobHash, &d.Size, &data, &createdAt,
+		&d.Filename, &d.BlobHash, &d.Size, &data, &createdAt, &rawBatchID,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("document: %w", domain.ErrNotFound)
@@ -111,6 +133,14 @@ func scanDocumentRow(row rowScanner) (*domain.Document, error) {
 		if *field.dst, err = idFrom(field.raw); err != nil {
 			return nil, err
 		}
+	}
+
+	if rawBatchID != nil {
+		batchID, err := idFrom(rawBatchID)
+		if err != nil {
+			return nil, err
+		}
+		d.BatchID = &batchID
 	}
 
 	if err = json.Unmarshal([]byte(data), &d.Data); err != nil {

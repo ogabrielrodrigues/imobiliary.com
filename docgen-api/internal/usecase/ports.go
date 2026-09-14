@@ -88,10 +88,24 @@ type TemplateRepository interface {
 type DocumentRepository interface {
 	Create(ctx context.Context, d *domain.Document) error
 	ByID(ctx context.Context, ownerID, id uuid.UUID) (*domain.Document, error)
-	List(ctx context.Context, ownerID uuid.UUID, limit, offset int) ([]domain.Document, error)
+	List(ctx context.Context, ownerID uuid.UUID, filter domain.DocumentFilter, limit, offset int) ([]domain.Document, error)
 	// Delete removes one document, reporting its blob hash when nothing else
 	// refers to it. An empty hash means the file must stay.
 	Delete(ctx context.Context, ownerID, id uuid.UUID) (string, error)
+}
+
+// BatchRepository stores batches of documents generated together.
+type BatchRepository interface {
+	Create(ctx context.Context, b *domain.Batch) error
+	ByID(ctx context.Context, ownerID, id uuid.UUID) (*domain.BatchSummary, error)
+	// AllForOwner returns every batch of an account, for the data export.
+	AllForOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.Batch, error)
+	// Delete removes a batch and the documents in it, reporting the blob
+	// hashes nothing refers to any more.
+	Delete(ctx context.Context, ownerID, id uuid.UUID) ([]string, error)
+	// History returns documents generated on their own and batches, mixed,
+	// newest first, optionally narrowed to one template.
+	History(ctx context.Context, ownerID uuid.UUID, templateID *uuid.UUID, limit, offset int) ([]domain.HistoryEntry, error)
 }
 
 // StatsRepository answers the aggregate questions behind an account's

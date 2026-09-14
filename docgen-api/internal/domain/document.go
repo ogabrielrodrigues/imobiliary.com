@@ -22,6 +22,9 @@ type Document struct {
 	Size              int64
 	Data              map[string]string
 	CreatedAt         time.Time
+	// BatchID is the batch the document was generated in, or nil for one
+	// generated on its own.
+	BatchID *uuid.UUID
 }
 
 // ValidateDocumentData checks the supplied values against the placeholder
