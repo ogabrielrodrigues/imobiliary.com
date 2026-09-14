@@ -2,6 +2,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { createRouter } from "@tanstack/react-router";
 import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query";
 
+import { NotFound } from "./components/not-found.tsx";
 import { STALE_TIME_MS } from "./queries/keys.ts";
 import { routeTree } from "./routeTree.gen";
 
@@ -38,6 +39,8 @@ export function getRouter() {
     // The router always calls the loader; the query cache decides whether
     // that means a request. Two caches deciding separately would disagree.
     defaultPreloadStaleTime: 0,
+    // Without it an unknown address renders the router's bare "Not Found".
+    defaultNotFoundComponent: NotFound,
   });
 
   // Dehydrates what the server fetched into the page and hydrates it in the
