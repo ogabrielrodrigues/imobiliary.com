@@ -16,7 +16,12 @@ export const queryKeys = {
     ["templates", id, "content", version ?? "latest"] as const,
 
   documents: ["documents"] as const,
-  documentPage: (page: number) => ["documents", "page", page] as const,
+  /** The documents inside one batch, read page by page as the row is opened. */
+  batchDocuments: (batchId: string) => ["documents", "batch", batchId] as const,
+
+  history: ["history"] as const,
+  historyPage: (page: number, templateId: string | undefined) =>
+    ["history", page, templateId ?? "all"] as const,
 
   dashboard: ["dashboard"] as const,
   dashboardView: (days: number, timeZone: string) =>
@@ -27,13 +32,15 @@ export const queryKeys = {
  * What each change makes stale, as key prefixes.
  *
  * The dashboard counts both templates and documents, so it appears in every
- * entry. Deleting a template also touches documents: their rows name it.
+ * entry that touches either. The history lists documents and names their
+ * templates, so it follows both too.
  */
 export const staleAfter = {
-  templateCreated: [queryKeys.templates, queryKeys.dashboard],
+  templateCreated: [queryKeys.templates, queryKeys.history, queryKeys.dashboard],
   versionPublished: [queryKeys.templates, queryKeys.dashboard],
-  templateDeleted: [queryKeys.templates, queryKeys.documents, queryKeys.dashboard],
-  documentGenerated: [queryKeys.documents, queryKeys.dashboard],
+  templateDeleted: [queryKeys.templates, queryKeys.documents, queryKeys.history, queryKeys.dashboard],
+  documentGenerated: [queryKeys.documents, queryKeys.history, queryKeys.dashboard],
+  batchChanged: [queryKeys.documents, queryKeys.history, queryKeys.dashboard],
 } as const satisfies Record<string, readonly (readonly unknown[])[]>;
 
 export type Change = keyof typeof staleAfter;

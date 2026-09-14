@@ -8,6 +8,7 @@
  * is a few lines rather than a mock framework.
  */
 
+import type { Batch, HistoryEntry } from "../domain/batch.ts";
 import type { GeneratedDocument, GenerateInput } from "../domain/document.ts";
 import type { DashboardStats, StatsPeriod } from "../domain/stats.ts";
 import type {
@@ -111,8 +112,31 @@ export interface FileContent {
   readonly bytes: Uint8Array;
 }
 
+/** Narrows a listing. An absent field does not filter. */
+export interface DocumentFilter {
+  readonly templateId?: string | undefined;
+  readonly batchId?: string | undefined;
+}
+
+export interface BatchGateway {
+  create(
+    ctx: CallContext,
+    input: { readonly templateId: string; readonly version?: number; readonly name: string },
+  ): Promise<Batch>;
+  get(ctx: CallContext, id: string): Promise<Batch>;
+  /** Loose documents and batches, mixed, newest first. */
+  history(
+    ctx: CallContext,
+    page?: Page,
+    filter?: { readonly templateId?: string | undefined },
+  ): Promise<HistoryEntry[]>;
+  /** The batch as a ZIP of its documents. */
+  download(ctx: CallContext, id: string): Promise<FileContent>;
+  remove(ctx: CallContext, id: string): Promise<void>;
+}
+
 export interface DocumentGateway {
-  list(ctx: CallContext, page?: Page): Promise<GeneratedDocument[]>;
+  list(ctx: CallContext, page?: Page, filter?: DocumentFilter): Promise<GeneratedDocument[]>;
   get(ctx: CallContext, id: string): Promise<GeneratedDocument>;
   generate(ctx: CallContext, input: GenerateInput): Promise<GeneratedDocument>;
   download(ctx: CallContext, id: string): Promise<FileContent>;

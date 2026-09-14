@@ -6,10 +6,18 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconDownload,
+  IconFileZip,
   IconFiles,
+  IconStack2,
+  IconTrash,
 } from "@tabler/icons-react";
-import { useState } from "react";
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useId, useState, type ReactNode } from "react";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+  useSuspenseQuery,
+} from "@tanstack/react-query";
 import {
   createColumnHelper,
   createSortedRowModel,
@@ -20,82 +28,104 @@ import {
   tableFeatures,
   useTable,
 } from "@tanstack/react-table";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 
-import { summaryOf, type Failure } from "@/application/result";
-import type { DocumentListItem } from "@/application/views";
+import type { FileContent } from "@/application/ports";
+import { summaryOf, type Failure, type Result } from "@/application/result";
+import type { DocumentListItem, HistoryItem, TemplateOption } from "@/application/views";
 import {
   EmptyState,
   LoadFailure,
   PageBody,
   PageHeader,
 } from "@/components/page";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import {
   Table,
-  TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { batchCount, type Batch } from "@/domain/batch";
 import { displayName } from "@/domain/document-name";
 import { formatBytes } from "@/domain/template";
 import { saveFile } from "@/lib/download";
 import { shortDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { documentPageQuery } from "@/queries/options";
+import { queryKeys } from "@/queries/keys";
+import { batchDocumentsQuery, historyPageQuery, invalidateAfter } from "@/queries/options";
 import { downloadDocument } from "@/server/documents";
+import { deleteBatch, downloadBatch } from "@/server/history";
 
 interface DocumentsSearch {
   /** One-based, as a person counts. Absent means the first page. */
   readonly pagina?: number;
+  /** A template id: only what was generated from it. */
+  readonly modelo?: string;
 }
 
+const IDENTIFIER = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const Route = createFileRoute("/_app/documentos")({
-  /** The page lives in the address, so a reload or a shared link keeps it. */
+  /**
+   * The page and the template filter live in the address, so a reload, the
+   * back button and a shared link all keep them.
+   */
   validateSearch: (search: Record<string, unknown>): DocumentsSearch => {
     const page = Number(search["pagina"]);
-    return Number.isInteger(page) && page > 1 ? { pagina: page } : {};
+    const template = search["modelo"];
+    return {
+      ...(Number.isInteger(page) && page > 1 ? { pagina: page } : {}),
+      ...(typeof template === "string" && IDENTIFIER.test(template) ? { modelo: template } : {}),
+    };
   },
-  loaderDeps: ({ search }) => ({ page: (search.pagina ?? 1) - 1 }),
+  loaderDeps: ({ search }) => ({ page: (search.pagina ?? 1) - 1, templateId: search.modelo }),
   loader: ({ context, deps }) =>
-    context.queryClient.ensureQueryData(documentPageQuery(deps.page)),
+    context.queryClient.ensureQueryData(historyPageQuery(deps.page, deps.templateId)),
   head: () => ({ meta: [{ title: "Documentos | Imobiliary Docs" }] }),
   component: DocumentsPage,
 });
 
 /*
-  Sorting only. The API returns documents newest first and offers no filter,
-  so a filter here could only search the page on screen and would pass for a
-  search of everything. Sorting is honest about the same limit: it reorders
-  the page, and the page says so when there is more than one.
+  The history: documents generated on their own and batches, mixed, newest
+  first. A batch is one row, closed until someone opens it.
+
+  Sorting reorders the entries of the page on screen. The documents inside an
+  open batch keep the order they were generated in.
 */
 const features = tableFeatures({
   rowSortingFeature,
   sortedRowModel: createSortedRowModel(),
 });
 
-const column = createColumnHelper<typeof features, DocumentListItem>();
+const column = createColumnHelper<typeof features, HistoryItem>();
 
 const columns = column.columns([
-  column.accessor((item) => item.document.filename, {
-    id: "filename",
-    header: "Documento",
-    sortFn: sortFn_text,
-  }),
-  column.accessor((item) => item.templateName ?? "", {
-    id: "template",
-    header: "Modelo",
-    sortFn: sortFn_text,
-  }),
-  column.accessor((item) => item.document.createdAt, {
-    id: "createdAt",
-    header: "Gerado em",
-    sortFn: sortFn_datetime,
-    sortDescFirst: true,
-  }),
-  column.accessor((item) => item.document.size, {
+  column.accessor(
+    (entry) => (entry.kind === "batch" ? entry.batch.name : displayName(entry.item.document.filename)),
+    { id: "name", header: "Documento", sortFn: sortFn_text },
+  ),
+  column.accessor(
+    (entry) => (entry.kind === "batch" ? entry.templateName : entry.item.templateName) ?? "",
+    { id: "template", header: "Modelo", sortFn: sortFn_text },
+  ),
+  column.accessor(
+    (entry) => (entry.kind === "batch" ? entry.batch.createdAt : entry.item.document.createdAt),
+    { id: "createdAt", header: "Gerado em", sortFn: sortFn_datetime, sortDescFirst: true },
+  ),
+  column.accessor((entry) => (entry.kind === "batch" ? entry.batch.size : entry.item.document.size), {
     id: "size",
     header: "Tamanho",
     sortFn: sortFn_basic,
@@ -106,48 +136,70 @@ const columns = column.columns([
 /** The order the API already returns, and so the one a page starts in. */
 const NEWEST_FIRST = [{ id: "createdAt", desc: true }];
 
-const NO_ITEMS: readonly DocumentListItem[] = [];
+const NO_ITEMS: readonly HistoryItem[] = [];
 
-function DocumentsPage() {
-  const { page: pageIndex } = Route.useLoaderDeps();
-  const { data: result } = useSuspenseQuery(documentPageQuery(pageIndex));
+const entryId = (entry: HistoryItem) =>
+  entry.kind === "batch" ? `batch:${entry.batch.id}` : `document:${entry.item.document.id}`;
 
-  // Tracks which row is being fetched, so only that button says so.
+/**
+ * Downloads, one at a time per row: which row is being fetched, and what went
+ * wrong. Shared by the table, the cards and the rows inside a batch.
+ */
+function useDownloads() {
   const [saving, setSaving] = useState<string | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
+
+  async function run(key: string, fetch: () => Promise<Result<FileContent>>) {
+    setSaving(key);
+    setFailure(null);
+    try {
+      const result = await fetch();
+      if (result.ok) {
+        saveFile(result.value.filename, result.value.contentType, result.value.bytes);
+        return;
+      }
+      setFailure(result.failure);
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  return {
+    saving,
+    failure,
+    document: (id: string) => run(`document:${id}`, () => downloadDocument({ data: id })),
+    batch: (id: string) => run(`batch:${id}`, () => downloadBatch({ data: id })),
+  };
+}
+
+type Downloads = ReturnType<typeof useDownloads>;
+
+function DocumentsPage() {
+  const { page: pageIndex, templateId } = Route.useLoaderDeps();
+  const { data: result } = useSuspenseQuery(historyPageQuery(pageIndex, templateId));
+  const navigate = useNavigate({ from: Route.fullPath });
+  const downloads = useDownloads();
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
 
   const table = useTable({
     features,
     columns,
     data: result.ok ? result.value.items : NO_ITEMS,
-    getRowId: (item) => item.document.id,
+    getRowId: entryId,
     initialState: { sorting: NEWEST_FIRST },
     // Two states per column, not three: a third click that silently goes
     // back to the API's order is hard to tell apart from a bug.
     enableSortingRemoval: false,
   });
 
-  async function onDownload(id: string) {
-    setSaving(id);
-    setFailure(null);
-
-    try {
-      const downloaded = await downloadDocument({ data: id });
-      if (downloaded.ok) {
-        saveFile(
-          downloaded.value.filename,
-          downloaded.value.contentType,
-          downloaded.value.bytes,
-        );
-        return;
-      }
-      setFailure(downloaded.failure);
-    } finally {
-      setSaving(null);
-    }
+  function toggle(batchId: string) {
+    setOpen((current) => {
+      const next = new Set(current);
+      if (next.has(batchId)) next.delete(batchId);
+      else next.add(batchId);
+      return next;
+    });
   }
-
-  const summary = summaryOf(failure);
 
   if (!result.ok) {
     return (
@@ -160,9 +212,12 @@ function DocumentsPage() {
     );
   }
 
-  const { items, page, hasNext } = result.value;
+  const { items, page, hasNext, templates } = result.value;
   const rows = table.getRowModel().rows;
   const paged = page > 0 || hasNext;
+  const summary = summaryOf(downloads.failure);
+  const filterName = templates.find((t) => t.id === templateId)?.name;
+
   const [sorted] = table.state.sorting;
   const sortedBy = sorted === undefined ? undefined : table.getColumn(sorted.id);
   const orderLabel =
@@ -171,7 +226,15 @@ function DocumentsPage() {
       : `, ordenados por ${String(sortedBy.columnDef.header).toLowerCase()}, ${
           sorted.desc ? "decrescente" : "crescente"
         }`;
-  const listLabel = `Documentos gerados${paged ? `, página ${page + 1}` : ""}${orderLabel}`;
+  const listLabel =
+    `Documentos gerados${filterName === undefined ? "" : ` do modelo ${filterName}`}` +
+    `${paged ? `, página ${page + 1}` : ""}${orderLabel}`;
+
+  function filterBy(id: string) {
+    // A new filter starts from the first page: the old page number means
+    // nothing in a different list.
+    void navigate({ search: id === "" ? {} : { modelo: id }, replace: true });
+  }
 
   return (
     <>
@@ -187,16 +250,35 @@ function DocumentsPage() {
           </p>
         )}
 
+        {(templates.length > 0 || templateId !== undefined) && (
+          <TemplateFilter templates={templates} value={templateId} onChange={filterBy} />
+        )}
+
         {items.length === 0 && page > 0 ? (
-          // A page past the end: an old link, or the last documents were on
-          // a page that has since shrunk. Not the same as having none.
+          // A page past the end: an old link, or the last entries were on a
+          // page that has since shrunk. Not the same as having none.
           <EmptyState
             icon={<IconFiles />}
             title="Esta página está vazia"
             description="Não há documentos a partir daqui."
             action={
-              <Button size="sm" nativeButton={false} render={<Link to="/documentos" />}>
+              <Button
+                size="sm"
+                nativeButton={false}
+                render={<Link to="/documentos" search={templateId === undefined ? {} : { modelo: templateId }} />}
+              >
                 Ir para a primeira página
+              </Button>
+            }
+          />
+        ) : items.length === 0 && templateId !== undefined ? (
+          <EmptyState
+            icon={<IconFiles />}
+            title="Nenhum documento deste modelo"
+            description="Nada foi gerado a partir dele ainda."
+            action={
+              <Button size="sm" variant="secondary" onClick={() => filterBy("")}>
+                Ver todos os documentos
               </Button>
             }
           />
@@ -206,11 +288,7 @@ function DocumentsPage() {
             title="Nenhum documento gerado"
             description="Abra um modelo e preencha os campos para gerar seu primeiro documento."
             action={
-              <Button
-                size="sm"
-                nativeButton={false}
-                render={<Link to="/templates" />}
-              >
+              <Button size="sm" nativeButton={false} render={<Link to="/templates" />}>
                 Ver modelos
               </Button>
             }
@@ -231,14 +309,20 @@ function DocumentsPage() {
               once.
             */}
             <ul aria-label={listLabel} className="flex flex-col gap-3 md:hidden">
-              {rows.map((row) => (
-                <DocumentCard
-                  key={row.id}
-                  item={row.original}
-                  saving={saving === row.id}
-                  onDownload={onDownload}
-                />
-              ))}
+              {rows.map(({ original: entry }) =>
+                entry.kind === "batch" ? (
+                  <BatchCard
+                    key={entryId(entry)}
+                    batch={entry.batch}
+                    templateName={entry.templateName}
+                    open={open.has(entry.batch.id)}
+                    onToggle={() => toggle(entry.batch.id)}
+                    downloads={downloads}
+                  />
+                ) : (
+                  <DocumentCard key={entryId(entry)} item={entry.item} downloads={downloads} />
+                ),
+              )}
             </ul>
 
             <div className="hidden overflow-hidden rounded-lg border border-border bg-card md:block">
@@ -286,20 +370,31 @@ function DocumentsPage() {
                     </TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
-                  {rows.map((row) => (
-                    <DocumentRow
-                      key={row.id}
-                      item={row.original}
-                      saving={saving === row.id}
-                      onDownload={onDownload}
+                {/*
+                  One tbody per entry, which a table allows: an open batch
+                  adds a second one holding its documents, and that element is
+                  what the batch's toggle points at with aria-controls.
+                */}
+                {rows.map(({ original: entry }) =>
+                  entry.kind === "batch" ? (
+                    <BatchRows
+                      key={entryId(entry)}
+                      batch={entry.batch}
+                      templateName={entry.templateName}
+                      open={open.has(entry.batch.id)}
+                      onToggle={() => toggle(entry.batch.id)}
+                      downloads={downloads}
                     />
-                  ))}
-                </TableBody>
+                  ) : (
+                    <tbody key={entryId(entry)}>
+                      <DocumentRow item={entry.item} downloads={downloads} />
+                    </tbody>
+                  ),
+                )}
               </Table>
             </div>
 
-            {paged && <Pagination page={page} hasNext={hasNext} />}
+            {paged && <Pagination page={page} hasNext={hasNext} templateId={templateId} />}
           </>
         )}
       </PageBody>
@@ -308,12 +403,62 @@ function DocumentsPage() {
 }
 
 /**
- * Previous and next, as links: each page has an address, so the browser's
- * back button, a new tab and a bookmark all work.
+ * The template filter. A native select, like the others on these screens: the
+ * browser's own is already right with a keyboard and on a phone.
  */
-function Pagination({ page, hasNext }: { readonly page: number; readonly hasNext: boolean }) {
+function TemplateFilter({
+  templates,
+  value,
+  onChange,
+}: {
+  readonly templates: readonly TemplateOption[];
+  readonly value: string | undefined;
+  readonly onChange: (templateId: string) => void;
+}) {
+  const id = useId();
+  // A filter on a template that is no longer listed (deleted since the link
+  // was made) still filters, and the select says so instead of showing "all".
+  const unlisted = value !== undefined && !templates.some((t) => t.id === value);
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+      <Label htmlFor={id}>Modelo</Label>
+      <select
+        id={id}
+        value={value ?? ""}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        className="h-9.5 w-full max-w-72 rounded-md border border-input-border bg-input px-3 text-sm text-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/20 sm:w-72"
+      >
+        <option value="">Todos os modelos</option>
+        {unlisted && <option value={value}>Modelo indisponível</option>}
+        {templates.map((template) => (
+          <option key={template.id} value={template.id}>
+            {template.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+/**
+ * Previous and next, as links: each page has an address, so the browser's
+ * back button, a new tab and a bookmark all work. The filter travels with it.
+ */
+function Pagination({
+  page,
+  hasNext,
+  templateId,
+}: {
+  readonly page: number;
+  readonly hasNext: boolean;
+  readonly templateId: string | undefined;
+}) {
   // Page 1 has no parameter, so the first page keeps one canonical address.
-  const searchFor = (index: number) => (index === 0 ? {} : { pagina: index + 1 });
+  const searchFor = (index: number) => ({
+    ...(templateId === undefined ? {} : { modelo: templateId }),
+    ...(index === 0 ? {} : { pagina: index + 1 }),
+  });
 
   return (
     <nav aria-label="Paginação" className="flex items-center justify-between gap-3">
@@ -350,98 +495,143 @@ function Pagination({ page, hasNext }: { readonly page: number; readonly hasNext
   );
 }
 
+function TemplateName({
+  templateId,
+  templateName,
+  version,
+}: {
+  readonly templateId: string;
+  readonly templateName: string | null;
+  readonly version: number;
+}) {
+  return (
+    <>
+      {templateName === null ? (
+        // The template was deleted. Saying so beats printing a bare identifier.
+        <span className="text-faint italic">modelo indisponível</span>
+      ) : (
+        <Link
+          to="/templates/$templateId"
+          params={{ templateId }}
+          className="hover:text-foreground hover:underline"
+        >
+          {templateName}
+        </Link>
+      )}
+      <span className="ml-2 font-mono text-meta text-faint">v{version}</span>
+    </>
+  );
+}
+
+function DownloadButton({
+  busy,
+  onClick,
+  label,
+  zip = false,
+  className,
+}: {
+  readonly busy: boolean;
+  readonly onClick: () => void;
+  readonly label: string;
+  readonly zip?: boolean;
+  readonly className?: string;
+}) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="secondary"
+      disabled={busy}
+      onClick={onClick}
+      aria-label={label}
+      className={className}
+    >
+      {zip ? (
+        <IconFileZip data-icon="inline-start" aria-hidden="true" />
+      ) : (
+        <IconDownload data-icon="inline-start" aria-hidden="true" />
+      )}
+      {busy ? "Preparando…" : zip ? "Baixar ZIP" : "Baixar"}
+    </Button>
+  );
+}
+
 /** One document as a card, for screens too narrow for the table. */
 function DocumentCard({
   item,
-  saving,
-  onDownload,
+  downloads,
+  nested = false,
 }: {
   readonly item: DocumentListItem;
-  readonly saving: boolean;
-  readonly onDownload: (id: string) => void;
+  readonly downloads: Downloads;
+  readonly nested?: boolean;
 }) {
   const { document, templateName } = item;
+  const name = displayName(document.filename);
 
   return (
-    <li className="flex flex-col gap-2.5 rounded-lg border border-border bg-card px-4 py-3.5">
-      <span className="text-control font-medium break-all">{displayName(document.filename)}</span>
-      <span className="text-small text-muted-foreground">
-        {templateName === null ? (
-          <span className="text-faint italic">modelo indisponível</span>
-        ) : (
-          <Link
-            to="/templates/$templateId"
-            params={{ templateId: document.templateId }}
-            className="hover:text-foreground hover:underline"
-          >
-            {templateName}
-          </Link>
-        )}
-        <span className="ml-2 font-mono text-meta text-faint">
-          v{document.templateVersion}
+    <li
+      className={cn(
+        "flex flex-col gap-2.5 rounded-lg border border-border bg-card px-4 py-3.5",
+        nested && "border-dashed bg-transparent",
+      )}
+    >
+      <span className="text-control font-medium break-all">{name}</span>
+      {!nested && (
+        <span className="text-small text-muted-foreground">
+          <TemplateName
+            templateId={document.templateId}
+            templateName={templateName}
+            version={document.templateVersion}
+          />
         </span>
-      </span>
+      )}
       <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted-foreground">
-        <time dateTime={document.createdAt.toISOString()}>
-          {shortDateTime(document.createdAt)}
-        </time>
+        <time dateTime={document.createdAt.toISOString()}>{shortDateTime(document.createdAt)}</time>
         <span className="font-mono tabular-nums">{formatBytes(document.size)}</span>
       </span>
-      <Button
-        type="button"
-        size="sm"
-        variant="secondary"
-        disabled={saving}
-        onClick={() => onDownload(document.id)}
+      <DownloadButton
+        busy={downloads.saving === `document:${document.id}`}
+        onClick={() => void downloads.document(document.id)}
+        label={`Baixar ${name}`}
         className="h-10 self-start"
-      >
-        <IconDownload data-icon="inline-start" aria-hidden="true" />
-        {saving ? "Preparando…" : "Baixar"}
-      </Button>
+      />
     </li>
   );
 }
 
 function DocumentRow({
   item,
-  saving,
-  onDownload,
+  downloads,
+  nested = false,
 }: {
   readonly item: DocumentListItem;
-  readonly saving: boolean;
-  readonly onDownload: (id: string) => void;
+  readonly downloads: Downloads;
+  readonly nested?: boolean;
 }) {
   const { document, templateName } = item;
+  const name = displayName(document.filename);
 
   return (
-    <TableRow className="border-b border-muted hover:bg-row-hover">
-      <TableCell className="px-5 py-3.5 text-control whitespace-normal">
-        {displayName(document.filename)}
+    <TableRow className={cn("border-b border-muted hover:bg-row-hover", nested && "bg-raised/40")}>
+      <TableCell className={cn("px-5 py-3.5 text-control whitespace-normal", nested && "pl-14")}>
+        {name}
       </TableCell>
 
       <TableCell className="px-5 py-3.5 text-small whitespace-normal text-muted-foreground">
-        {templateName === null ? (
-          // The template was deleted, or sits beyond the page fetched to
-          // resolve names. Saying so beats printing a bare identifier.
-          <span className="text-faint italic">modelo indisponível</span>
+        {nested ? (
+          <span className="font-mono text-meta text-faint">v{document.templateVersion}</span>
         ) : (
-          <Link
-            to="/templates/$templateId"
-            params={{ templateId: document.templateId }}
-            className="hover:text-foreground hover:underline"
-          >
-            {templateName}
-          </Link>
+          <TemplateName
+            templateId={document.templateId}
+            templateName={templateName}
+            version={document.templateVersion}
+          />
         )}
-        <span className="ml-2 font-mono text-meta text-faint">
-          v{document.templateVersion}
-        </span>
       </TableCell>
 
       <TableCell className="px-5 py-3.5 text-small text-muted-foreground">
-        <time dateTime={document.createdAt.toISOString()}>
-          {shortDateTime(document.createdAt)}
-        </time>
+        <time dateTime={document.createdAt.toISOString()}>{shortDateTime(document.createdAt)}</time>
       </TableCell>
 
       <TableCell className="px-5 py-3.5 font-mono text-caption tabular-nums text-muted-foreground">
@@ -449,17 +639,329 @@ function DocumentRow({
       </TableCell>
 
       <TableCell className="px-5 py-3.5 text-right">
+        <DownloadButton
+          busy={downloads.saving === `document:${document.id}`}
+          onClick={() => void downloads.document(document.id)}
+          label={`Baixar ${name}`}
+        />
+      </TableCell>
+    </TableRow>
+  );
+}
+
+/** The button that opens and closes a batch, for the row and for the card. */
+function BatchToggle({
+  batch,
+  open,
+  onToggle,
+  controls,
+  children,
+}: {
+  readonly batch: Batch;
+  readonly open: boolean;
+  readonly onToggle: () => void;
+  readonly controls: string;
+  readonly children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      aria-controls={controls}
+      aria-label={`${open ? "Ocultar" : "Mostrar"} os ${batchCount(batch.documents)} do lote ${batch.name}`}
+      className="group -mx-1.5 flex min-w-0 items-start gap-2 rounded-md px-1.5 py-0.5 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
+    >
+      <IconChevronRight
+        aria-hidden="true"
+        className={cn(
+          "mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform group-hover:text-foreground",
+          open && "rotate-90",
+        )}
+      />
+      {children}
+    </button>
+  );
+}
+
+function BatchLabel({ batch }: { readonly batch: Batch }) {
+  return (
+    <span className="flex min-w-0 flex-col gap-1">
+      <span className="flex items-center gap-2 text-control font-medium">
+        <IconStack2 aria-hidden="true" className="size-4 shrink-0 text-docs-soft" />
+        <span className="break-words">{batch.name}</span>
+      </span>
+      <span className="self-start rounded-full border border-docs/35 bg-docs/10 px-2 py-0.5 text-label text-docs-soft">
+        Lote · {batchCount(batch.documents)}
+      </span>
+    </span>
+  );
+}
+
+/** A batch in the table: its row, and its documents below it once opened. */
+function BatchRows({
+  batch,
+  templateName,
+  open,
+  onToggle,
+  downloads,
+}: {
+  readonly batch: Batch;
+  readonly templateName: string | null;
+  readonly open: boolean;
+  readonly onToggle: () => void;
+  readonly downloads: Downloads;
+}) {
+  const contentId = `batch-${batch.id}-table`;
+
+  return (
+    <>
+      <tbody>
+      <TableRow className="border-b border-muted hover:bg-row-hover">
+        <TableCell className="px-5 py-3.5 whitespace-normal">
+          <BatchToggle batch={batch} open={open} onToggle={onToggle} controls={contentId}>
+            <BatchLabel batch={batch} />
+          </BatchToggle>
+        </TableCell>
+        <TableCell className="px-5 py-3.5 text-small whitespace-normal text-muted-foreground">
+          <TemplateName templateId={batch.templateId} templateName={templateName} version={batch.templateVersion} />
+        </TableCell>
+        <TableCell className="px-5 py-3.5 text-small text-muted-foreground">
+          <time dateTime={batch.createdAt.toISOString()}>{shortDateTime(batch.createdAt)}</time>
+        </TableCell>
+        <TableCell className="px-5 py-3.5 font-mono text-caption tabular-nums text-muted-foreground">
+          {formatBytes(batch.size)}
+        </TableCell>
+        <TableCell className="px-5 py-3.5 text-right">
+          <span className="inline-flex items-center gap-1.5">
+            <DownloadButton
+              busy={downloads.saving === `batch:${batch.id}`}
+              onClick={() => void downloads.batch(batch.id)}
+              label={`Baixar o lote ${batch.name} como ZIP`}
+              zip
+            />
+            <DeleteBatch batch={batch} />
+          </span>
+        </TableCell>
+      </TableRow>
+      </tbody>
+      {open && <BatchDocumentRows id={contentId} batch={batch} downloads={downloads} />}
+    </>
+  );
+}
+
+/** The documents of an open batch, as indented rows, a page at a time. */
+function BatchDocumentRows({
+  id,
+  batch,
+  downloads,
+}: {
+  readonly id: string;
+  readonly batch: Batch;
+  readonly downloads: Downloads;
+}) {
+  const query = useInfiniteQuery(batchDocumentsQuery(batch.id));
+  const pages = query.data?.pages ?? [];
+  const failed = pages.find((p) => !p.ok);
+  const items = pages.flatMap((p) => (p.ok ? p.value.items : []));
+
+  const note = (content: ReactNode) => (
+    <TableRow className="border-b border-muted bg-raised/40 hover:bg-raised/40">
+      <TableCell colSpan={5} className="py-3 pr-5 pl-14 text-small text-muted-foreground">
+        {content}
+      </TableCell>
+    </TableRow>
+  );
+
+  return (
+    // A body of its own, so aria-controls on the toggle names something real.
+    <tbody id={id} aria-label={`Documentos do lote ${batch.name}`}>
+      {query.isPending
+        ? note("Carregando documentos…")
+        : failed !== undefined && !failed.ok
+          ? note(<span role="alert">{summaryOf(failed.failure) ?? "Não foi possível carregar."}</span>)
+          : items.length === 0
+            ? note("Este lote ainda não tem documentos.")
+            : items.map((item) => (
+                <DocumentRow key={item.document.id} item={item} downloads={downloads} nested />
+              ))}
+      {query.hasNextPage &&
+        note(
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={query.isFetchingNextPage}
+            onClick={() => void query.fetchNextPage()}
+          >
+            {query.isFetchingNextPage ? "Carregando…" : "Carregar mais documentos"}
+          </Button>,
+        )}
+    </tbody>
+  );
+}
+
+/** A batch as a card, for screens too narrow for the table. */
+function BatchCard({
+  batch,
+  templateName,
+  open,
+  onToggle,
+  downloads,
+}: {
+  readonly batch: Batch;
+  readonly templateName: string | null;
+  readonly open: boolean;
+  readonly onToggle: () => void;
+  readonly downloads: Downloads;
+}) {
+  const contentId = `batch-${batch.id}-cards`;
+
+  return (
+    <li className="flex flex-col gap-2.5 rounded-lg border border-docs/30 bg-card px-4 py-3.5">
+      <BatchToggle batch={batch} open={open} onToggle={onToggle} controls={contentId}>
+        <BatchLabel batch={batch} />
+      </BatchToggle>
+      <span className="text-small text-muted-foreground">
+        <TemplateName templateId={batch.templateId} templateName={templateName} version={batch.templateVersion} />
+      </span>
+      <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted-foreground">
+        <time dateTime={batch.createdAt.toISOString()}>{shortDateTime(batch.createdAt)}</time>
+        <span className="font-mono tabular-nums">{formatBytes(batch.size)}</span>
+      </span>
+      <span className="flex items-center gap-2">
+        <DownloadButton
+          busy={downloads.saving === `batch:${batch.id}`}
+          onClick={() => void downloads.batch(batch.id)}
+          label={`Baixar o lote ${batch.name} como ZIP`}
+          zip
+          className="h-10"
+        />
+        <DeleteBatch batch={batch} />
+      </span>
+      {open && <BatchDocumentCards id={contentId} batch={batch} downloads={downloads} />}
+    </li>
+  );
+}
+
+function BatchDocumentCards({
+  id,
+  batch,
+  downloads,
+}: {
+  readonly id: string;
+  readonly batch: Batch;
+  readonly downloads: Downloads;
+}) {
+  const query = useInfiniteQuery(batchDocumentsQuery(batch.id));
+  const pages = query.data?.pages ?? [];
+  const failed = pages.find((p) => !p.ok);
+  const items = pages.flatMap((p) => (p.ok ? p.value.items : []));
+
+  return (
+    <div id={id} className="flex flex-col gap-2 pt-1">
+      {query.isPending ? (
+        <p className="text-small text-muted-foreground">Carregando documentos…</p>
+      ) : failed !== undefined && !failed.ok ? (
+        <p role="alert" className="text-small text-destructive-soft">
+          {summaryOf(failed.failure) ?? "Não foi possível carregar."}
+        </p>
+      ) : items.length === 0 ? (
+        <p className="text-small text-muted-foreground">Este lote ainda não tem documentos.</p>
+      ) : (
+        <ul aria-label={`Documentos do lote ${batch.name}`} className="flex flex-col gap-2">
+          {items.map((item) => (
+            <DocumentCard key={item.document.id} item={item} downloads={downloads} nested />
+          ))}
+        </ul>
+      )}
+      {query.hasNextPage && (
         <Button
           type="button"
           size="sm"
-          variant="secondary"
-          disabled={saving}
-          onClick={() => onDownload(document.id)}
+          variant="ghost"
+          disabled={query.isFetchingNextPage}
+          onClick={() => void query.fetchNextPage()}
+          className="h-10 self-start"
         >
-          <IconDownload data-icon="inline-start" aria-hidden="true" />
-          {saving ? "Preparando…" : "Baixar"}
+          {query.isFetchingNextPage ? "Carregando…" : "Carregar mais documentos"}
         </Button>
-      </TableCell>
-    </TableRow>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Deleting a batch, behind a confirmation that says what goes with it: every
+ * document in it. Unlike a template, nothing of a batch stays behind.
+ */
+function DeleteBatch({ batch }: { readonly batch: Batch }) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  // Mounted only once asked for: Base UI renders its root through a portal,
+  // which does not survive hydration here.
+  const [mounted, setMounted] = useState(false);
+  const [failure, setFailure] = useState<Failure | null>(null);
+
+  const remove = useMutation({ mutationFn: (id: string) => deleteBatch({ data: id }) });
+
+  async function onConfirm() {
+    setFailure(null);
+    const result = await remove.mutateAsync(batch.id);
+    if (!result.ok) {
+      setFailure(result.failure);
+      return;
+    }
+    setOpen(false);
+    queryClient.removeQueries({ queryKey: queryKeys.batchDocuments(batch.id) });
+    await invalidateAfter(queryClient, "batchChanged");
+  }
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label={`Excluir o lote ${batch.name}`}
+        onClick={() => {
+          setMounted(true);
+          setOpen(true);
+        }}
+        // 40px on a phone: an icon-only button is the easiest target to miss.
+        className="text-muted-foreground hover:text-destructive max-md:size-10"
+      >
+        <IconTrash aria-hidden="true" />
+      </Button>
+
+      {mounted && (
+        <AlertDialog open={open} onOpenChange={setOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Excluir o lote “{batch.name}”?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {batch.documents === 0
+                  ? "O lote está vazio e sai do histórico."
+                  : `Os ${batchCount(batch.documents)} deste lote são apagados junto, com os valores preenchidos neles. Não há como desfazer.`}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+
+            {failure && (
+              <p role="alert" className="flex items-start gap-1.5 text-caption text-destructive">
+                <IconAlertCircle aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+                <span>{summaryOf(failure)}</span>
+              </p>
+            )}
+
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={remove.isPending}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction variant="destructive" disabled={remove.isPending} onClick={onConfirm}>
+                {remove.isPending ? "Excluindo…" : "Excluir lote"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+    </>
   );
 }

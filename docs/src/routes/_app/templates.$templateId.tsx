@@ -388,6 +388,14 @@ function GenerateScreen({
               </span>
             </>
           )}
+          <Dot />
+          <Link
+            to="/documentos"
+            search={{ modelo: template.id }}
+            className="text-primary-text underline-offset-2 hover:underline"
+          >
+            Ver documentos deste modelo
+          </Link>
         </div>
 
         {pinned && (

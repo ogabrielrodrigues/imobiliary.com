@@ -6,6 +6,7 @@
  * along with it.
  */
 
+import type { Batch } from "../domain/batch.ts";
 import type { GeneratedDocument } from "../domain/document.ts";
 import type { DashboardStats } from "../domain/stats.ts";
 
@@ -34,6 +35,30 @@ export interface DocumentPage {
   readonly page: number;
   readonly pageSize: number;
   readonly hasNext: boolean;
+}
+
+/** One entry of the history, with the name of the template behind it. */
+export type HistoryItem =
+  | { readonly kind: "document"; readonly item: DocumentListItem }
+  | { readonly kind: "batch"; readonly batch: Batch; readonly templateName: string | null };
+
+/** A template as a filter offers it. */
+export interface TemplateOption {
+  readonly id: string;
+  readonly name: string;
+}
+
+/**
+ * One page of the history. `templates` lists the active templates for the
+ * filter, read in the same round trip because the page needs both.
+ */
+export interface HistoryPage {
+  readonly items: readonly HistoryItem[];
+  /** Zero-based. */
+  readonly page: number;
+  readonly pageSize: number;
+  readonly hasNext: boolean;
+  readonly templates: readonly TemplateOption[];
 }
 
 /** Everything the dashboard shows: the figures, and the latest documents. */

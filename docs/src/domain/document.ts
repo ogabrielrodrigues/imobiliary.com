@@ -21,6 +21,8 @@ export interface GeneratedDocument {
   readonly createdAt: Date;
   /** Path to the download endpoint, relative to the API. */
   readonly downloadUrl: string;
+  /** The batch it was generated in, or null for one generated on its own. */
+  readonly batchId: string | null;
 }
 
 export interface GenerateInput {
@@ -29,6 +31,8 @@ export interface GenerateInput {
   readonly version?: number;
   readonly filename?: string;
   readonly data: Readonly<Record<string, string>>;
+  /** Joins the document to a batch of the same template. */
+  readonly batchId?: string;
 }
 
 /**

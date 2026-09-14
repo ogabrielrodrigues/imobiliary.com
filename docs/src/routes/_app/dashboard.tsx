@@ -328,9 +328,19 @@ function TopTemplates({ stats }: { readonly stats: DashboardStats }) {
                     {usage.name}
                   </Link>
                 )}
-                <span className="shrink-0 font-mono text-caption tabular-nums text-muted-foreground">
+                {/*
+                  The count opens Documentos filtered to this template, the
+                  place to see which documents those are. Deleted templates
+                  too: their documents stay in the history.
+                */}
+                <Link
+                  to="/documentos"
+                  search={{ modelo: usage.templateId }}
+                  aria-label={`Ver os documentos de ${usage.name}`}
+                  className="shrink-0 font-mono text-caption tabular-nums text-muted-foreground hover:text-foreground hover:underline"
+                >
                   {plural(usage.documents, "documento", "documentos")}
-                </span>
+                </Link>
               </div>
               <div aria-hidden="true" className="h-1.5 overflow-hidden rounded-full bg-muted">
                 <div

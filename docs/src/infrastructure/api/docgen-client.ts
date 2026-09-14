@@ -12,13 +12,16 @@
 
 import type {
   AuthGateway,
+  BatchGateway,
   CallContext,
+  DocumentFilter,
   DocumentGateway,
   FileContent,
   Page,
   StatsGateway,
   TemplateGateway,
 } from "../../application/ports.ts";
+import type { Batch, HistoryEntry } from "../../domain/batch.ts";
 import type { GeneratedDocument, GenerateInput } from "../../domain/document.ts";
 import type { DashboardStats, StatsPeriod } from "../../domain/stats.ts";
 import type {
@@ -86,6 +89,24 @@ interface ApiDocument {
   data: Record<string, string>;
   created_at: string;
   download_url: string;
+  batch_id: string | null;
+}
+
+interface ApiBatch {
+  id: string;
+  template_id: string;
+  template_version: number;
+  name: string;
+  documents: number;
+  size: number;
+  created_at: string;
+  download_url: string;
+}
+
+interface ApiHistoryItem {
+  kind: "document" | "batch";
+  document?: ApiDocument;
+  batch?: ApiBatch;
 }
 
 interface ApiStats {
@@ -110,6 +131,7 @@ export interface DocgenClient {
   readonly auth: AuthGateway;
   readonly templates: TemplateGateway;
   readonly documents: DocumentGateway;
+  readonly batches: BatchGateway;
   readonly stats: StatsGateway;
 }
 
@@ -120,7 +142,63 @@ export function createDocgenClient(options: TransportOptions): DocgenClient {
     auth: createAuthGateway(http),
     templates: createTemplateGateway(http),
     documents: createDocumentGateway(http),
+    batches: createBatchGateway(http),
     stats: createStatsGateway(http),
+  };
+}
+
+/** A page plus filters as a query string. Absent filters are left out. */
+function listQuery(page: Page | undefined, filters: Record<string, string | undefined>): string {
+  const params = new URLSearchParams(pageQuery(page).slice(1));
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== "") params.set(key, value);
+  }
+  const query = params.toString();
+  return query === "" ? "" : `?${query}`;
+}
+
+function createBatchGateway(http: Transport): BatchGateway {
+  return {
+    async create(ctx, input): Promise<Batch> {
+      const payload: Record<string, unknown> = { template_id: input.templateId, name: input.name };
+      if (input.version !== undefined) payload["version"] = input.version;
+      return toBatch(await http.json<ApiBatch>(ctx, "POST", "/v1/batches", payload));
+    },
+
+    async get(ctx, id): Promise<Batch> {
+      return toBatch(await http.json<ApiBatch>(ctx, "GET", `/v1/batches/${encodeSegment(id)}`));
+    },
+
+    async history(ctx, page, filter): Promise<HistoryEntry[]> {
+      const body = await http.json<{ items: ApiHistoryItem[] }>(
+        ctx,
+        "GET",
+        `/v1/history${listQuery(page, { template_id: filter?.templateId })}`,
+      );
+      return body.items.flatMap((item): HistoryEntry[] => {
+        if (item.kind === "batch" && item.batch !== undefined) {
+          return [{ kind: "batch", batch: toBatch(item.batch) }];
+        }
+        if (item.kind === "document" && item.document !== undefined) {
+          return [{ kind: "document", document: toDocument(item.document) }];
+        }
+        // A kind this client does not know is skipped rather than guessed at.
+        return [];
+      });
+    },
+
+    async download(ctx, id): Promise<FileContent> {
+      const response = await http.send(ctx, "GET", `/v1/batches/${encodeSegment(id)}/download`);
+      return {
+        filename: filenameFrom(response.headers.get("content-disposition")),
+        contentType: response.headers.get("content-type") ?? "application/zip",
+        bytes: new Uint8Array(await response.arrayBuffer()),
+      };
+    },
+
+    async remove(ctx, id): Promise<void> {
+      await http.send(ctx, "DELETE", `/v1/batches/${encodeSegment(id)}`);
+    },
   };
 }
 
@@ -313,11 +391,11 @@ function createTemplateGateway(http: Transport): TemplateGateway {
 
 function createDocumentGateway(http: Transport): DocumentGateway {
   return {
-    async list(ctx: CallContext, page?: Page): Promise<GeneratedDocument[]> {
+    async list(ctx: CallContext, page?: Page, filter?: DocumentFilter): Promise<GeneratedDocument[]> {
       const body = await http.json<{ items: ApiDocument[] }>(
         ctx,
         "GET",
-        `/v1/documents${pageQuery(page)}`,
+        `/v1/documents${listQuery(page, { template_id: filter?.templateId, batch_id: filter?.batchId })}`,
       );
       return body.items.map(toDocument);
     },
@@ -344,6 +422,7 @@ function createDocumentGateway(http: Transport): DocumentGateway {
       // "use the latest", and an absent filename as "pick one".
       if (input.version !== undefined) payload["version"] = input.version;
       if (input.filename !== undefined) payload["filename"] = input.filename;
+      if (input.batchId !== undefined) payload["batch_id"] = input.batchId;
 
       return toDocument(
         await http.json<ApiDocument>(ctx, "POST", "/v1/documents", payload),
@@ -439,6 +518,20 @@ function toDocument(body: ApiDocument): GeneratedDocument {
     filename: body.filename,
     size: body.size,
     data: body.data,
+    createdAt: new Date(body.created_at),
+    downloadUrl: body.download_url,
+    batchId: body.batch_id ?? null,
+  };
+}
+
+function toBatch(body: ApiBatch): Batch {
+  return {
+    id: body.id,
+    templateId: body.template_id,
+    templateVersion: body.template_version,
+    name: body.name,
+    documents: body.documents,
+    size: body.size,
     createdAt: new Date(body.created_at),
     downloadUrl: body.download_url,
   };

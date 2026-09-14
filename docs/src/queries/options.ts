@@ -7,10 +7,10 @@
  * screens branch on `result.ok` exactly as they did with loader data.
  */
 
-import { queryOptions, type QueryClient } from "@tanstack/react-query";
+import { infiniteQueryOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 
 import { getDashboard } from "../server/dashboard.ts";
-import { listDocuments } from "../server/documents.ts";
+import { getHistory, listBatchDocuments } from "../server/history.ts";
 import { getTemplateContent, listTemplates } from "../server/templates.ts";
 import type { StatsPeriod } from "../domain/stats.ts";
 import { queryKeys, staleAfter, type Change } from "./keys.ts";
@@ -42,10 +42,24 @@ export function templateContentQuery(id: string, version: number | undefined) {
   });
 }
 
-export function documentPageQuery(page: number) {
+export function historyPageQuery(page: number, templateId: string | undefined) {
   return queryOptions({
-    queryKey: queryKeys.documentPage(page),
-    queryFn: () => listDocuments({ data: { page } }),
+    queryKey: queryKeys.historyPage(page, templateId),
+    queryFn: () =>
+      getHistory({ data: { page, ...(templateId === undefined ? {} : { templateId }) } }),
+  });
+}
+
+/**
+ * The documents of one batch, a page at a time. Read only when the batch's row
+ * is opened, so a history of large batches costs nothing until someone looks.
+ */
+export function batchDocumentsQuery(batchId: string) {
+  return infiniteQueryOptions({
+    queryKey: queryKeys.batchDocuments(batchId),
+    queryFn: ({ pageParam }) => listBatchDocuments({ data: { batchId, page: pageParam } }),
+    initialPageParam: 0,
+    getNextPageParam: (last) => (last.ok && last.value.hasNext ? last.value.page + 1 : undefined),
   });
 }
 

@@ -5,9 +5,7 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import type { FileContent } from "../application/ports.ts";
-import { collectPages } from "../application/paging.ts";
 import { attempt, type Result } from "../application/result.ts";
-import type { DocumentListItem, DocumentPage } from "../application/views.ts";
 import {
   validateDocumentData,
   type GeneratedDocument,
@@ -15,61 +13,8 @@ import {
 } from "../domain/document.ts";
 import { assertSameOrigin, callContext, docgen, sessions } from "./runtime.ts";
 
-/** Documents per page of the list. */
-export const DOCUMENTS_PAGE_SIZE = 20;
-
-/** A page far past any real account; it only bounds the offset sent on. */
-const MAX_PAGE = 10_000;
-
-/**
- * Lists one page of generated documents, each with the name of the template
- * behind it.
- *
- * The API returns only the template's identifier, and an identifier tells a
- * person nothing. The join happens here, in one extra call, rather than as one
- * call per row from the browser.
- *
- * One row more than the page is requested: the API reports no total, and that
- * extra row is how the list knows whether there is a next page.
- */
-export const listDocuments = createServerFn({ method: "GET" })
-  .validator((input: { page?: number }): { page: number } => ({
-    page:
-      Number.isInteger(input.page) && (input.page ?? 0) >= 0
-        ? Math.min(input.page ?? 0, MAX_PAGE)
-        : 0,
-  }))
-  .handler(
-    async ({ data }): Promise<Result<DocumentPage>> =>
-      attempt(() =>
-        sessions().authorize(callContext(), async (ctx) => {
-          const [documents, templates] = await Promise.all([
-            docgen().documents.list(ctx, {
-              limit: DOCUMENTS_PAGE_SIZE + 1,
-              offset: data.page * DOCUMENTS_PAGE_SIZE,
-            }),
-            // Every template, not the first page: a document whose template sat
-            // beyond it used to show "modelo indisponível" for a template that
-            // exists. Only a deleted template is unnamed now.
-            collectPages((page) => docgen().templates.list(ctx, page)),
-          ]);
-
-          const names = new Map(templates.items.map((t) => [t.id, t.name]));
-
-          return {
-            items: documents.slice(0, DOCUMENTS_PAGE_SIZE).map(
-              (document): DocumentListItem => ({
-                document,
-                templateName: names.get(document.templateId) ?? null,
-              }),
-            ),
-            page: data.page,
-            pageSize: DOCUMENTS_PAGE_SIZE,
-            hasNext: documents.length > DOCUMENTS_PAGE_SIZE,
-          };
-        }),
-      ),
-  );
+// The documents list is now the history: see server/history.ts, which pages
+// loose documents and batches together.
 
 /**
  * Renders a document.
