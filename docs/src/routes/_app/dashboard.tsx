@@ -27,6 +27,7 @@ import {
   type DashboardStats,
   type StatsPeriod,
 } from "@/domain/stats";
+import { displayName } from "@/domain/document-name";
 import { saveFile } from "@/lib/download";
 import { relativeDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -393,7 +394,7 @@ function RecentDocuments({ recent }: { readonly recent: readonly DocumentListIte
         {recent.map(({ document, templateName }) => (
           <li key={document.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
             <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="truncate text-small font-medium">{document.filename}</span>
+              <span className="truncate text-small font-medium">{displayName(document.filename)}</span>
               <span className="truncate text-caption text-muted-foreground">
                 {templateName ?? "modelo indisponível"} ·{" "}
                 <time dateTime={document.createdAt.toISOString()}>
@@ -407,7 +408,7 @@ function RecentDocuments({ recent }: { readonly recent: readonly DocumentListIte
               variant="secondary"
               disabled={saving === document.id}
               onClick={() => onDownload(document.id)}
-              aria-label={`Baixar ${document.filename}`}
+              aria-label={`Baixar ${displayName(document.filename)}`}
               className="max-md:h-10"
             >
               <IconDownload data-icon="inline-start" aria-hidden="true" />

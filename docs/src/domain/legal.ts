@@ -57,9 +57,10 @@ export const PRIVACY_POLICY: LegalDocument = {
   title: "Política de Privacidade",
   // 1.1 names Resend as a processor and declares the international transfer
   // that sending a password-reset mail entails. The terms did not change, so
-  // their version did not either.
-  version: "1.3",
-  effectiveFrom: "2026-09-11",
+  // their version did not either. 1.4 lists the third local-storage record:
+  // which field completes a document's name, per template.
+  version: "1.4",
+  effectiveFrom: "2026-09-14",
 };
 
 export const TERMS_OF_USE: LegalDocument = {

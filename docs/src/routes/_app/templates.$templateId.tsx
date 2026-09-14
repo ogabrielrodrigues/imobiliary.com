@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
@@ -30,7 +30,18 @@ import { Button } from "@/components/ui/button";
 import { placeholdersOf, type Block, type Marks } from "@/domain/block";
 import type { EditingState } from "@/components/document-preview";
 import type { ReactNode } from "react";
-import { countFilled, suggestFilename, validateDocumentData } from "@/domain/document";
+import { countFilled, validateDocumentData } from "@/domain/document";
+import {
+  decodeNameSource,
+  defaultNameSource,
+  displayName,
+  encodeNameSource,
+  suggestDocumentName,
+  toFilename,
+  validateDocumentName,
+  type NameSource,
+} from "@/domain/document-name";
+import { loadNameSource, saveNameSource } from "@/lib/document-name-storage";
 import type { GeneratedDocument } from "@/domain/document";
 import { groupPlaceholders, placeholderSyntax } from "@/domain/placeholder";
 import {
@@ -147,20 +158,34 @@ function GenerateScreen({
     typed. Field names are `data.<placeholder>`, the same names the domain and
     the API give their errors, so every error lands on its field unchanged.
   */
+  // Which field completes the document's name. The server render cannot read
+  // the browser's storage, so it starts from the default and the remembered
+  // choice is applied once mounted; reading it during render would hydrate a
+  // different select than the server drew.
+  const [nameSource, setNameSource] = useState<NameSource>(() => defaultNameSource(placeholders));
+  // Once the name is typed by hand, the suggestion stops overwriting it.
+  const [nameEdited, setNameEdited] = useState(false);
+  const [today] = useState(() => new Date());
+
   const form = useForm({
     defaultValues: {
+      filename: suggestDocumentName(template.name, defaultNameSource(placeholders), {}, today),
       data: Object.fromEntries(placeholders.map((name) => [name, ""])) as Record<string, string>,
     },
     validationLogic: blurThenChange,
     validators: {
-      onDynamic: ({ value }) => formErrors(validateDocumentData(placeholders, value.data)),
+      onDynamic: ({ value }) =>
+        formErrors([
+          ...(validateDocumentData(placeholders, value.data)?.fields ?? []),
+          ...validateDocumentName(value.filename),
+        ]),
     },
     onSubmit: async ({ value }) => {
       setFailure(null);
       const result = await generateDocument({
         data: {
           templateId: template.id,
-          filename: suggestFilename(template.name),
+          filename: toFilename(value.filename),
           data: value.data,
           placeholders,
           // Sent only when a version is actually pinned. Passing the latest
@@ -189,6 +214,32 @@ function GenerateScreen({
     form.store,
     (state) => state.submissionAttempts > 0 && !state.isValid,
   );
+
+  const suggestion = suggestDocumentName(template.name, nameSource, values, today);
+
+  useEffect(() => {
+    const remembered = loadNameSource(template.id, placeholders);
+    if (remembered !== null) setNameSource(remembered);
+    // Only on mount: placeholders belong to the version, and the screen
+    // remounts whenever the version changes.
+  }, [template.id]);
+
+  // The suggestion follows what is typed into the chosen field until the name
+  // has been edited by hand.
+  useEffect(() => {
+    if (!nameEdited && form.getFieldValue("filename") !== suggestion) {
+      form.setFieldValue("filename", suggestion);
+    }
+  }, [form, nameEdited, suggestion]);
+
+  function chooseNameSource(encoded: string) {
+    const source = decodeNameSource(encoded, placeholders);
+    if (source === null) return;
+    setNameSource(source);
+    saveNameSource(template.id, source);
+    // Choosing what completes the name is asking for the suggestion back.
+    setNameEdited(false);
+  }
 
   const filled = countFilled(placeholders, values);
   const missing = new Set(
@@ -395,6 +446,31 @@ function GenerateScreen({
           />
         )}
 
+        <DocumentNameRow
+          placeholders={placeholders}
+          source={nameSource}
+          onSourceChange={chooseNameSource}
+          canRestore={nameEdited && form.getFieldValue("filename") !== suggestion}
+          onRestore={() => setNameEdited(false)}
+        >
+          <form.Field name="filename">
+            {(field) => (
+              <BoundFormField
+                field={field}
+                submitted={submitted}
+                serverError={messageFor(failure, "filename")}
+                onEdit={() => {
+                  setFailure(null);
+                  setNameEdited(true);
+                }}
+                label="Nome do documento"
+                autoComplete="off"
+                hint="É o nome que aparece em Documentos e no arquivo baixado."
+              />
+            )}
+          </form.Field>
+        </DocumentNameRow>
+
         <div className="grid max-w-5xl gap-5">
           {previewUnavailable ? (
             <FallbackForm placeholders={placeholders} renderField={boundInput} />
@@ -417,6 +493,74 @@ function GenerateScreen({
         </div>
       </PageBody>
     </>
+  );
+}
+
+/**
+ * The document's name and what completes it.
+ *
+ * A native select, like the version picker: grouped placeholders become
+ * optgroups, and the browser's own control is already right with a keyboard
+ * and on a phone.
+ */
+function DocumentNameRow({
+  placeholders,
+  source,
+  onSourceChange,
+  canRestore,
+  onRestore,
+  children,
+}: {
+  readonly placeholders: readonly string[];
+  readonly source: NameSource;
+  readonly onSourceChange: (encoded: string) => void;
+  readonly canRestore: boolean;
+  readonly onRestore: () => void;
+  readonly children: ReactNode;
+}) {
+  return (
+    <div className="flex max-w-3xl flex-col gap-2">
+      <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
+        <div className="min-w-64 flex-1">{children}</div>
+        <label className="flex flex-col gap-1.5 text-small">
+          <span className="font-medium text-foreground">Completar com</span>
+          <select
+            value={encodeNameSource(source)}
+            onChange={(event) => onSourceChange(event.currentTarget.value)}
+            className="h-9.5 rounded-md border border-input-border bg-input px-2.5 text-small text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/20"
+          >
+            {groupPlaceholders(placeholders).map((group) =>
+              group.label === null ? (
+                group.fields.map((field) => (
+                  <option key={field.name} value={`field:${field.name}`}>
+                    {field.label}
+                  </option>
+                ))
+              ) : (
+                <optgroup key={group.key ?? "__loose"} label={group.label}>
+                  {group.fields.map((field) => (
+                    <option key={field.name} value={`field:${field.name}`}>
+                      {field.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ),
+            )}
+            <option value="date">Data de hoje</option>
+            <option value="none">Nada, só o nome do modelo</option>
+          </select>
+        </label>
+      </div>
+      {canRestore && (
+        <button
+          type="button"
+          onClick={onRestore}
+          className="self-start text-caption text-muted-foreground underline underline-offset-2 hover:text-foreground"
+        >
+          Usar a sugestão
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -818,7 +962,7 @@ function GeneratedCard({
     >
       <DocxIcon size={30} />
       <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-sm font-semibold">{document.filename}</span>
+        <span className="text-sm font-semibold">{displayName(document.filename)}</span>
         <span className="text-xs text-faint">
           {formatBytes(document.size)} · versão {document.templateVersion}
         </span>

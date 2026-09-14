@@ -171,12 +171,14 @@ function PrivacyPolicyPage() {
           consentimento para usá-lo; apenas informamos.
         </P>
         <P>
-          Guardamos ainda, no armazenamento local do seu navegador, até dois
-          registros: um indicando que você já dispensou o aviso de cookies, e
+          Guardamos ainda, no armazenamento local do seu navegador, até três
+          registros: um indicando que você já dispensou o aviso de cookies;
           outro com as suas preferências de aparência e acessibilidade (tema,
           tamanho do texto, contraste e animações), se você alterar alguma em
-          Ajustes. Nenhum
-          deles identifica ninguém, e nenhum é enviado a nós.
+          Ajustes; e um terceiro com o campo que você escolheu, em cada modelo,
+          para completar o nome dos documentos gerados. Esse último guarda só o
+          nome do campo, nunca o que foi preenchido nele. Nenhum deles
+          identifica ninguém, e nenhum é enviado a nós.
         </P>
         <P>
           Não usamos cookies de análise, de publicidade ou de terceiros. Não há

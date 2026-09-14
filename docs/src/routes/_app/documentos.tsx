@@ -39,6 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { displayName } from "@/domain/document-name";
 import { formatBytes } from "@/domain/template";
 import { saveFile } from "@/lib/download";
 import { shortDateTime } from "@/lib/format";
@@ -363,7 +364,7 @@ function DocumentCard({
 
   return (
     <li className="flex flex-col gap-2.5 rounded-lg border border-border bg-card px-4 py-3.5">
-      <span className="text-control font-medium break-all">{document.filename}</span>
+      <span className="text-control font-medium break-all">{displayName(document.filename)}</span>
       <span className="text-small text-muted-foreground">
         {templateName === null ? (
           <span className="text-faint italic">modelo indisponível</span>
@@ -415,7 +416,7 @@ function DocumentRow({
   return (
     <TableRow className="border-b border-muted hover:bg-row-hover">
       <TableCell className="px-5 py-3.5 text-control whitespace-normal">
-        {document.filename}
+        {displayName(document.filename)}
       </TableCell>
 
       <TableCell className="px-5 py-3.5 text-small whitespace-normal text-muted-foreground">
