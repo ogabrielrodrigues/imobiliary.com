@@ -32,7 +32,7 @@ const MAX_TIME_ZONE_LENGTH = 64;
  * default, and the zone goes to the API, which has the last word on it.
  */
 export const getDashboard = createServerFn({ method: "GET" })
-  .inputValidator(
+  .validator(
     (input: { days?: number; timeZone?: string }): { days: StatsPeriod; timeZone: string } => ({
       days: isStatsPeriod(input.days) ? input.days : DEFAULT_STATS_PERIOD,
       timeZone:

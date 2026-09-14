@@ -39,7 +39,7 @@ const MAX_PAGE = 10_000;
  * extra row is how the list knows whether there is a next page.
  */
 export const listDocuments = createServerFn({ method: "GET" })
-  .inputValidator((input: { page?: number }): { page: number } => ({
+  .validator((input: { page?: number }): { page: number } => ({
     page:
       Number.isInteger(input.page) && (input.page ?? 0) >= 0
         ? Math.min(input.page ?? 0, MAX_PAGE)
@@ -82,7 +82,7 @@ export const listDocuments = createServerFn({ method: "GET" })
  * without a round trip. The API validates independently and has the last word.
  */
 export const generateDocument = createServerFn({ method: "POST" })
-  .inputValidator(
+  .validator(
     (input: GenerateInput & { placeholders: readonly string[] }) => input,
   )
   .handler(
@@ -110,7 +110,7 @@ export const generateDocument = createServerFn({ method: "POST" })
  * page, so a plain link to it was never an option.
  */
 export const downloadDocument = createServerFn({ method: "GET" })
-  .inputValidator((id: string) => id)
+  .validator((id: string) => id)
   .handler(
     async ({ data }): Promise<Result<FileContent>> =>
       attempt(() =>

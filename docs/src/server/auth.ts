@@ -40,7 +40,7 @@ export const ACCOUNT_DELETION_CONFIRMATION = "EXCLUIR";
  * returns nothing that could tell the two apart, and neither does this.
  */
 export const register = createServerFn({ method: "POST" })
-  .inputValidator((input: RegistrationInput) => input)
+  .validator((input: RegistrationInput) => input)
   .handler(async ({ data }): Promise<Result<null>> =>
     attempt(async () => {
       assertSameOrigin();
@@ -61,7 +61,7 @@ export const register = createServerFn({ method: "POST" })
 
 /** Exchanges credentials for a session and seals it into the cookie. */
 export const login = createServerFn({ method: "POST" })
-  .inputValidator((input: LoginInput) => input)
+  .validator((input: LoginInput) => input)
   .handler(async ({ data }): Promise<Result<User>> =>
     attempt(async () => {
       assertSameOrigin();
@@ -134,7 +134,7 @@ export const exportAccount = createServerFn({ method: "POST" }).handler(
  * send the browser back to a dashboard that can only fail.
  */
 export const deleteAccount = createServerFn({ method: "POST" })
-  .inputValidator((confirmation: string) => confirmation)
+  .validator((confirmation: string) => confirmation)
   .handler(
     async ({ data }): Promise<Result<null>> =>
       attempt(async () => {
@@ -172,7 +172,7 @@ export const deleteAccount = createServerFn({ method: "POST" })
  * here while ending it everywhere else.
  */
 export const changePassword = createServerFn({ method: "POST" })
-  .inputValidator((input: PasswordChangeInput) => input)
+  .validator((input: PasswordChangeInput) => input)
   .handler(
     async ({ data }): Promise<Result<null>> =>
       attempt(async () => {
@@ -197,7 +197,7 @@ export const changePassword = createServerFn({ method: "POST" })
  * accidentally undo it by reporting a failure the API deliberately swallowed.
  */
 export const requestPasswordReset = createServerFn({ method: "POST" })
-  .inputValidator((email: string) => email)
+  .validator((email: string) => email)
   .handler(
     async ({ data }): Promise<Result<null>> =>
       attempt(async () => {
@@ -221,7 +221,7 @@ export const requestPasswordReset = createServerFn({ method: "POST" })
  * chose.
  */
 export const resetPassword = createServerFn({ method: "POST" })
-  .inputValidator((input: { token: string; password: string }) => input)
+  .validator((input: { token: string; password: string }) => input)
   .handler(
     async ({ data }): Promise<Result<null>> =>
       attempt(async () => {
