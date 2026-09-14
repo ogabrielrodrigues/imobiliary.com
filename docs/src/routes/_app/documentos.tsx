@@ -103,7 +103,8 @@ export const Route = createFileRoute("/_app/documentos")({
   first. A batch is one row, closed until someone opens it.
 
   Sorting reorders the entries of the page on screen. The documents inside an
-  open batch keep the order they were generated in.
+  open batch are not sorted with them: they stay newest first, the order the
+  API lists them in.
 */
 const features = tableFeatures({
   rowSortingFeature,

@@ -86,7 +86,11 @@ export const getHistory = createServerFn({ method: "GET" })
       ),
   );
 
-/** One page of the documents inside a batch, oldest first as generated. */
+/**
+ * One page of the documents inside a batch, newest first like the rest of the
+ * history: the API lists documents in that order only. The batch's ZIP is the
+ * one place they come in generation order.
+ */
 export const listBatchDocuments = createServerFn({ method: "GET" })
   .validator((input: { batchId: string; page?: number }) => ({
     batchId: identifierOf(input.batchId),

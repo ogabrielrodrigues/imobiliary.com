@@ -883,6 +883,27 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       `DELETE /v1/documents/{id}` (`deleteDocument`); batches and documents
       share one `DeleteButton`. `staleAfter.documentDeleted` is tested.
 
+31. **Signed-in review, 2026-09-14**, in the browser pane with the user's test
+    account, creating a document and a batch of 3 and deleting both after.
+    Verified: dashboard empty and with data (chart, summary, ranking link,
+    recent), Templates search and clear, the generation screen (name follows
+    the chosen field, "Usar a sugestão", alignment 0px), a loose generation,
+    the batch page (a file dropped on the header via the full-screen overlay,
+    Google Forms-style headers with accents matched, a row without a name
+    left out, progress to 100%, the ZIP read in memory with both entries),
+    the history (filter from "Ver no histórico", batch closed and opened,
+    `aria-controls` on a tbody, deletes with the right dialog text), 375px
+    (drawer closes on navigation, cards, batch card opens, no page scrolls
+    sideways), Ajustes (Claro and Papel switch knobs, high contrast), and the
+    preferences restored. No console error from the app.
+    - **Inside an open batch documents are newest first**, like the rest of
+      the history, because the API lists them only that way; only the ZIP is in
+      generation order. Two comments had claimed otherwise and were corrected.
+      Offering generation order would need an order parameter on
+      `GET /v1/documents`.
+    - The Ajustes tab list is 32px with a 1px subpixel overflow, clipped by
+      `overflow-y-hidden`: not visible, not a bug.
+
 ### Next step
 
 **The block editor**, the last piece of the original plan. The user asked for an
