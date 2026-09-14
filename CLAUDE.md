@@ -749,6 +749,30 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       cache on returning to a screen, generating then seeing Documentos
       update, the table's sorting and paging, the generation form.
 
+25. **The small open items, cleared** (2026-09-14).
+    - `inputValidator()` → `validator()` on all fifteen server functions.
+    - **A 401 reads as an expired session by default.** `summaryOf(failure,
+      overrides)` takes the screen's own sentence: sign-in says "E-mail ou
+      senha incorretos.", the reset screen says the link expired, the password
+      panel says the current password does not match. The API returns 401 for
+      all of these on purpose; only the screen knows which it can mean.
+    - **404 page:** `components/not-found.tsx`, set as the router's
+      `defaultNotFoundComponent`. Still a real 404 status; it sets its own
+      title because no route's head runs.
+    - **Version picker:** `getTemplateContent` reports `versionsTruncated`
+      when the page of 100 came back full, and the picker says older versions
+      are not listed. It still cannot reach them.
+    - **Open Graph image:** `public/og-image.png`, from
+      `scripts/og-image/og-image.html` (see the README there: render in a
+      taller window and crop, or headless Chrome cuts the bottom off).
+    - **Claude Design:** a new page, "Imobiliary Docs - Acessibilidade", lists
+      every token the platform changed for contrast, per theme, and the content
+      corrections (12-character minimum, flat placeholder names, Fustat, no
+      draft or error statuses). **The existing design files were not edited**:
+      there is no local copy and the tool only replaces whole files, so fixing
+      "Mínimo de 8 caracteres" in place means rewriting ~30 KB of hand-authored
+      HTML per file. That is the user's call.
+
 ### Next step
 
 **The block editor**, the last piece of the original plan. It needs the docx
@@ -806,13 +830,11 @@ a Resend key — the API refuses to start with neither.
   harness artifact, not a product bug.
 - `go test -race` still unrun (no C compiler here).
 - The design system's "mínimo de 8 caracteres" copy contradicts the API's 12.
-- **`summaryOf` in `application/result.ts` speaks only about authentication.**
-  A 401 after a failed refresh renders "E-mail ou senha incorretos." wherever
-  it happens — including inside the delete dialog. The copy needs a context,
-  or the auth screens need to override those two strings locally.
+  The correction is documented on the "Acessibilidade" page of the Claude
+  Design project (item 25); the original files still say 8.
 - `GET /v1/templates/{id}/versions` is paged and the platform asks for 100.
-  A template with more versions than that would silently lose the oldest from
-  the picker. Nothing shows that it truncated.
+  The picker now says when older versions are not listed (item 25), but a
+  template with more than 100 still cannot reach them.
 - **`docs` cannot be started from a production build.** `pnpm start` runs
   `node .output/server/index.mjs`, a Nitro-era path that no longer exists —
   `vite build` produces `dist/client` and `dist/server`. Running
@@ -820,9 +842,6 @@ a Resend key — the API refuses to start with neither.
   never listens, so it likely needs a host adapter that is not installed.
   **Nothing has ever been deployed from this repository.** Resolve before
   planning a launch; it is a deployment question, not a code bug to guess at.
-- **An Open Graph image is missing** — 1200×630 PNG, the one SEO item that
-  is design work rather than code. Add it to `public/` and give `pageSeo` an
-  `og:image`/`twitter:image` pair pointing at it.
 - **No DPA with Resend yet.** They receive an email address and a first name
   when a security message goes out, which is a declared international
   transfer. Sign the processing contract, under the ANPD standard clauses,
@@ -863,8 +882,11 @@ a Resend key — the API refuses to start with neither.
   browser signed in**, like the rest of Ajustes. Public pages were verified
   in all three themes and both high contrasts.
 - **The favicon's "d" is still the Figtree glyph.** It is a path drawn from
-  the font, so it did not change with Fustat. Redraw it from Fustat's glyph
-  at weight 600 if the brand mark should follow the interface font.
+  the font, so it did not change with Fustat. Redrawing it needs the outline
+  of Fustat's "d" at weight 600, and the only local copy of Fustat is the
+  Fontsource WOFF2 of a variable font: extracting an instance from it needs
+  `fonttools` (Python), which is not installed. Installing it is the user's
+  call.
 - The published API reference (republished 2026-09-11, with `/v1/me/stats`,
   the versions endpoint and registration's 202) lives at
   `https://claude.ai/code/artifact/e3eaf9ee-95d7-46a0-bd7f-d596a95345ee`.
