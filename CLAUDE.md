@@ -76,8 +76,15 @@ consumer.
 cd docgen-api && gofmt -l . && go vet ./... && go test ./... && go test -tags=integration ./...
 ```
 
-`go test -race` has never run: it needs cgo and there is no C compiler on this
-machine. Run it wherever one exists.
+`go test -race` first ran on 2026-09-14, unit and integration, with no race
+reported. It needs cgo, so a C compiler: the WinLibs GCC was installed with
+winget for it and is not on the shell's PATH by default. In PowerShell:
+
+```powershell
+$env:PATH = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin;$env:PATH"
+$env:CGO_ENABLED = "1"
+go test -race ./... ; go test -race -tags=integration ./...
+```
 
 ---
 
@@ -828,7 +835,6 @@ a Resend key — the API refuses to start with neither.
   `left_click` on it fires no `click` event at all, while `form.requestSubmit()`
   runs the same handler correctly. Drive forms that way when verifying; it is a
   harness artifact, not a product bug.
-- `go test -race` still unrun (no C compiler here).
 - The design system's "mínimo de 8 caracteres" copy contradicts the API's 12.
   The correction is documented on the "Acessibilidade" page of the Claude
   Design project (item 25); the original files still say 8.
