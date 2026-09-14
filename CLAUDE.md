@@ -834,8 +834,23 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       order and paging, filters, archive contents, deletion down to blobs,
       rules, isolation, export), all passing with `-race`. The published API
       reference is republished at the same URL.
-    - Next in that plan: phase 4, Documentos becomes the history with
-      collapsible batch rows and the template filter.
+
+28. **Documentos is the history** (phase 4, `1b54667`). It reads
+    `GET /v1/history` through `server/history.ts` (`getHistory`, which also
+    returns every active template for the filter; `listBatchDocuments`;
+    `downloadBatch`; `deleteBatch`). `?pagina=` and `?modelo=` live in the URL.
+    - A batch row is closed until opened; opening reads its documents with
+      `useInfiniteQuery` (`batchDocumentsQuery`), twenty at a time, only then.
+    - **Each history entry is its own `<tbody>`**, so an open batch's documents
+      are a tbody the toggle's `aria-controls` names. A tbody inside a tbody
+      is invalid HTML, which is what the first version produced.
+    - Invalidation: `staleAfter.batchChanged` and the history key in the others;
+      `listDocuments` and `documentPageQuery` are gone.
+    - Links: "Ver documentos deste modelo" on the template screen, and the
+      dashboard ranking's counts open Documentos filtered.
+    - Batch rows cannot be seen until phase 5 creates batches from the
+      platform; the history, filter and document rows need the signed-in
+      check.
 
 ### Next step
 
