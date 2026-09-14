@@ -3,7 +3,7 @@ import { useForm, useStore } from "@tanstack/react-form";
 import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
-import { IconAlertCircle, IconAlertTriangle, IconDownload, IconFilePlus, IconPlus, IconTrash } from "@tabler/icons-react";
+import { IconAlertCircle, IconAlertTriangle, IconDownload, IconFilePlus, IconPlus, IconStack2, IconTrash } from "@tabler/icons-react";
 
 import { messageFor, summaryOf, type Failure } from "@/application/result";
 import { DocumentPreview, PlaceholderField } from "@/components/document-preview";
@@ -357,6 +357,14 @@ function GenerateScreen({
             >
               Voltar
             </Link>
+            <Button
+              variant="secondary"
+              nativeButton={false}
+              render={<Link to="/templates/$templateId/lote" params={{ templateId: template.id }} />}
+            >
+              <IconStack2 data-icon="inline-start" aria-hidden="true" />
+              Gerar em lote
+            </Button>
             <Button type="button" disabled={pending} onClick={() => void form.handleSubmit()}>
               <IconFilePlus data-icon="inline-start" aria-hidden="true" />
               {pending ? "Gerando…" : "Gerar documento"}

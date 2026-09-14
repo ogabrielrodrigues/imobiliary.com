@@ -5,7 +5,8 @@ import { cn } from "@/lib/utils";
 import { formatBytes, MAX_TEMPLATE_BYTES } from "@/domain/template";
 
 /**
- * The file picker for a template.
+ * The file picker: a template by default, or any other kind of file through
+ * `accept`, `title`, `hint` and `badge`.
  *
  * One of only two components the design leaves bespoke. It is built around a
  * real `<input type="file">` inside a `<label>` rather than a div with a click
@@ -17,10 +18,20 @@ export function Dropzone({
   file,
   onSelect,
   error,
+  accept = ".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  title = "Arraste o modelo .docx",
+  hint = `ou clique para escolher · até ${formatBytes(MAX_TEMPLATE_BYTES)}`,
+  badge = "docx",
 }: {
   readonly file: File | null;
   readonly onSelect: (file: File | null) => void;
   readonly error?: string | undefined;
+  /** What the browser's picker offers. */
+  readonly accept?: string;
+  readonly title?: string;
+  readonly hint?: string;
+  /** The short type shown beside a chosen file. */
+  readonly badge?: string;
 }) {
   const [dragging, setDragging] = useState(false);
 
@@ -37,7 +48,7 @@ export function Dropzone({
             aria-hidden="true"
             className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border-strong bg-muted font-mono text-label font-medium text-docs"
           >
-            docx
+            {badge}
           </span>
           <span className="flex min-w-0 flex-col gap-0.5">
             <span className="truncate text-control font-medium">
@@ -89,14 +100,12 @@ export function Dropzone({
         >
           <IconUpload className="size-5" />
         </span>
-        <span className="text-sm font-medium">Arraste o modelo .docx</span>
-        <span className="text-caption text-faint">
-          ou clique para escolher · até {formatBytes(MAX_TEMPLATE_BYTES)}
-        </span>
+        <span className="text-sm font-medium">{title}</span>
+        <span className="text-caption text-faint">{hint}</span>
         <input
           type="file"
           name="file"
-          accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          accept={accept}
           onChange={(event) => take(event.currentTarget.files)}
           className="sr-only"
         />

@@ -13,7 +13,8 @@ import type {
   HistoryItem,
   HistoryPage,
 } from "../application/views.ts";
-import { NotFoundError } from "../domain/errors.ts";
+import { MAX_BATCH_NAME_LENGTH, type Batch } from "../domain/batch.ts";
+import { fieldError, NotFoundError } from "../domain/errors.ts";
 import { assertSameOrigin, callContext, docgen, sessions } from "./runtime.ts";
 
 /** Entries per page of the history, and documents per page inside a batch. */
@@ -137,6 +138,35 @@ export const downloadBatch = createServerFn({ method: "GET" })
           return docgen().batches.download(ctx, data);
         }),
       ),
+  );
+
+/**
+ * Creates an empty batch for one template version. The documents join it one
+ * generation at a time, through generateDocument with `batchId`.
+ */
+export const createBatch = createServerFn({ method: "POST" })
+  .validator((input: { templateId: string; version?: number; name: string }) => input)
+  .handler(
+    async ({ data }): Promise<Result<Batch>> =>
+      attempt(async () => {
+        assertSameOrigin();
+
+        const name = data.name.trim();
+        if (name === "") throw fieldError("name", "Dê um nome ao lote.");
+        if ([...name].length > MAX_BATCH_NAME_LENGTH) {
+          throw fieldError("name", `O nome deve ter no máximo ${MAX_BATCH_NAME_LENGTH} caracteres.`);
+        }
+        const templateId = identifierOf(data.templateId);
+        if (templateId === undefined) throw new NotFoundError();
+
+        return sessions().authorize(callContext(), (ctx) =>
+          docgen().batches.create(ctx, {
+            templateId,
+            name,
+            ...(data.version === undefined ? {} : { version: data.version }),
+          }),
+        );
+      }),
   );
 
 /** Erases a batch, its documents and the files nothing else uses. */
