@@ -94,7 +94,7 @@ function TemplateDetailPage() {
     );
   }
 
-  const { template, blocks, versions, previewUnavailable } = result.value;
+  const { template, blocks, versions, versionsTruncated, previewUnavailable } = result.value;
   const selected = template.version?.version;
 
   return (
@@ -106,6 +106,7 @@ function TemplateDetailPage() {
       template={template}
       blocks={blocks}
       versions={versions}
+      versionsTruncated={versionsTruncated}
       previewUnavailable={previewUnavailable}
     />
   );
@@ -115,11 +116,13 @@ function GenerateScreen({
   template,
   blocks,
   versions,
+  versionsTruncated,
   previewUnavailable,
 }: {
   readonly template: Template;
   readonly blocks: readonly Block[];
   readonly versions: readonly TemplateVersion[];
+  readonly versionsTruncated: boolean;
   readonly previewUnavailable: boolean;
 }) {
   const navigate = useNavigate();
@@ -282,6 +285,7 @@ function GenerateScreen({
             {versions.length > 1 && (
               <VersionPicker
                 versions={versions}
+                truncated={versionsTruncated}
                 shown={shown}
                 latest={template.latestVersion}
                 onChange={showVersion}
@@ -432,18 +436,24 @@ function Dot() {
  */
 function VersionPicker({
   versions,
+  truncated,
   shown,
   latest,
   onChange,
 }: {
   readonly versions: readonly TemplateVersion[];
+  /** The listing came back full; older versions may not be in it. */
+  readonly truncated: boolean;
   readonly shown: number;
   readonly latest: number;
   readonly onChange: (version: number) => void;
 }) {
   return (
     <label className="flex items-center gap-2 text-small text-muted-foreground">
-      <span className="sr-only">Versão do modelo</span>
+      <span className="sr-only">
+        Versão do modelo
+        {truncated ? `, mostrando as ${versions.length} mais recentes` : ""}
+      </span>
       <select
         value={shown}
         onChange={(event) => onChange(Number(event.currentTarget.value))}
@@ -456,6 +466,15 @@ function VersionPicker({
             {relativeDate(version.createdAt)}
           </option>
         ))}
+        {/*
+          Said inside the list itself, where someone looking for an old
+          version will be looking. Disabled: it is a note, not a choice.
+        */}
+        {truncated && (
+          <option disabled value="">
+            Versões mais antigas não listadas
+          </option>
+        )}
       </select>
     </label>
   );

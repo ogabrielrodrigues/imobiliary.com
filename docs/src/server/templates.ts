@@ -52,7 +52,7 @@ export const listTemplates = createServerFn({ method: "GET" }).handler(
  * job — it inspects the archive properly, and its answer is the one that counts.
  */
 export const createTemplate = createServerFn({ method: "POST" })
-  .inputValidator((form: FormData) => form)
+  .validator((form: FormData) => form)
   .handler(
     async ({ data }): Promise<Result<Template>> =>
       attempt(async () => {
@@ -79,7 +79,7 @@ export const createTemplate = createServerFn({ method: "POST" })
   );
 
 export const listTemplateVersions = createServerFn({ method: "GET" })
-  .inputValidator((id: string) => id)
+  .validator((id: string) => id)
   .handler(
     async ({ data }): Promise<Result<TemplateVersion[]>> =>
       attempt(() =>
@@ -102,7 +102,7 @@ export const listTemplateVersions = createServerFn({ method: "GET" })
  * in the same form because a validator takes a single value.
  */
 export const publishTemplateVersion = createServerFn({ method: "POST" })
-  .inputValidator((form: FormData) => form)
+  .validator((form: FormData) => form)
   .handler(
     async ({ data }): Promise<Result<Template>> =>
       attempt(async () => {
@@ -138,7 +138,7 @@ export const publishTemplateVersion = createServerFn({ method: "POST" })
  * deciding whether to delete needs to know it.
  */
 export const deleteTemplate = createServerFn({ method: "POST" })
-  .inputValidator((id: string) => id)
+  .validator((id: string) => id)
   .handler(
     async ({ data }): Promise<Result<null>> =>
       attempt(async () => {
@@ -166,6 +166,11 @@ export interface TemplateContent {
   readonly blocks: readonly Block[];
   /** Every version, newest first, so a caller can offer the choice. */
   readonly versions: readonly TemplateVersion[];
+  /**
+   * True when the listing came back full, so older versions may exist beyond
+   * it. The API reports no total; a full page is the only signal there is.
+   */
+  readonly versionsTruncated: boolean;
   /** True when the content could not be read; the form still works without it. */
   readonly previewUnavailable: boolean;
 }
@@ -182,7 +187,7 @@ export interface TemplateContent {
  * where the template stands.
  */
 export const getTemplateContent = createServerFn({ method: "GET" })
-  .inputValidator((input: { id: string; version?: number }) => input)
+  .validator((input: { id: string; version?: number }) => input)
   .handler(
     async ({ data }): Promise<Result<TemplateContent>> =>
       attempt(() =>
@@ -217,6 +222,7 @@ export const getTemplateContent = createServerFn({ method: "GET" })
             return {
               template,
               versions,
+              versionsTruncated: versions.length >= VERSION_PAGE_LIMIT,
               blocks: parseDocx(archive),
               previewUnavailable: false,
             };
@@ -228,6 +234,7 @@ export const getTemplateContent = createServerFn({ method: "GET" })
             return {
               template,
               versions,
+              versionsTruncated: versions.length >= VERSION_PAGE_LIMIT,
               blocks: [],
               previewUnavailable: true,
             };
