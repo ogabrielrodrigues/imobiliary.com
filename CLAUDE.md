@@ -869,12 +869,25 @@ _Update this section as work proceeds. It is what a fresh session reads first._
     - Adding `@base-ui/react/progress` (via `shadcn add progress`) is a new
       Base UI subpath: the dev server was restarted with `node_modules/.vite`
       cleared before any browser test, per the gotcha above.
-    - **Not yet seen signed in**: phases 4 and 5 both wait for the user's test
-      account.
+    - **Verified by the user in their own browser (2026-09-14):** a batch of
+      six generated from a spreadsheet, shown collapsed in the history with
+      its ZIP and delete, next to loose documents.
+
+30. **Drop anywhere, and delete single documents** (`c8b5266`), confirmed
+    working by the user.
+    - `Dropzone` listens on `window` while mounted: a drag carrying files
+      shows a full-screen overlay (pointer-events none) and a drop anywhere
+      selects the file. dragenter/dragleave are counted so crossing elements
+      does not flicker. **One dropzone per screen** is assumed.
+    - History rows, loose or inside a batch, have a trash button calling
+      `DELETE /v1/documents/{id}` (`deleteDocument`); batches and documents
+      share one `DeleteButton`. `staleAfter.documentDeleted` is tested.
 
 ### Next step
 
-**The block editor**, the last piece of the original plan. It needs the docx
+**The block editor**, the last piece of the original plan. The user asked for an
+explanation first (it is at the end of the plan file) and has not decided yet;
+it also needs a rich-text editor dependency, to be agreed. It needs the docx
 `build` module: blocks → `word/document.xml` → `writeZip`. Write the writer and
 **open its output in Word before building any interface around it** — that is
 the step that decides whether the whole idea works. Store the block tree as
