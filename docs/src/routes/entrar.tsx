@@ -77,7 +77,7 @@ function SignInPage() {
     <AuthLayout
       title="Entrar"
       subtitle="Use a conta que você criou para acessar seus modelos."
-      summary={summaryOf(failure)}
+      summary={summaryOf(failure, { authentication: "E-mail ou senha incorretos." })}
       footer={
         <>
           Ainda não tem conta?{" "}

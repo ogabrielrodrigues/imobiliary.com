@@ -68,7 +68,14 @@ export function PasswordPanel() {
         messageFor(failure, "newPassword") === undefined && (
           <p role="alert" className="flex items-start gap-1.5 text-caption text-destructive">
             <IconAlertCircle aria-hidden="true" className="mt-px size-3.5 shrink-0" />
-            <span>{summaryOf(failure)}</span>
+            <span>
+              {summaryOf(failure, {
+                // A wrong current password is a 401; so is a session that
+                // expired in the meantime, and the API will not say which.
+                authentication:
+                  "A senha atual não confere. Se continuar, saia e entre novamente.",
+              })}
+            </span>
           </p>
         )}
 

@@ -116,7 +116,10 @@ function ResetPasswordPage() {
     <AuthLayout
       title="Escolha uma nova senha"
       subtitle="Ao confirmar, todas as sessões abertas serão encerradas."
-      summary={summaryOf(failure)}
+      summary={summaryOf(failure, {
+        // The API answers 401 for a reset token that expired or was used.
+        authentication: "Este link expirou ou já foi usado. Peça um novo.",
+      })}
       footer={
         <>
           O link expirou?{" "}

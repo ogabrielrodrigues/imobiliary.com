@@ -89,13 +89,29 @@ export function messageFor(
 }
 
 /**
+ * Messages a screen says in its own words, by kind of failure.
+ *
+ * The API answers 401 for a wrong password at sign-in, a wrong current
+ * password, a spent reset link and an expired session alike, on purpose. Only
+ * the screen knows which of those it can mean, so a credential screen passes
+ * its own sentence and every other screen gets the expired session.
+ */
+export type SummaryOverrides = Partial<Record<Failure["kind"], string>>;
+
+/**
  * The message to show above a form, for failures that belong to no field.
  *
  * Returns null when every problem is already marked on an input, so the form
  * does not repeat itself.
  */
-export function summaryOf(failure: Failure | null): string | null {
+export function summaryOf(
+  failure: Failure | null,
+  overrides: SummaryOverrides = {},
+): string | null {
   if (failure === null) return null;
+
+  const own = overrides[failure.kind];
+  if (own !== undefined) return own;
 
   switch (failure.kind) {
     case "validation":
@@ -106,7 +122,9 @@ export function summaryOf(failure: Failure | null): string | null {
         : null;
 
     case "authentication":
-      return "E-mail ou senha incorretos.";
+      // Anywhere past sign-in, a 401 that survived the refresh means the
+      // session is gone. "E-mail ou senha incorretos." belongs to /entrar only.
+      return "Sua sessão expirou. Entre novamente para continuar.";
 
     case "conflict":
       return "Já existe uma conta com esse e-mail.";
