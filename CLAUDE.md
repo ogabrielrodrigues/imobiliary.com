@@ -801,8 +801,41 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       reported as truncated. Used by the template list, the versions of the
       generation screen, and the template-name lookups in Documentos and the
       dashboard. A template pinned beyond its 100th version opens again.
-    - Next in that plan: phase 3, batches, a template filter and a history
-      endpoint in the API.
+    - The "Completar com" select sat 6.5px low (`de9bcbc`): a native control
+      beside a `FormField` must use the same `Label` (leading-none) and the
+      `Input`'s height, padding and text size, or the two do not align.
+
+27. **Batches, a template filter and a mixed history in the API** (phase 3:
+    `b752260` code, `871eb72` contract).
+    - **A batch** is created empty (`POST /v1/batches`), then each document
+      joins it through `POST /v1/documents` with `batch_id`. Generation stays one
+      synchronous request per document. A batch records its template version;
+      a document of another template or version, or naming another account's
+      batch, is a 422 on `batch_id`.
+    - **`GET /v1/history`** mixes loose documents and batches, newest first,
+      paging over ids (UUIDv7 in both tables; a batch is created before its
+      documents). `template_id` filters it and `GET /v1/documents`;
+      `batch_id` filters `GET /v1/documents`.
+    - **`GET /v1/batches/{id}/download`** streams a ZIP in generation order,
+      entries stored (a .docx is already deflated) and repeated names made
+      unique ("contrato (2).docx"). Charged to the write budget, like the
+      export. The batch is read first, so a foreign one is a 404 before any
+      byte is written.
+    - **`DELETE /v1/batches/{id}`** deletes the documents explicitly, then the
+      batch, then orphaned blobs, in one transaction.
+    - **Migration `0004_batches.sql`** (0003 was taken by password resets):
+      `batches`, `documents.batch_id` (nullable FK, allowed on ALTER because
+      its default is NULL), and indexes for both filters.
+    - **The export includes batches** and each document's `batch_id`: a batch
+      name is typed text and often names people.
+    - `sanitizeName(name, extension, fallback)` generalises the filename rule;
+      the archive is `<batch name>.zip`.
+    - Tests: unit (batch names, archive entry names), integration (history
+      order and paging, filters, archive contents, deletion down to blobs,
+      rules, isolation, export), all passing with `-race`. The published API
+      reference is republished at the same URL.
+    - Next in that plan: phase 4, Documentos becomes the history with
+      collapsible batch rows and the template filter.
 
 ### Next step
 
