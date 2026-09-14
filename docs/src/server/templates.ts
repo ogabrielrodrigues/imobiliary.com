@@ -8,6 +8,7 @@
 
 import { createServerFn } from "@tanstack/react-start";
 
+import { collectPages, LISTING_CAP } from "../application/paging.ts";
 import { attempt, type Result } from "../application/result.ts";
 import { fieldError, NotFoundError, ValidationError } from "../domain/errors.ts";
 import {
@@ -20,23 +21,20 @@ import type { Block } from "../domain/block.ts";
 import { parseDocx } from "../infrastructure/docx/parse.ts";
 import { assertSameOrigin, callContext, docgen, sessions } from "./runtime.ts";
 
-/** How many versions a picker asks for at once. */
-const VERSION_PAGE_LIMIT = 100;
-
 /**
- * How many templates the list asks for: the API's largest page. The search on
- * that screen runs over what was fetched, since the API offers none, so the
- * list takes as much as one request allows; the screen says when it may have
- * been cut short.
+ * The most templates the list reads. The search on that screen runs over what
+ * was fetched, since the API offers none, so the list reads every page up to
+ * this cap; the screen says when it may have been reached.
  */
-export const TEMPLATE_LIST_LIMIT = 100;
+export const TEMPLATE_LIST_CAP = LISTING_CAP;
 
 export const listTemplates = createServerFn({ method: "GET" }).handler(
   async (): Promise<Result<Template[]>> =>
     attempt(() =>
-      sessions().authorize(callContext(), (ctx) =>
-        docgen().templates.list(ctx, { limit: TEMPLATE_LIST_LIMIT }),
-      ),
+      sessions().authorize(callContext(), async (ctx) => {
+        const { items } = await collectPages((page) => docgen().templates.list(ctx, page));
+        return [...items];
+      }),
     ),
 );
 
@@ -83,9 +81,12 @@ export const listTemplateVersions = createServerFn({ method: "GET" })
   .handler(
     async ({ data }): Promise<Result<TemplateVersion[]>> =>
       attempt(() =>
-        sessions().authorize(callContext(), (ctx) =>
-          docgen().templates.versions(ctx, data, { limit: VERSION_PAGE_LIMIT }),
-        ),
+        sessions().authorize(callContext(), async (ctx) => {
+          const { items } = await collectPages((page) =>
+            docgen().templates.versions(ctx, data, page),
+          );
+          return [...items];
+        }),
       ),
   );
 
@@ -167,8 +168,8 @@ export interface TemplateContent {
   /** Every version, newest first, so a caller can offer the choice. */
   readonly versions: readonly TemplateVersion[];
   /**
-   * True when the listing came back full, so older versions may exist beyond
-   * it. The API reports no total; a full page is the only signal there is.
+   * True when the listing reached the cap of `collectPages`, so older versions
+   * may exist beyond it. Every page up to that cap is read.
    */
   readonly versionsTruncated: boolean;
   /** True when the content could not be read; the form still works without it. */
@@ -192,12 +193,13 @@ export const getTemplateContent = createServerFn({ method: "GET" })
     async ({ data }): Promise<Result<TemplateContent>> =>
       attempt(() =>
         sessions().authorize(callContext(), async (ctx) => {
-          const [latest, versions] = await Promise.all([
+          const [latest, listing] = await Promise.all([
             docgen().templates.get(ctx, data.id),
-            docgen().templates.versions(ctx, data.id, {
-              limit: VERSION_PAGE_LIMIT,
-            }),
+            // Every version, not the first page: a template pinned to an old
+            // version must still open, and the picker must offer all of them.
+            collectPages((page) => docgen().templates.versions(ctx, data.id, page)),
           ]);
+          const versions = [...listing.items];
 
           const selected =
             data.version === undefined
@@ -222,7 +224,7 @@ export const getTemplateContent = createServerFn({ method: "GET" })
             return {
               template,
               versions,
-              versionsTruncated: versions.length >= VERSION_PAGE_LIMIT,
+              versionsTruncated: listing.truncated,
               blocks: parseDocx(archive),
               previewUnavailable: false,
             };
@@ -234,7 +236,7 @@ export const getTemplateContent = createServerFn({ method: "GET" })
             return {
               template,
               versions,
-              versionsTruncated: versions.length >= VERSION_PAGE_LIMIT,
+              versionsTruncated: listing.truncated,
               blocks: [],
               previewUnavailable: true,
             };

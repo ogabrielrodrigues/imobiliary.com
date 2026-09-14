@@ -5,6 +5,7 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import type { FileContent } from "../application/ports.ts";
+import { collectPages } from "../application/paging.ts";
 import { attempt, type Result } from "../application/result.ts";
 import type { DocumentListItem, DocumentPage } from "../application/views.ts";
 import {
@@ -13,13 +14,6 @@ import {
   type GenerateInput,
 } from "../domain/document.ts";
 import { assertSameOrigin, callContext, docgen, sessions } from "./runtime.ts";
-
-/**
- * How many templates are fetched to resolve names. The API caps a page at 100,
- * and a document whose template falls outside that page simply shows no name —
- * which the interface states plainly rather than papering over.
- */
-const TEMPLATE_NAME_LOOKUP_LIMIT = 100;
 
 /** Documents per page of the list. */
 export const DOCUMENTS_PAGE_SIZE = 20;
@@ -54,10 +48,13 @@ export const listDocuments = createServerFn({ method: "GET" })
               limit: DOCUMENTS_PAGE_SIZE + 1,
               offset: data.page * DOCUMENTS_PAGE_SIZE,
             }),
-            docgen().templates.list(ctx, { limit: TEMPLATE_NAME_LOOKUP_LIMIT }),
+            // Every template, not the first page: a document whose template sat
+            // beyond it used to show "modelo indisponível" for a template that
+            // exists. Only a deleted template is unnamed now.
+            collectPages((page) => docgen().templates.list(ctx, page)),
           ]);
 
-          const names = new Map(templates.map((t) => [t.id, t.name]));
+          const names = new Map(templates.items.map((t) => [t.id, t.name]));
 
           return {
             items: documents.slice(0, DOCUMENTS_PAGE_SIZE).map(

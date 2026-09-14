@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { matchesTemplateSearch, type Template } from "@/domain/template";
 import { relativeDate } from "@/lib/format";
 import { templateListQuery } from "@/queries/options";
-import { TEMPLATE_LIST_LIMIT } from "@/server/templates";
+import { TEMPLATE_LIST_CAP } from "@/server/templates";
 
 interface TemplatesSearch {
   /** What was typed in the search box. Absent when empty. */
@@ -170,9 +170,9 @@ function TemplateResults({
 }) {
   const shown = templates.filter((template) => matchesTemplateSearch(template, query));
   const searching = query.trim() !== "";
-  // A full page means there may be more than the API handed over, and the
-  // search can only see what it was given.
-  const mayBeCut = templates.length >= TEMPLATE_LIST_LIMIT;
+  // The list reads every page up to the cap. Reaching it means more may exist,
+  // and the search can only see what it was given.
+  const mayBeCut = templates.length >= TEMPLATE_LIST_CAP;
 
   return (
     <>
@@ -185,7 +185,7 @@ function TemplateResults({
 
       {searching && mayBeCut && (
         <p className="text-caption text-faint">
-          A busca cobre os {TEMPLATE_LIST_LIMIT} primeiros modelos da lista.
+          A busca cobre os {TEMPLATE_LIST_CAP} primeiros modelos da lista.
         </p>
       )}
 

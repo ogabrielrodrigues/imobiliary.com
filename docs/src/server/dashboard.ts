@@ -4,6 +4,7 @@
 
 import { createServerFn } from "@tanstack/react-start";
 
+import { collectPages } from "../application/paging.ts";
 import { attempt, type Result } from "../application/result.ts";
 import type { DashboardView } from "../application/views.ts";
 import {
@@ -17,8 +18,6 @@ import { callContext, docgen, sessions } from "./runtime.ts";
 /** How many documents the dashboard lists as recent. */
 const RECENT_DOCUMENTS = 5;
 
-/** As in documents.ts: enough to name the templates behind recent documents. */
-const TEMPLATE_NAME_LOOKUP_LIMIT = 100;
 
 /** Longest IANA zone name worth forwarding; the real ones are far shorter. */
 const MAX_TIME_ZONE_LENGTH = 64;
@@ -50,10 +49,12 @@ export const getDashboard = createServerFn({ method: "GET" })
           const [stats, documents, templates] = await Promise.all([
             docgen().stats.get(ctx, data),
             docgen().documents.list(ctx, { limit: RECENT_DOCUMENTS }),
-            docgen().templates.list(ctx, { limit: TEMPLATE_NAME_LOOKUP_LIMIT }),
+            // Every template, so a recent document's template is named even on
+            // an account with more than one page of them.
+            collectPages((page) => docgen().templates.list(ctx, page)),
           ]);
 
-          const names = new Map(templates.map((t) => [t.id, t.name]));
+          const names = new Map(templates.items.map((t) => [t.id, t.name]));
 
           return {
             stats,
