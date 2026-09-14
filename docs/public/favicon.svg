@@ -2,15 +2,22 @@
   <!--
     The "d" of docs, in the subapplication amber.
 
-    The outline is the real Figtree glyph at weight 600 — the same weight the
-    wordmark uses — taken from the variable font (SIL Open Font License) and
-    converted to a path. It is a path rather than a <text> element because a
-    favicon renders without the page's fonts: Figtree would silently fall back
-    to whatever each machine happens to have, and the mark would differ from
-    one computer to the next.
+    The outline is the real Fustat glyph at weight 600 — the same weight the
+    wordmark uses — taken from the variable font the platform ships
+    (@fontsource-variable/fustat, SIL Open Font License), instanced at wght=600
+    with fontTools and converted to a path. It is a path rather than a <text>
+    element because a favicon renders without the page's fonts: Fustat would
+    silently fall back to whatever each machine happens to have, and the mark
+    would differ from one computer to the next.
 
     Glyph units are 1000 per em with the baseline at y=0 and y pointing up, so
-    the transform flips the axis and scales the em to fit the square.
+    the transform flips the axis, scales the glyph to 20px tall and centres its
+    bounding box in the square. Coordinates are rounded to one decimal, which
+    at this scale is under three hundredths of a pixel.
+
+    The outline keeps the variable font's overlap: the stem is its own contour
+    crossing the bowl. Both wind the same way and the counter the other, so the
+    default nonzero fill draws it as one shape.
 
     The dark ground is deliberate. A bare amber glyph would disappear against a
     light tab bar; the square keeps the contrast the same everywhere.
@@ -21,7 +28,7 @@
     parse falls back to black — which on this ground means an invisible mark.
   -->
   <rect width="32" height="32" rx="7" fill="#0b0d10"/>
-  <g transform="translate(8.1 25.66) scale(0.0281 -0.0281)" fill="#c87e41">
-    <path d="M260 -12Q192 -12 141.5 20.5Q91 53 62.5 112Q34 171 34 250Q34 330 62.5 388.5Q91 447 141.5 479.5Q192 512 260 512Q312 512 352 489.5Q392 467 418 426L418 700L529 700L529 0L423 0L419 76Q394 34 353.5 11Q313 -12 260 -12ZM288 90Q325 90 354 109.5Q383 129 399.5 163.5Q416 198 418 243L418 257Q416 302 399.5 336.5Q383 371 354 390Q325 409 287 409Q247 409 215.5 389Q184 369 166.5 333Q149 297 149 250Q149 203 167 167Q185 131 216.5 110.5Q248 90 288 90Z"/>
+  <g transform="translate(8.19 25.63) scale(0.0268 -0.0268)" fill="#c87e41">
+    <path d="M278.1 -13.7Q210.8 -13.7 156.3 20.5Q101.7 54.7 69.8 114.4Q37.9 174 37.9 251.3Q37.9 328.9 69.8 388.8Q101.7 448.6 156.3 482.8Q210.8 517 278.1 517Q332 517 375.8 495Q419.7 473.1 449.8 436.6Q480 400.1 492.9 354.3V148.2Q480 103.4 449.8 66.6Q419.7 29.8 375.8 8.1Q332 -13.7 278.1 -13.7ZM289.8 78.9Q336.1 78.9 371 100.8Q406 122.8 426.2 161.7Q446.4 200.7 446.4 251.7Q446.4 303.1 426.2 341.8Q406 380.6 371 402.5Q336.1 424.4 289.8 424.4Q245.8 424.4 211.2 402.5Q176.6 380.6 157.3 341.8Q137.9 303.1 137.9 251.7Q137.9 200.7 157.3 161.7Q176.6 122.8 211.2 100.8Q245.8 78.9 289.8 78.9ZM450.1 0V167.8L469.6 251.7L444.7 335.5V720L541.8 731.9L544.8 723.9V0Z"/>
   </g>
 </svg>

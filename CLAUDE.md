@@ -881,12 +881,11 @@ a Resend key — the API refuses to start with neither.
 - **The Aparência tab and the themes inside the app are not yet seen in a
   browser signed in**, like the rest of Ajustes. Public pages were verified
   in all three themes and both high contrasts.
-- **The favicon's "d" is still the Figtree glyph.** It is a path drawn from
-  the font, so it did not change with Fustat. Redrawing it needs the outline
-  of Fustat's "d" at weight 600, and the only local copy of Fustat is the
-  Fontsource WOFF2 of a variable font: extracting an instance from it needs
-  `fonttools` (Python), which is not installed. Installing it is the user's
-  call.
+- The favicon's "d" is the Fustat glyph at weight 600 since 2026-09-14,
+  extracted with `fonttools` (installed for the user with pip, with `brotli`
+  for WOFF2) by instancing the Fontsource variable font at wght=600. If the
+  font changes again, the same route applies: instance, draw the glyph with
+  `SVGPathPen`, scale to 20px and centre the bounding box.
 - The published API reference (republished 2026-09-11, with `/v1/me/stats`,
   the versions endpoint and registration's 202) lives at
   `https://claude.ai/code/artifact/e3eaf9ee-95d7-46a0-bd7f-d596a95345ee`.
