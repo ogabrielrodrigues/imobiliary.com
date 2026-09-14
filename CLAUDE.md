@@ -848,9 +848,29 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       `listDocuments` and `documentPageQuery` are gone.
     - Links: "Ver documentos deste modelo" on the template screen, and the
       dashboard ranking's counts open Documentos filtered.
-    - Batch rows cannot be seen until phase 5 creates batches from the
-      platform; the history, filter and document rows need the signed-in
-      check.
+    - The history, filter and document rows still need the signed-in check.
+
+29. **Batch generation from a spreadsheet** (phase 5, `705d5fc`), at
+    `/templates/$templateId/lote` (file `templates.$templateId_.lote.tsx`: the
+    trailing underscore keeps it out of the template screen, which has no
+    Outlet).
+    - `domain/csv.ts` reads and writes CSV with no dependency: separator from
+      the first line **with content** (a blank first line once defaulted it to
+      `,`), RFC 4180 quotes, UTF-8 with a Windows-1252 fallback (Excel's
+      default). The model spreadsheet is written for Excel in Brazil: `;`,
+      CRLF, BOM. **Write the BOM as `"﻿"`**, never the invisible character:
+      it did not survive a shell heredoc and nearly shipped wrong.
+    - `domain/batch.ts` matches columns by `headerWords`: accents, case,
+      punctuation and filler words removed, words sorted, so "Nome do
+      locatário" feeds `locatario_nome`. Up to `MAX_BATCH_ROWS` (200).
+    - The run is client-side: create the batch, then `generateDocument` with
+      `batchId` row by row, waiting out a 429's `retryAfterSeconds`. Stop, retry
+      failed rows into the same batch, download the ZIP.
+    - Adding `@base-ui/react/progress` (via `shadcn add progress`) is a new
+      Base UI subpath: the dev server was restarted with `node_modules/.vite`
+      cleared before any browser test, per the gotcha above.
+    - **Not yet seen signed in**: phases 4 and 5 both wait for the user's test
+      account.
 
 ### Next step
 
