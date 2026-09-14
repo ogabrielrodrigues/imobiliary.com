@@ -24,6 +24,14 @@ export function absoluteUrl(path: string): string {
   return SITE_URL + (path === "/" ? "/" : path.replace(/\/+$/, ""));
 }
 
+/** The sharing image, served from public/. */
+const OG_IMAGE = {
+  path: "/og-image.png",
+  width: 1200,
+  height: 630,
+  alt: "imobiliary docs: Seus contratos, preenchidos sozinhos.",
+} as const;
+
 export interface PageSeo {
   readonly title: string;
   readonly description: string;
@@ -47,12 +55,14 @@ export interface PageSeo {
  * people pass to each other. That costs more traffic day to day than ranking
  * does.
  *
- * There is deliberately no `og:image` yet. A card without one still shows the
- * title, description and site name; a card pointing at an image that does not
- * exist shows a broken frame, which is worse than the absence.
+ * The image is `public/og-image.png`, 1200×630: the size WhatsApp, LinkedIn
+ * and X all crop from without losing the text. It is the same for every page,
+ * so it names the product rather than the page. Its source is an HTML page
+ * rendered by a headless browser; regenerate it rather than editing the PNG.
  */
 export function pageSeo(seo: PageSeo) {
   const url = absoluteUrl(seo.path);
+  const image = absoluteUrl(OG_IMAGE.path);
 
   const meta = [
     { title: seo.title },
@@ -64,12 +74,16 @@ export function pageSeo(seo: PageSeo) {
     { property: "og:title", content: seo.title },
     { property: "og:description", content: seo.description },
     { property: "og:url", content: url },
+    { property: "og:image", content: image },
+    { property: "og:image:width", content: String(OG_IMAGE.width) },
+    { property: "og:image:height", content: String(OG_IMAGE.height) },
+    { property: "og:image:alt", content: OG_IMAGE.alt },
 
-    // Without an image the large card is unavailable anyway, and claiming it
-    // would leave a stretched, empty frame.
-    { name: "twitter:card", content: "summary" },
+    { name: "twitter:card", content: "summary_large_image" },
     { name: "twitter:title", content: seo.title },
     { name: "twitter:description", content: seo.description },
+    { name: "twitter:image", content: image },
+    { name: "twitter:image:alt", content: OG_IMAGE.alt },
   ];
 
   if (seo.noindex === true) {

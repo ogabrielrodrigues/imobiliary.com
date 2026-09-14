@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face {
+    font-family: "Fustat Variable";
+    src: url("../../node_modules/@fontsource-variable/fustat/files/fustat-latin-wght-normal.woff2") format("woff2");
+    font-weight: 200 800;
+  }
+  @font-face {
+    font-family: "JetBrains Mono Variable";
+    src: url("../../node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2") format("woff2");
+    font-weight: 100 800;
+  }
+  html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    background: #0b0d10;
+    color: #e8eaee;
+    font-family: "Fustat Variable", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    position: relative;
+  }
+  .glow {
+    position: absolute; right: -180px; top: -220px; width: 760px; height: 760px;
+    background: radial-gradient(closest-side, oklch(0.8 0.15 82 / 0.16), transparent);
+  }
+  .frame { position: absolute; inset: 72px 88px; display: flex; flex-direction: column; }
+  .brand { font-size: 44px; font-weight: 600; letter-spacing: -0.02em; }
+  .brand span { color: #c87e41; }
+  .eyebrow {
+    margin-top: auto; font-family: "JetBrains Mono Variable", monospace; font-size: 22px;
+    letter-spacing: 0.1em; text-transform: uppercase; color: #828c9b;
+  }
+  h1 { margin: 18px 0 0; font-size: 76px; font-weight: 600; letter-spacing: -0.025em; line-height: 1.05; max-width: 900px; }
+  .lead { margin: 26px 0 0; font-size: 30px; line-height: 1.4; color: #9aa3b2; max-width: 860px; }
+  .chip {
+    display: inline-block; font-family: "JetBrains Mono Variable", monospace; font-size: 26px;
+    padding: 2px 12px; border-radius: 10px; color: oklch(0.82 0.1 68);
+    background: oklch(0.66 0.12 58 / 0.12); border: 2px solid oklch(0.66 0.12 58 / 0.4);
+  }
+  .rule { position: absolute; left: 0; right: 0; bottom: 0; height: 8px; background: oklch(0.8 0.15 82); }
+</style>
+</head>
+<body>
+  <div class="glow"></div>
+  <div class="frame">
+    <div class="brand">imobiliary <span>docs</span></div>
+    <div class="eyebrow">Documentos padronizados</div>
+    <h1>Seus contratos, preenchidos sozinhos.</h1>
+    <p class="lead">Envie um modelo do Word com campos como <span class="chip">{{.locatario_nome}}</span> e baixe o documento pronto.</p>
+  </div>
+  <div class="rule"></div>
+</body>
+</html>
