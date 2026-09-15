@@ -525,8 +525,14 @@ img.ProseMirror-separator {
   list-style: decimal;
 }
 
+/* Word's second level reads "a)", and so do the writer and the preview. */
+@counter-style word-lower-alpha {
+  system: extends lower-alpha;
+  suffix: ") ";
+}
+
 .block-editor-content ol ol {
-  list-style: lower-alpha;
+  list-style: word-lower-alpha;
 }
 
 .block-editor-content ol ol ol {

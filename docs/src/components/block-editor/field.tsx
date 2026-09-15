@@ -94,10 +94,14 @@ function FieldChip({ node, selected }: ReactNodeViewProps) {
       data-field-chip=""
       aria-label={`Campo ${humanize(name)}`}
       className={cn(
-        "mx-0.5 inline-block cursor-default rounded-[4px] border border-docs/40 bg-docs/12 px-1.5 py-px align-baseline font-mono text-xs leading-normal text-docs-soft",
+        "mx-0.5 inline-block cursor-default rounded-[4px] border border-docs/40 indent-0 bg-docs/12 px-1.5 py-px align-baseline font-mono text-xs leading-normal text-docs-soft",
         marks.has("bold") && "font-semibold",
         marks.has("italic") && "italic",
-        marks.has("underline") && "underline",
+        marks.has("underline") && marks.has("strike")
+          ? "[text-decoration-line:underline_line-through]"
+          : marks.has("underline")
+            ? "underline"
+            : marks.has("strike") && "line-through",
         selected && "border-primary ring-[3px] ring-ring/30",
       )}
     >

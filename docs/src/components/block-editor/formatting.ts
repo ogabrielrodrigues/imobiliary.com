@@ -157,10 +157,25 @@ export const PageBreak = Node.create({
 
   addCommands() {
     return {
+      /**
+       * Breaks the page where the caret is and leaves the caret after the
+       * break, as Word does: the paragraph is split, the break goes between
+       * the halves, and typing continues on the new page. Not inside a list,
+       * whose items cannot hold a block of their own.
+       */
       setPageBreak:
         () =>
-        ({ chain }) =>
-          chain().insertContent({ type: this.name }).run(),
+        ({ state, chain }) => {
+          if (isInList(state.selection.$from)) return false;
+          return chain()
+            .splitBlock()
+            .command(({ tr }) => {
+              const before = tr.selection.$from.before();
+              tr.insert(before, this.type.create());
+              return true;
+            })
+            .run();
+        },
     };
   },
 

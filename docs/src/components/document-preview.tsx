@@ -280,7 +280,8 @@ export function PlaceholderField({
           }
         }}
         className={cn(
-          "mx-0.5 inline-block rounded-[4px] border border-primary bg-input px-1.5 py-0.5",
+          // indent-0: an inline-block inherits a first-line indent and would draw it inside itself.
+          "mx-0.5 inline-block rounded-[4px] border border-primary bg-input px-1.5 py-0.5 indent-0",
           "text-sm text-foreground outline-none ring-[3px] ring-ring/20",
           marksClass(marks),
         )}
@@ -302,7 +303,7 @@ export function PlaceholderField({
             : `${label}. Preencher`
       }
       className={cn(
-        "mx-0.5 inline-block rounded-[4px] border px-1.5 py-0.5 align-baseline transition-colors",
+        "mx-0.5 inline-block rounded-[4px] border px-1.5 py-0.5 align-baseline indent-0 transition-colors",
         "focus-visible:ring-[3px] focus-visible:ring-ring/30",
         marksClass(marks),
         invalid

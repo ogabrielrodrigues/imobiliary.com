@@ -340,7 +340,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-15 — the block editor, with formatting, proven in Word; next: see it signed in
+**Last updated:** 2026-09-15 — the block editor, with formatting, verified signed in and in Word; next: the open decisions
 
 ### Done
 
@@ -996,21 +996,39 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       automation here; do not use it.** Iterating `Paragraphs` with PowerShell
       `foreach` is also best avoided; index with `Item(i)`.
     - **User feedback:** first version "ficou bom"; formatting added after.
-      **The formatted editor has not been seen in a browser yet**: the pane's
-      session had expired.
+    - **Verified signed in (2026-09-15)**, every toolbar control driven in the
+      pane: heading 1 centred; a justified paragraph with 1.5 spacing and a
+      first-line indent; right-aligned 14pt; two indent steps and back; double
+      spacing; superscript, subscript, strike and bold-italic-underline; a
+      numbered list with Tab and Shift+Tab to level i. and back; a page break
+      with Ctrl+Enter; a bulleted list nested with the indent button; fields
+      typed as `{{.nome}}`, inserted from "Inserir campo" ("Prazo em meses"
+      became `prazo_em_meses`) and renamed from the panel. Saved, the template
+      screen showed "Editar" and a preview matching the editor; a document
+      generated from it, captured in the page and opened in Word, kept every
+      format, both lists and two pages, with `&` and `<>` in values. "Editar"
+      then: leaving without changes did not ask, leaving with changes did,
+      "Salvar como versão 2" published it. A Word template's `/editar`
+      explains why it cannot open. Test data deleted.
+    - **Fixed during that check:** Ctrl+Enter left the caret before the break
+      (it now splits the paragraph and continues after it, as Word does; not
+      offered inside a list); a chip inside a paragraph with a first-line indent
+      inherited the indent inside itself (`indent-0` on chips, in the editor
+      and the preview); the editor drew the second list level as "a." (an
+      `@counter-style` makes it "a)", as Word and the preview do); the preview
+      note claimed a Word origin for editor templates.
+    - **Harness notes:** the pane's `type` inserts a whole string at once, so
+      an input rule that fires on the last character only fires when that
+      character is typed on its own; the key is `Enter`, not `Return`. TipTap's
+      `NodeViewWrapper` passes its `as` prop through to the DOM as an
+      attribute: harmless, from the library. A CSP report about a blob worker
+      appeared once on the first load of the session, before any script ran;
+      its source was not identified and it did not recur.
     - `contrast.test.ts` now normalises CRLF. With `core.autocrlf` a checkout
       writes CRLF, and a Python rewrite in text mode on Windows does too;
       that broke the test once. Rewrite files with `write_bytes`.
 
 ### Next step
-
-**See the block editor signed in** — the user signs in the browser pane.
-Create a template using every toolbar control (alignment, size, lists with
-Tab levels, indents, spacing, page break, marks, fields inserted and renamed),
-save it, check the generation screen's preview draws the same, generate a
-document and open it; then "Editar", change something, save as version 2,
-and confirm the leave guard asks only while there are unsaved changes. Delete
-the test template afterwards.
 
 **Points from the 2026-09-14 review, awaiting the user's decision:**
 - Documents inside an open batch are newest first (the only order the API

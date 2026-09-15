@@ -508,9 +508,11 @@ function GenerateScreen({
           ) : (
             <>
               <p className="text-caption text-faint">
-                Clique em um campo no documento para preenchê-lo. Esta é uma
-                leitura simplificada do modelo: o arquivo gerado mantém a
-                formatação original do Word.
+                {/* A template written in the editor is shown from its own tree,
+                    exactly; one from Word is a simplified reading of it. */}
+                {editable
+                  ? "Clique em um campo no documento para preenchê-lo. O documento gerado sai com esta formatação."
+                  : "Clique em um campo no documento para preenchê-lo. Esta é uma leitura simplificada do modelo: o arquivo gerado mantém a formatação original do Word."}
               </p>
               <DocumentPreview blocks={blocks} renderPlaceholder={boundChip} />
             </>

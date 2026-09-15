@@ -405,7 +405,7 @@ function Toolbar({
             </option>
           ))}
         </select>
-        <IconAction label="Inserir quebra de página" disabled={disabled} onClick={() => run((c) => c.setPageBreak())}>
+        <IconAction label="Inserir quebra de página" disabled={disabled || (state?.inList ?? false)} onClick={() => run((c) => c.setPageBreak())}>
           <IconPageBreak />
         </IconAction>
 
