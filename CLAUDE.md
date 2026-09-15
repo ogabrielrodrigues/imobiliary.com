@@ -340,7 +340,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-15 — the block editor, with formatting, verified signed in and in Word; next: the open decisions
+**Last updated:** 2026-09-15 — batches listed in row order and accented field labels; nothing open but the deferred deploy and legal items
 
 ### Done
 
@@ -896,11 +896,8 @@ _Update this section as work proceeds. It is what a fresh session reads first._
     (drawer closes on navigation, cards, batch card opens, no page scrolls
     sideways), Ajustes (Claro and Papel switch knobs, high contrast), and the
     preferences restored. No console error from the app.
-    - **Inside an open batch documents are newest first**, like the rest of
-      the history, because the API lists them only that way; only the ZIP is in
-      generation order. Two comments had claimed otherwise and were corrected.
-      Offering generation order would need an order parameter on
-      `GET /v1/documents`.
+    - Inside an open batch documents were newest first at the time; item 34
+      changed that to generation order.
     - The Ajustes tab list is 32px with a 1px subpixel overflow, clipped by
       `overflow-y-hidden`: not visible, not a bug.
 
@@ -1028,15 +1025,42 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       writes CRLF, and a Python rewrite in text mode on Windows does too;
       that broke the test once. Rewrite files with `write_bytes`.
 
+34. **The two decisions left from the 2026-09-14 review, put into practice**
+    at the user's request (2026-09-15).
+    - **Documents inside an open batch are in row order.** The API's
+      `GET /v1/documents` takes `order=newest|oldest` (`d912799`, contract
+      `7603715`, `aa924f8`): newest by default, anything else a 422 on
+      `order`, `DocumentFilter.OldestFirst` in the domain, `ORDER BY id ASC`
+      in SQLite (UUIDv7 ids sort by creation). The batch archive now reads
+      that order directly instead of reversing a newest-first listing.
+      `listBatchDocuments` asks for `oldest`, so the open batch, the ZIP and
+      the spreadsheet agree. Integration test
+      `TestDocumentsListInGenerationOrderOnRequest` covers default, both
+      values, paging and the 422. The reference page was republished at the
+      same URL (version 5).
+    - **Field labels have their accents** (`beb0914`). `humanize`
+      (`domain/placeholder.ts`) maps ASCII words with a single reading in
+      lease, sale and registration vocabulary to their accented form
+      (`locatario` → "Locatário", `mes` → "Mês", `endereco_do_imovel` →
+      "Endereço do imóvel") and capitalises acronyms (CPF, CNPJ, CEP, IPTU).
+      **Ambiguous words are deliberately absent** (e/é, pais/país, esta/está):
+      a label may stay unaccented but is never wrong. Words not listed stay as
+      typed; extend the map rather than guessing in code. The labels reach the
+      generation screen, the chips' spoken names, the fields panel, the batch
+      page and the model spreadsheet's headers; column matching strips accents,
+      so old and new spreadsheets both match.
+    - Verified signed in: a batch of three from the model spreadsheet
+      (headers "Data › Dia;Data › Mês;Pessoa nome") matched every column and
+      listed primeira, segunda, terceira when opened, on the phone-width cards
+      as well; the generation screen reads "Data mês". Test batch deleted.
+
 ### Next step
 
-**Points from the 2026-09-14 review, awaiting the user's decision:**
-- Documents inside an open batch are newest first (the only order the API
-  lists); generation order would need an order parameter on
-  `GET /v1/documents`.
-- Field labels have no accents ("Locatario", "Mes") on screen and in the model
-  spreadsheet's headers, because placeholder names are ASCII and `humanize`
-  does not guess accents. Column matching works either way.
+Nothing is waiting on a decision. What remains is what the user deferred:
+**deploy** (item 4 of the 2026-09-14 survey: the production start command,
+TLS in front of the API, discarding `data/docgen.db`) and the **legal items**
+(item 5: controller identity, a lawyer's review, the DPA with Resend), both for
+the day the platform leaves the controlled local environment. See Open items.
 
 Not in the editor on purpose, for now: fonts, colours, highlight, tables,
 images, headers and footers. Tables are the costly one: the block model,
