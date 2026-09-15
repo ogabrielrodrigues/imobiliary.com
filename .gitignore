@@ -11,6 +11,10 @@ docgen-api/data/
 docgen-api/docgen
 docgen-api/docgen.exe
 
+# --- imobiliary-api (Go) -----------------------------------------------------
+imobiliary-api/imobiliary
+imobiliary-api/imobiliary.exe
+
 # --- docs (TanStack Start) ---------------------------------------------------
 node_modules/
 docs/dist/
