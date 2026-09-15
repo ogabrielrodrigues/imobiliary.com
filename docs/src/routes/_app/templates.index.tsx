@@ -1,4 +1,4 @@
-import { IconFileText, IconSearch, IconUpload, IconX } from "@tabler/icons-react";
+import { IconFileText, IconPencilPlus, IconSearch, IconUpload, IconX } from "@tabler/icons-react";
 import { useRef } from "react";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
@@ -62,6 +62,10 @@ function TemplatesPage() {
                 }
               />
             )}
+            <Button variant="secondary" nativeButton={false} render={<Link to="/templates/criar" />}>
+              <IconPencilPlus data-icon="inline-start" aria-hidden="true" />
+              Criar no editor
+            </Button>
             <Button nativeButton={false} render={<Link to="/templates/novo" />}>
               <IconUpload data-icon="inline-start" aria-hidden="true" />
               Enviar modelo
@@ -76,9 +80,12 @@ function TemplatesPage() {
           <EmptyState
             icon={<IconFileText />}
             title="Nenhum template ainda"
-            description="Envie um .docx com campos no formato {{.campo}} para começar. A plataforma descobre os campos sozinha."
+            description="Envie um .docx com campos no formato {{.campo}}, ou escreva o modelo aqui mesmo no editor. A plataforma descobre os campos sozinha."
             action={
-              <Button size="sm" nativeButton={false} render={<Link to="/templates/novo" />}><IconUpload data-icon="inline-start" aria-hidden="true" />Enviar modelo</Button>
+              <span className="flex flex-wrap justify-center gap-2">
+                <Button size="sm" nativeButton={false} render={<Link to="/templates/novo" />}><IconUpload data-icon="inline-start" aria-hidden="true" />Enviar modelo</Button>
+                <Button size="sm" variant="secondary" nativeButton={false} render={<Link to="/templates/criar" />}><IconPencilPlus data-icon="inline-start" aria-hidden="true" />Criar no editor</Button>
+              </span>
             }
           />
         ) : (

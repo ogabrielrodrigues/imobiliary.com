@@ -52,6 +52,18 @@ export interface TemplateUploadInput {
 export function validateTemplateUpload(
   input: TemplateUploadInput,
 ): ValidationError | null {
+  const fields = [...validateTemplateDetails(input), ...validateTemplateFile(input.file)];
+  return fields.length > 0 ? new ValidationError(fields) : null;
+}
+
+/**
+ * The name and description rules alone, shared by the upload and by a template
+ * written in the block editor, which has no file until it is saved.
+ */
+export function validateTemplateDetails(input: {
+  readonly name: string;
+  readonly description: string;
+}): FieldError[] {
   const fields: FieldError[] = [];
 
   const name = input.name.trim();
@@ -71,9 +83,7 @@ export function validateTemplateUpload(
     });
   }
 
-  fields.push(...validateTemplateFile(input.file));
-
-  return fields.length > 0 ? new ValidationError(fields) : null;
+  return fields;
 }
 
 /** Checks the chosen file's shape and size. */

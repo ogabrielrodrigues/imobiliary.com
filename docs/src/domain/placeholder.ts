@@ -118,3 +118,21 @@ export function humanize(fragment: string): string {
 export function placeholderSyntax(name: string): string {
   return `{{.${name}}}`;
 }
+
+/**
+ * A field name from what an author typed: "Nome do locatário" becomes
+ * `nome_do_locatario`. Accents are removed (and "º" read as "o"), anything that is not a letter or a
+ * digit becomes one underscore, and a leading digit gets a `campo_` prefix, so
+ * the result always satisfies `isValidPlaceholderName` unless it is empty or
+ * too long.
+ */
+export function toPlaceholderName(label: string): string {
+  const name = label
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (name === "") return "";
+  return /^[0-9]/.test(name) ? `campo_${name}` : name;
+}

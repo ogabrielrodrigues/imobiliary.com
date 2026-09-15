@@ -1,7 +1,15 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-import type { Block, Marks, Segment } from "@/domain/block";
+import {
+  BASE_FONT_SIZE,
+  formatOf,
+  listPositions,
+  type Block,
+  type ListPosition,
+  type Marks,
+  type Segment,
+} from "@/domain/block";
 import { humanize, placeholderSyntax } from "@/domain/placeholder";
 
 /** Which placeholder has its input open. One at a time, across the document. */
@@ -25,11 +33,11 @@ export type RenderPlaceholder = (
  * The template, shown as a document, with each placeholder editable where it
  * sits.
  *
- * This is a reading of the file, not the file: paragraphs, heading level and
- * emphasis, nothing more. The document a user downloads is still rendered by
- * the API from the original archive, so anything this leaves out — page breaks,
- * fonts, images, tables — is missing from the preview only, never from the
- * result.
+ * This is a reading of the file, not the file: paragraphs and headings,
+ * alignment, indentation, spacing, lists, page breaks and emphasis, nothing
+ * more. The document a user downloads is still rendered by the API from the
+ * original archive, so anything this leaves out — fonts, images, tables — is
+ * missing from the preview only, never from the result.
  */
 export function DocumentPreview({
   blocks,
@@ -39,6 +47,7 @@ export function DocumentPreview({
   readonly renderPlaceholder: RenderPlaceholder;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
+  const positions = useMemo(() => listPositions(blocks), [blocks]);
 
   return (
     <article
@@ -51,6 +60,7 @@ export function DocumentPreview({
           key={index}
           blockIndex={index}
           block={block}
+          list={positions[index] ?? null}
           editing={editing}
           onEdit={setEditing}
           renderPlaceholder={renderPlaceholder}
@@ -60,30 +70,60 @@ export function DocumentPreview({
   );
 }
 
-const BLOCK_CLASS: Record<Block["type"], string> = {
+const BLOCK_CLASS: Record<Exclude<Block["type"], "pageBreak">, string> = {
   heading1: "text-2xl font-semibold tracking-[-0.015em]",
   heading2: "text-lg font-semibold",
   heading3: "text-lead font-semibold",
   paragraph: "text-sm leading-[1.7]",
 };
 
+/** Room for a list marker, per level. */
+const LIST_STEP_REM = 1.5;
+
+/**
+ * A block's paragraph settings as inline style. Line spacing is Word's
+ * multiple times 1.45, so the 1.15 default lands on the 1.7 paragraphs use;
+ * one indentation step is 2rem.
+ */
+function blockStyle(block: Block, list: ListPosition | null): CSSProperties {
+  const format = formatOf(block);
+  return {
+    ...(format.align === null ? {} : { textAlign: format.align }),
+    ...(format.lineSpacing === null ? {} : { lineHeight: format.lineSpacing * 1.45 }),
+    ...(format.indent === 0 ? {} : { marginLeft: `${format.indent * 2}rem` }),
+    ...(format.firstLineIndent ? { textIndent: "2rem" } : {}),
+    ...(list === null ? {} : { paddingLeft: `${(list.level + 1) * LIST_STEP_REM}rem`, position: "relative" }),
+  };
+}
+
 function BlockView({
   blockIndex,
   block,
+  list,
   editing,
   onEdit,
   renderPlaceholder,
 }: {
   readonly blockIndex: number;
   readonly block: Block;
+  readonly list: ListPosition | null;
   /** The occurrence being edited, as "block:segment". */
   readonly editing: string | null;
   readonly onEdit: (occurrence: string | null) => void;
   readonly renderPlaceholder: RenderPlaceholder;
 }) {
+  if (block.type === "pageBreak") {
+    return (
+      <div role="separator" aria-label="Quebra de página" className="page-break my-0">
+        <span>Quebra de página</span>
+      </div>
+    );
+  }
+
+  const base = BASE_FONT_SIZE[block.type];
   const content = block.segments.map((segment, index) => {
     if (segment.kind === "text") {
-      return <TextSpan key={index} segment={segment} />;
+      return <TextSpan key={index} segment={segment} base={base} />;
     }
 
     // Editing is tracked per occurrence, never per name. A placeholder that
@@ -92,7 +132,7 @@ function BlockView({
     // marks both as errors before anyone typed.
     const occurrence = `${blockIndex}:${index}`;
     return (
-      <span key={index} className="contents">
+      <span key={index} className="contents" style={marksStyle(segment, base)}>
         {renderPlaceholder(segment.name, segment, {
           editing: editing === occurrence,
           onEdit: (name) => onEdit(name === null ? null : occurrence),
@@ -102,22 +142,41 @@ function BlockView({
   });
 
   const className = BLOCK_CLASS[block.type];
+  const style = blockStyle(block, list);
 
   // An empty paragraph is spacing in the original; keeping it preserves the
-  // document's rhythm instead of collapsing it.
-  if (block.segments.length === 0) {
+  // document's rhythm instead of collapsing it. An empty list item still
+  // shows its marker.
+  if (block.segments.length === 0 && list === null) {
     return <p className="h-2" aria-hidden="true" />;
   }
 
+  // The marker is drawn, not announced: the text reads the same without it,
+  // and a list role on a lone paragraph would be wrong without its list.
+  const marker = list !== null && (
+    <span
+      aria-hidden="true"
+      className="absolute text-muted-foreground"
+      style={{ left: `${list.level * LIST_STEP_REM}rem` }}
+    >
+      {list.marker}
+    </span>
+  );
+
   switch (block.type) {
     case "heading1":
-      return <h2 className={className}>{content}</h2>;
+      return <h2 className={className} style={style}>{content}</h2>;
     case "heading2":
-      return <h3 className={className}>{content}</h3>;
+      return <h3 className={className} style={style}>{content}</h3>;
     case "heading3":
-      return <h4 className={className}>{content}</h4>;
+      return <h4 className={className} style={style}>{content}</h4>;
     default:
-      return <p className={className}>{content}</p>;
+      return (
+        <p className={className} style={style}>
+          {marker}
+          {content}
+        </p>
+      );
   }
 }
 
@@ -125,14 +184,30 @@ function marksClass(marks: Marks): string {
   return cn(
     marks.bold && "font-semibold",
     marks.italic && "italic",
-    marks.underline && "underline",
+    // One text-decoration utility holds both lines, so they are combined.
+    marks.underline && marks.strike
+      ? "[text-decoration-line:underline_line-through]"
+      : marks.underline
+        ? "underline"
+        : marks.strike && "line-through",
+    marks.superscript && "align-super text-[0.75em]",
+    marks.subscript && "align-sub text-[0.75em]",
   );
 }
 
-function TextSpan({ segment }: { readonly segment: Segment & { kind: "text" } }) {
+/**
+ * A set size, relative to the block's own base size, so a 12pt word in an
+ * 11pt paragraph is drawn a little larger than the text around it however
+ * large the preview draws that paragraph.
+ */
+function marksStyle(marks: Marks, base: number): CSSProperties | undefined {
+  return marks.size === null ? undefined : { fontSize: `${marks.size / base}em` };
+}
+
+function TextSpan({ segment, base }: { readonly segment: Segment & { kind: "text" }; readonly base: number }) {
   // Newlines come from <w:br/>; preserving them keeps a broken line broken.
   return (
-    <span className={cn("whitespace-pre-wrap", marksClass(segment))}>
+    <span className={cn("whitespace-pre-wrap", marksClass(segment))} style={marksStyle(segment, base)}>
       {segment.text}
     </span>
   );

@@ -3,7 +3,7 @@ import { useForm, useStore } from "@tanstack/react-form";
 import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
-import { IconAlertCircle, IconAlertTriangle, IconDownload, IconFilePlus, IconPlus, IconStack2, IconTrash } from "@tabler/icons-react";
+import { IconAlertCircle, IconAlertTriangle, IconDownload, IconFilePlus, IconPencil, IconPlus, IconStack2, IconTrash } from "@tabler/icons-react";
 
 import { messageFor, summaryOf, type Failure } from "@/application/result";
 import { DocumentPreview, PlaceholderField } from "@/components/document-preview";
@@ -106,7 +106,7 @@ function TemplateDetailPage() {
     );
   }
 
-  const { template, blocks, versions, versionsTruncated, previewUnavailable } = result.value;
+  const { template, blocks, versions, versionsTruncated, previewUnavailable, editable } = result.value;
   const selected = template.version?.version;
 
   return (
@@ -120,6 +120,7 @@ function TemplateDetailPage() {
       versions={versions}
       versionsTruncated={versionsTruncated}
       previewUnavailable={previewUnavailable}
+      editable={editable}
     />
   );
 }
@@ -130,12 +131,15 @@ function GenerateScreen({
   versions,
   versionsTruncated,
   previewUnavailable,
+  editable,
 }: {
   readonly template: Template;
   readonly blocks: readonly Block[];
   readonly versions: readonly TemplateVersion[];
   readonly versionsTruncated: boolean;
   readonly previewUnavailable: boolean;
+  /** Whether the shown version was written in the block editor and can open there. */
+  readonly editable: boolean;
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -342,6 +346,16 @@ function GenerateScreen({
                 latest={template.latestVersion}
                 onChange={showVersion}
               />
+            )}
+            {editable && shown === template.latestVersion && (
+              <Button
+                variant="secondary"
+                nativeButton={false}
+                render={<Link to="/templates/$templateId/editar" params={{ templateId: template.id }} />}
+              >
+                <IconPencil data-icon="inline-start" aria-hidden="true" />
+                Editar
+              </Button>
             )}
             <Button
               type="button"

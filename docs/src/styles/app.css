@@ -435,3 +435,137 @@
     outline-offset: 2px;
   }
 }
+
+/*
+  The block editor. TipTap would inject these rules as a <style> element at
+  runtime; it is told not to, so every rule the page draws with lives here.
+  The first block is what ProseMirror needs to behave: spaces and line breaks
+  kept as typed, and atoms (the field chips) not inheriting pre-wrap.
+*/
+.ProseMirror {
+  position: relative;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  white-space: break-spaces;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0;
+}
+
+.ProseMirror [contenteditable="false"] {
+  white-space: normal;
+}
+
+img.ProseMirror-separator {
+  display: inline !important;
+  border: none !important;
+  margin: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.ProseMirror-hideselection *::selection {
+  background: transparent;
+}
+
+/*
+  Sizes follow the writer's styles in points, drawn in rem so the text-size
+  preference still applies: 1rem is 12pt at the default root size. Paragraphs
+  are 11pt, headings 16, 13 and 12, as in word/styles.xml.
+*/
+.block-editor-content .ProseMirror {
+  font-size: calc(11rem / 12);
+}
+
+.block-editor-content h1 {
+  font-size: calc(16rem / 12);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  margin-top: 1.25rem;
+}
+
+.block-editor-content h2 {
+  font-size: calc(13rem / 12);
+  font-weight: 600;
+  margin-top: 1rem;
+}
+
+.block-editor-content h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-top: 0.75rem;
+}
+
+.block-editor-content .ProseMirror > :first-child {
+  margin-top: 0;
+}
+
+.block-editor-content p {
+  line-height: 1.7;
+  min-height: 1.7em;
+}
+
+.block-editor-content ul,
+.block-editor-content ol {
+  padding-left: 1.5rem;
+}
+
+.block-editor-content ul {
+  list-style: disc;
+}
+
+.block-editor-content ul ul {
+  list-style: circle;
+}
+
+.block-editor-content ul ul ul {
+  list-style: square;
+}
+
+.block-editor-content ol {
+  list-style: decimal;
+}
+
+.block-editor-content ol ol {
+  list-style: lower-alpha;
+}
+
+.block-editor-content ol ol ol {
+  list-style: lower-roman;
+}
+
+.block-editor-content li::marker {
+  color: var(--muted-foreground);
+}
+
+/* A page break: a labelled rule across the page, and a ring when selected. */
+.page-break {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1rem 0;
+  color: var(--faint);
+  font-size: var(--text-caption);
+  user-select: none;
+}
+
+.page-break::before,
+.page-break::after {
+  content: "";
+  flex: 1;
+  border-top: 1px dashed var(--border-hover);
+}
+
+.ProseMirror-selectednode.page-break {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* The hint in an empty document, from TipTap's Placeholder extension. */
+.block-editor-content p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--faint);
+}

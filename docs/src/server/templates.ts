@@ -10,15 +10,28 @@ import { createServerFn } from "@tanstack/react-start";
 
 import { collectPages, LISTING_CAP } from "../application/paging.ts";
 import { attempt, type Result } from "../application/result.ts";
-import { fieldError, NotFoundError, ValidationError } from "../domain/errors.ts";
+import { fieldError, NotFoundError, ValidationError, type FieldError } from "../domain/errors.ts";
 import {
+  DOCX_MEDIA_TYPE,
+  validateTemplateDetails,
   validateTemplateFile,
   validateTemplateUpload,
   type Template,
   type TemplateVersion,
 } from "../domain/template.ts";
 import type { Block } from "../domain/block.ts";
+import {
+  blockOf,
+  describesDocument,
+  MAX_BLOCKS,
+  normalizeBlocks,
+  parseBlockSource,
+  validateBlocks,
+} from "../domain/block-source.ts";
+import { cleanDocumentName } from "../domain/document-name.ts";
+import { buildDocx, SOURCE_PART } from "../infrastructure/docx/build.ts";
 import { parseDocx } from "../infrastructure/docx/parse.ts";
+import { readZipEntry } from "../infrastructure/docx/zip.ts";
 import { assertSameOrigin, callContext, docgen, sessions } from "./runtime.ts";
 
 /**
@@ -72,6 +85,96 @@ export const createTemplate = createServerFn({ method: "POST" })
 
         return sessions().authorize(callContext(), (ctx) =>
           docgen().templates.create(ctx, input),
+        );
+      }),
+  );
+
+/**
+ * A block tree sent by the browser, checked and in its normal form, with the
+ * problems found under `content`. The browser is not trusted to have run the
+ * same checks: this is what decides what reaches the writer.
+ */
+function checkedContent(raw: unknown): { tree: Block[]; problems: FieldError[] } {
+  const unreadable = {
+    tree: [],
+    problems: [{ field: "content", message: "Não foi possível ler o conteúdo do modelo." }],
+  };
+  if (!Array.isArray(raw) || raw.length > MAX_BLOCKS) return unreadable;
+
+  const blocks: Block[] = [];
+  for (const item of raw) {
+    const block = blockOf(item);
+    if (block === null) return unreadable;
+    blocks.push(block);
+  }
+  const tree = normalizeBlocks(blocks);
+  return { tree, problems: validateBlocks(tree) };
+}
+
+/** The .docx for a tree, named after the template. */
+function templateFile(tree: readonly Block[], name: string): File {
+  const bytes = buildDocx(tree, { title: name });
+  return new File([new Uint8Array(bytes)], `${cleanDocumentName(name) || "modelo"}.docx`, {
+    type: DOCX_MEDIA_TYPE,
+  });
+}
+
+/**
+ * Creates a template from a document written in the block editor.
+ *
+ * The .docx is built here, on the server, where the writer and `node:zlib`
+ * live; from then on it is an upload like any other, and the API inspects it
+ * the same way. Name, description and content are checked together, so every
+ * problem shows at once.
+ */
+export const createTemplateFromBlocks = createServerFn({ method: "POST" })
+  .validator((input: { name: string; description: string; blocks: unknown }) => input)
+  .handler(
+    async ({ data }): Promise<Result<Template>> =>
+      attempt(async () => {
+        assertSameOrigin();
+
+        const name = String(data.name ?? "").trim();
+        const description = String(data.description ?? "").trim();
+        const { tree, problems } = checkedContent(data.blocks);
+        const fields = [...validateTemplateDetails({ name, description }), ...problems];
+        if (fields.length > 0) throw new ValidationError(fields);
+
+        const file = templateFile(tree, name);
+        const invalid = validateTemplateUpload({ name, description, file });
+        if (invalid) throw invalid;
+
+        return sessions().authorize(callContext(), (ctx) =>
+          docgen().templates.create(ctx, { name, description, file }),
+        );
+      }),
+  );
+
+/**
+ * Publishes a new version of a template from the block editor. The version it
+ * replaces stays exactly as it was, like any other version.
+ */
+export const publishTemplateVersionFromBlocks = createServerFn({ method: "POST" })
+  .validator((input: { templateId: string; name: string; blocks: unknown }) => input)
+  .handler(
+    async ({ data }): Promise<Result<Template>> =>
+      attempt(async () => {
+        assertSameOrigin();
+
+        const templateId = String(data.templateId ?? "");
+        if (templateId === "") throw new NotFoundError();
+
+        const { tree, problems } = checkedContent(data.blocks);
+        if (problems.length > 0) throw new ValidationError(problems);
+
+        const file = templateFile(tree, String(data.name ?? ""));
+        const fileProblems = validateTemplateFile(file);
+        if (fileProblems.length > 0) {
+          throw new ValidationError(fileProblems.map((problem) => ({ ...problem, field: "content" })));
+        }
+
+        return sessions().authorize(callContext(), (ctx) =>
+          docgen().templates.addVersion(ctx, templateId, file),
         );
       }),
   );
@@ -174,6 +277,13 @@ export interface TemplateContent {
   readonly versionsTruncated: boolean;
   /** True when the content could not be read; the form still works without it. */
   readonly previewUnavailable: boolean;
+  /**
+   * True when the version was written in the block editor and its stored tree
+   * still describes the document, so the editor can open it without losing
+   * anything. A template from Word, or one changed in Word after the editor
+   * wrote it, is not editable.
+   */
+  readonly editable: boolean;
 }
 
 /**
@@ -221,12 +331,18 @@ export const getTemplateContent = createServerFn({ method: "GET" })
               template.id,
               selected.version,
             );
+            const document = parseDocx(archive);
+            const source = storedTree(archive);
+            // The stored tree is exact where the reader is approximate, so it
+            // is also the better preview, but only while it still matches.
+            const editable = source !== null && describesDocument(source, document);
             return {
               template,
               versions,
               versionsTruncated: listing.truncated,
-              blocks: parseDocx(archive),
+              blocks: editable ? source : document,
               previewUnavailable: false,
+              editable,
             };
           } catch (error) {
             // A document this reader cannot make sense of must not cost the
@@ -239,8 +355,15 @@ export const getTemplateContent = createServerFn({ method: "GET" })
               versionsTruncated: listing.truncated,
               blocks: [],
               previewUnavailable: true,
+              editable: false,
             };
           }
         }),
       ),
   );
+
+/** The tree the block editor stored in an archive, or null. */
+function storedTree(archive: Uint8Array): Block[] | null {
+  const part = readZipEntry(archive, SOURCE_PART);
+  return part === null ? null : parseBlockSource(new TextDecoder().decode(part));
+}

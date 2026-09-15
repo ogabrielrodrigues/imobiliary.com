@@ -4,24 +4,37 @@
  * This is a **preview**, not a source of truth. Values fill placeholders, but
  * the document is still rendered by the API from the original archive, so
  * nothing here can affect the file a user ends up with. That is what allows a
- * deliberately simple reading: paragraphs, heading level, bold/italic/underline
- * and the position of each placeholder. No page breaks, no fonts, no images,
- * no tables.
+ * deliberately simple reading of what `domain/block.ts` models: paragraphs,
+ * heading level, alignment, indentation, line spacing, lists, page breaks,
+ * emphasis, font size and the position of each placeholder. No fonts, colours,
+ * images or tables.
  *
  * It must never be used to rewrite a Word template — round-tripping through
  * this model would discard everything it does not model.
  */
 
 import {
+  LINE_SPACINGS,
+  MAX_INDENT,
+  MAX_LIST_LEVEL,
+  NO_FORMAT,
   NO_MARKS,
+  type Alignment,
   type Block,
+  type BlockFormat,
   type BlockType,
+  type LineSpacing,
+  type ListKind,
   type Marks,
   type Segment,
 } from "../../domain/block.ts";
 import { readZipEntry } from "./zip.ts";
 
 export const MAIN_DOCUMENT_PART = "word/document.xml";
+export const NUMBERING_PART = "word/numbering.xml";
+
+/** For each numbering instance id, the kind of list at each level. */
+export type Numbering = ReadonlyMap<string, readonly ListKind[]>;
 
 
 /** Pulls the block tree out of a whole archive. */
@@ -30,7 +43,65 @@ export function parseDocx(archive: Uint8Array): Block[] {
   if (part === null) {
     throw new Error(`archive is missing ${MAIN_DOCUMENT_PART}`);
   }
-  return parseDocumentXml(new TextDecoder().decode(part));
+  const numbering = readZipEntry(archive, NUMBERING_PART);
+  return parseDocumentXml(
+    new TextDecoder().decode(part),
+    numbering === null ? new Map() : parseNumberingXml(new TextDecoder().decode(numbering)),
+  );
+}
+
+/**
+ * Which instances are bulleted and which numbered, level by level. A level
+ * whose format is "bullet" is a bulleted list; any other format (decimal,
+ * letters, roman) reads as numbered.
+ */
+export function parseNumberingXml(xml: string): Numbering {
+  const abstract = new Map<string, ListKind[]>();
+  const instances = new Map<string, string>();
+
+  let abstractId: string | null = null;
+  let level = -1;
+  let numId: string | null = null;
+
+  for (const token of tokenize(xml)) {
+    if (token.kind === "text") continue;
+    const name = localName(token.name);
+
+    if (token.kind === "close") {
+      if (name === "abstractNum") abstractId = null;
+      if (name === "num") numId = null;
+      continue;
+    }
+
+    switch (name) {
+      case "abstractNum":
+        abstractId = token.attributes["w:abstractNumId"] ?? null;
+        if (abstractId !== null) abstract.set(abstractId, []);
+        break;
+      case "lvl":
+        level = Number(token.attributes["w:ilvl"] ?? -1);
+        break;
+      case "numFmt":
+        if (abstractId !== null && level >= 0 && level <= MAX_LIST_LEVEL) {
+          abstract.get(abstractId)![level] = token.attributes["w:val"] === "bullet" ? "bullet" : "ordered";
+        }
+        break;
+      case "num":
+        numId = token.attributes["w:numId"] ?? null;
+        break;
+      case "abstractNumId":
+        if (numId !== null && token.attributes["w:val"] !== undefined) {
+          instances.set(numId, token.attributes["w:val"]);
+        }
+        break;
+    }
+  }
+
+  const numbering = new Map<string, readonly ListKind[]>();
+  for (const [id, abstractRef] of instances) {
+    numbering.set(id, abstract.get(abstractRef) ?? []);
+  }
+  return numbering;
 }
 
 /**
@@ -41,7 +112,7 @@ export function parseDocx(archive: Uint8Array): Block[] {
  * anything more faithful would be modelling layout, which this deliberately
  * does not do.
  */
-export function parseDocumentXml(xml: string): Block[] {
+export function parseDocumentXml(xml: string, numbering: Numbering = new Map()): Block[] {
   const blocks: Block[] = [];
 
   let block: MutableBlock | null = null;
@@ -49,6 +120,16 @@ export function parseDocumentXml(xml: string): Block[] {
   let inRunProperties = false;
   let inParagraphProperties = false;
   let inText = false;
+
+  // A page break ends the paragraph it sits in; the text after it continues
+  // in a paragraph of the same kind, which is dropped if it stays empty.
+  const breakPage = () => {
+    if (block === null) return;
+    const continued = { ...emptyBlock(block.type), properties: block.properties, continuation: true };
+    if (block.segments.length > 0) blocks.push(finish(block, numbering));
+    blocks.push({ type: "pageBreak", segments: [] });
+    block = continued;
+  };
 
   for (const token of tokenize(xml)) {
     if (token.kind === "text") {
@@ -63,8 +144,8 @@ export function parseDocumentXml(xml: string): Block[] {
         case "p":
           // A nested paragraph ends the one around it rather than corrupting
           // it; both become blocks in reading order.
-          if (block) blocks.push(finish(block));
-          block = { type: "paragraph", segments: [] };
+          if (block) blocks.push(finish(block, numbering));
+          block = emptyBlock("paragraph");
           break;
         case "pPr":
           inParagraphProperties = true;
@@ -72,6 +153,35 @@ export function parseDocumentXml(xml: string): Block[] {
         case "pStyle":
           if (inParagraphProperties && block) {
             block.type = headingLevel(token.attributes["w:val"] ?? "");
+          }
+          break;
+        case "jc":
+          if (inParagraphProperties && !inRunProperties && block) {
+            block.properties.align = alignment(token.attributes["w:val"] ?? "");
+          }
+          break;
+        case "spacing":
+          if (inParagraphProperties && !inRunProperties && block) {
+            const spacing = lineSpacing(token.attributes);
+            if (spacing !== undefined) block.properties.lineSpacing = spacing;
+          }
+          break;
+        case "ind":
+          if (inParagraphProperties && !inRunProperties && block) {
+            const left = Number(token.attributes["w:left"] ?? token.attributes["w:start"] ?? 0);
+            const firstLine = Number(token.attributes["w:firstLine"] ?? 0);
+            block.properties.indent = Math.min(MAX_INDENT, Math.max(0, Math.round(left / 709)));
+            block.properties.firstLineIndent = firstLine > 0;
+          }
+          break;
+        case "ilvl":
+          if (inParagraphProperties && block) {
+            block.properties.level = Number(token.attributes["w:val"] ?? 0);
+          }
+          break;
+        case "numId":
+          if (inParagraphProperties && block) {
+            block.properties.numId = token.attributes["w:val"] ?? null;
           }
           break;
         case "rPr":
@@ -94,6 +204,25 @@ export function parseDocumentXml(xml: string): Block[] {
             marks = { ...marks, underline: true };
           }
           break;
+        case "strike":
+          if (inRunProperties && isOn(token.attributes)) {
+            marks = { ...marks, strike: true };
+          }
+          break;
+        case "sz": {
+          const halfPoints = Number(token.attributes["w:val"]);
+          if (inRunProperties && Number.isFinite(halfPoints) && halfPoints > 0) {
+            marks = { ...marks, size: halfPoints / 2 };
+          }
+          break;
+        }
+        case "vertAlign": {
+          const value = token.attributes["w:val"];
+          if (inRunProperties) {
+            marks = { ...marks, superscript: value === "superscript", subscript: value === "subscript" };
+          }
+          break;
+        }
         case "r":
           marks = NO_MARKS;
           break;
@@ -101,8 +230,12 @@ export function parseDocumentXml(xml: string): Block[] {
           inText = token.kind === "open";
           break;
         case "br":
+          if (token.attributes["w:type"] === "page") breakPage();
+          else if (block) pushText(block, "\n", marks);
+          break;
         case "tab":
-          if (block) pushText(block, name === "tab" ? "\t" : "\n", marks);
+          // Inside w:pPr a tab is a tab stop definition, not a character.
+          if (block && !inParagraphProperties) pushText(block, "\t", marks);
           break;
       }
     }
@@ -111,7 +244,9 @@ export function parseDocumentXml(xml: string): Block[] {
       switch (name) {
         case "p":
           if (block) {
-            blocks.push(finish(block));
+            if (!(block.continuation && block.segments.length === 0)) {
+              blocks.push(finish(block, numbering));
+            }
             block = null;
           }
           break;
@@ -128,20 +263,87 @@ export function parseDocumentXml(xml: string): Block[] {
     }
   }
 
-  if (block) blocks.push(finish(block));
+  if (block) blocks.push(finish(block, numbering));
   return blocks;
 }
 
 
 // ----- building --------------------------------------------------------
 
+interface ParagraphProperties {
+  align: Alignment | null;
+  lineSpacing: LineSpacing | null;
+  indent: number;
+  firstLineIndent: boolean;
+  numId: string | null;
+  level: number;
+}
+
 interface MutableBlock {
   type: BlockType;
   segments: Segment[];
+  properties: ParagraphProperties;
+  /** Opened after a page break inside another paragraph. */
+  continuation: boolean;
 }
 
-function finish(block: MutableBlock): Block {
-  return { type: block.type, segments: block.segments };
+function emptyBlock(type: BlockType): MutableBlock {
+  return {
+    type,
+    segments: [],
+    properties: { align: null, lineSpacing: null, indent: 0, firstLineIndent: false, numId: null, level: 0 },
+    continuation: false,
+  };
+}
+
+function finish(block: MutableBlock, numbering: Numbering): Block {
+  const { numId, level: rawLevel, ...rest } = block.properties;
+  const level = Math.min(MAX_LIST_LEVEL, Math.max(0, rawLevel));
+  // numId 0 is Word's explicit "no list".
+  const list =
+    numId !== null && numId !== "0" && block.type === "paragraph"
+      ? { kind: numbering.get(numId)?.[level] ?? ("bullet" as ListKind), level }
+      : null;
+
+  const format: BlockFormat = { ...rest, list, indent: list === null ? rest.indent : 0 };
+  const unset =
+    format.align === NO_FORMAT.align &&
+    format.lineSpacing === NO_FORMAT.lineSpacing &&
+    format.indent === 0 &&
+    !format.firstLineIndent &&
+    format.list === null;
+  return unset ? { type: block.type, segments: block.segments } : { type: block.type, segments: block.segments, format };
+}
+
+function alignment(value: string): Alignment | null {
+  switch (value) {
+    case "left":
+    case "start":
+      return "left";
+    case "center":
+      return "center";
+    case "right":
+    case "end":
+      return "right";
+    case "both":
+    case "distribute":
+      return "justify";
+    default:
+      return null;
+  }
+}
+
+/**
+ * The line spacing Word calls "multiple", snapped to the values the model
+ * offers; exact or at-least spacing, and anything between steps, is left unset.
+ */
+function lineSpacing(attributes: Record<string, string>): LineSpacing | null | undefined {
+  const line = attributes["w:line"];
+  if (line === undefined) return undefined;
+  const rule = attributes["w:lineRule"] ?? "auto";
+  if (rule !== "auto") return null;
+  const factor = Number(line) / 240;
+  return LINE_SPACINGS.find((step) => Math.abs(step - factor) < 0.02) ?? null;
 }
 
 function headingLevel(style: string): BlockType {
