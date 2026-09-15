@@ -361,7 +361,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-15 — batches listed in row order and accented field labels; nothing open but the deferred deploy and legal items
+**Last updated:** 2026-09-15 — phase 0 of the main platform started: imobiliary-api skeleton done, PostgreSQL, packages/ui and web still to do
 
 ### Done
 
@@ -1075,13 +1075,54 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       listed primeira, segunda, terceira when opened, on the phone-width cards
       as well; the generation screen reads "Data mês". Test batch deleted.
 
+35. **Main platform, phase 0 (in progress)** — plan in `PLANO.md`.
+    - Root scripts renamed by project (`9f3c5b7`): `docgen:*`, `docs:*`,
+      `imobiliary:*`. `pnpm dev` and `pnpm api:dev` no longer exist.
+    - **`imobiliary-api` skeleton** (`97a8945`, `3ceda0a`, `d24add1`, `20c4c28`):
+      `domain` value types `Money` (int64 centavos, strict "1500.00"),
+      `Rate` (int32 millionths, 4 decimal places, signed), `Date` (calendar
+      day, no zone; day 31 clamps to the month's last day), CPF and
+      alphanumeric CNPJ (the Receita's example `12.ABC.345/01DE-35` validates),
+      with fuzz targets; `platform/fieldcrypt` (versioned AES-GCM keys, AAD of
+      table/column/row, org-scoped HMAC blind index); `platform/logging`
+      (slog JSON with key-based redaction); `platform/metrics` (hand-written
+      Prometheus text format); `platform/config` (fails closed, `.env` loader
+      that never overrides the environment); `adapter/postgres` (pgx pool,
+      checksum-verified migrator under an advisory lock, `InOrganization`
+      transaction with `app.organization_id`); `adapter/http` (`/healthz`,
+      `/readyz`, JSON 404, request id, traceparent, access log by route
+      pattern); `cmd/imobiliary` with `serve` and `migrate`.
+    - **The metrics method is `Expose`, not `WriteTo`**: `go vet` rejects a
+      `WriteTo` whose signature differs from `io.WriterTo`.
+    - **Put the request-observing middleware innermost.** `ServeMux` records
+      `r.Pattern` on the request value it receives; any middleware between it
+      and the observer that calls `WithContext` hides the pattern.
+    - **pgx pulls `golang.org/x/text`, reachable through SCRAM auth**;
+      GO-2026-5970 needed v0.39.0. `govulncheck` is clean after it. The proxy
+      sometimes times out over IPv6 from this machine: retry.
+    - `pnpm security` runs vulncheck, gofmt, vet (both tags) and unit tests on
+      the new module. **The integration suite is written but has never run**:
+      PostgreSQL is not installed. Add it to `security.mjs` once it passes.
+    - **Not started:** PostgreSQL install and `setup-local.sql`, `packages/ui`,
+      `web`, the production-start investigation.
+
 ### Next step
 
-Nothing is waiting on a decision. What remains is what the user deferred:
-**deploy** (item 4 of the 2026-09-14 survey: the production start command,
-TLS in front of the API, discarding `data/docgen.db`) and the **legal items**
-(item 5: controller identity, a lawyer's review, the DPA with Resend), both for
-the day the platform leaves the controlled local environment. See Open items.
+**Finish phase 0 of `PLANO.md`.** The user asked to stop after the API
+skeleton. In order:
+
+1. The user installs PostgreSQL 18 (`winget install PostgreSQL.PostgreSQL.18`,
+   setting the superuser password in the installer; the assistant must not
+   type passwords), runs `psql -U postgres -f imobiliary-api/scripts/setup-local.sql`,
+   fills `pgpass.conf` and `imobiliary-api/.env`.
+2. Run `pnpm imobiliary:test:integration`; fix what fails; add it to
+   `scripts/security.mjs`; run `pnpm imobiliary:migrate` and
+   `pnpm imobiliary:dev`, check `/readyz` and `/metrics`.
+3. `packages/ui`, then `web`, then the production-start investigation
+   (bring any adapter dependency to the user first).
+
+Deferred by the user, unchanged: **deploy** and the **legal items** of the
+docs platform. See Open items.
 
 Not in the editor on purpose, for now: fonts, colours, highlight, tables,
 images, headers and footers. Tables are the costly one: the block model,
