@@ -1102,6 +1102,10 @@ Your plan is {{.plan}} at {{.amount}} per month.</code></pre>
             <div><span class="field-name">batch_id</span><br><span class="field-type">query · uuid</span></div>
             <div class="field-desc">Only the documents of this batch.</div>
           </div>
+          <div class="field">
+            <div><span class="field-name">order</span><br><span class="field-type">query · newest | oldest</span></div>
+            <div class="field-desc"><code>newest</code> by default. <code>oldest</code> lists in generation order, which inside a batch is the order of its rows, the same order as its archive. Any other value is a 422 on <code>order</code>.</div>
+          </div>
         </div>
       </div>
 

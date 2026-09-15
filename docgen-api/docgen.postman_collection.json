@@ -585,7 +585,7 @@
                 }
               ]
             },
-            "description": "Newest first."
+            "description": "Newest first. Add template_id or batch_id to filter, and order=oldest for generation order (the order of a batch's rows)."
           },
           "response": []
         },

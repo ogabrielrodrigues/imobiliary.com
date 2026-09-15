@@ -662,6 +662,7 @@ paths:
         - $ref: "#/components/parameters/Offset"
         - $ref: "#/components/parameters/TemplateFilter"
         - $ref: "#/components/parameters/BatchFilter"
+        - $ref: "#/components/parameters/DocumentOrder"
       responses:
         "200":
           description: A page of documents.
@@ -959,6 +960,18 @@ components:
       schema:
         type: string
         format: uuid
+    DocumentOrder:
+      name: order
+      in: query
+      required: false
+      description: >-
+        newest (the default) lists the latest document first; oldest lists them in
+        the order they were generated, which inside a batch is the order of its rows.
+        Any other value is a 422 on order.
+      schema:
+        type: string
+        enum: [newest, oldest]
+        default: newest
     BatchId:
       name: id
       in: path
