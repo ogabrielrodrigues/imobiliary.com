@@ -13,7 +13,9 @@ import { describe, it } from "node:test";
 
 type Rgb = readonly [number, number, number];
 
-const css = readFileSync(new URL("./app.css", import.meta.url), "utf8");
+// Line endings are normalised: with core.autocrlf a checkout writes CRLF, and
+// the selectors below are matched across a line break.
+const css = readFileSync(new URL("./app.css", import.meta.url), "utf8").replaceAll("\r\n", "\n");
 
 /**
  * The custom properties declared in the first block whose selector is exactly

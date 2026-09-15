@@ -340,7 +340,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-14 — leaving a running batch now asks first; next: the open decisions below, then the block editor
+**Last updated:** 2026-09-15 — the block editor, with formatting, proven in Word; next: see it signed in
 
 ### Done
 
@@ -927,7 +927,90 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       shows the reload prompt only after a real user gesture, so synthetic
       clicks cannot show it. Test batches deleted.
 
+33. **The block editor** (`873f7df` writer, `69326c9` editor), the last piece
+    of the original plan, approved with TipTap on 2026-09-15. The user then
+    asked for the usual formatting and chose: alignment, font size, lists,
+    strikethrough/superscript/subscript, indentation, line spacing and page
+    breaks (not fonts, colours or tables).
+    - **Dependencies:** TipTap 3.31.3, MIT packages only, pinned: core, react,
+      pm, extensions (UndoRedo, Placeholder), and extension-document,
+      -paragraph, -text, -heading, -bold, -italic, -underline, -strike,
+      -superscript, -subscript, -hard-break, -text-align, -text-style, -list.
+      Nothing paid, no cloud.
+    - **The block model grew** (`domain/block.ts`): `pageBreak` blocks, an
+      optional `BlockFormat` (align, lineSpacing 1/1.15/1.5/2, indent steps,
+      firstLineIndent, list {kind, level 0-8}) and marks strike, superscript,
+      subscript and size in points. `listPositions` groups list paragraphs
+      into lists and computes markers; **the preview and the writer both use
+      it**, so where a list restarts and what "a)" reads cannot differ. A
+      .docx numbering holds one kind per level for a whole list, so the first
+      paragraph at a level decides it; a sub-level restarts after an item
+      above it, as Word does.
+    - **Stored source** `imobiliary/source.json`, `domain/block-source.ts`:
+      format `imobiliary.blocks` version 2, still reading 1. `normalizeBlocks`
+      is the one canonical form (joins runs, drops unset formats, clears a
+      list on a heading or an indent inside a list, superscript wins over
+      subscript). **A version is editable only while `describesDocument`
+      holds**: the stored tree's text equals the text the reader finds, so a
+      template changed in Word afterwards is not silently reverted.
+    - **Writer** `infrastructure/docx/build.ts`: A4, Word's built-in heading
+      styles (shown as "Título 1"), compatibility mode 15, a
+      `word/numbering.xml` with one abstract numbering and one instance per
+      list, no author in the properties. Normal is left-aligned, matching
+      what the editor shows by default. **Element order in w:pPr (pStyle,
+      numPr, spacing, ind, jc) and w:rPr (b, i, strike, sz, u, vertAlign)
+      follows the schema; Word rejects anything out of order.**
+    - **Reader** `parse.ts` reads the same properties, including numbering
+      kinds from `word/numbering.xml`, so previews of Word templates show
+      alignment, lists and sizes too. A `w:tab` inside `w:pPr` is a tab stop,
+      not a character; it used to become a stray tab in the preview.
+    - **Editor** `components/block-editor/`: `block-editor.tsx` (toolbar,
+      document, fields panel with insert and rename-everywhere),
+      `field.tsx` (the field as an inline atom; typing or pasting
+      `{{.nome}}` makes one), `formatting.ts` (line spacing, indent and
+      first-line indent as attributes, `PageBreak` with Ctrl+Enter, list items
+      limited to one paragraph plus sub-lists, superscript and subscript
+      exclusive, **font size drawn in rem** — TipTap writes `pt`, which would
+      ignore the text-size preference; 1rem is 12pt at the default root),
+      `unsaved-changes.tsx` (the leave guard). `lib/editor-document.ts`
+      converts the editor's nested lists to flat numbered paragraphs and
+      back, tested. `injectCSS: false`: the editor's rules live in `app.css`.
+      The editor loads only on its two routes, in its own chunk.
+    - **Screens:** `/templates/criar` ("Criar no editor" beside "Enviar
+      modelo") and `/templates/$templateId/editar` ("Editar" on the template
+      screen when the latest version is editable; a Word template explains
+      why it is not). Saving goes through `createTemplateFromBlocks` /
+      `publishTemplateVersionFromBlocks`, which re-check the tree on the
+      server, build the file there and upload it like any other.
+    - **Proof, beyond the tests:** Word 16 is installed here and was driven
+      through COM (`Word.Application`, `DisplayAlerts = 0`, open read-only
+      without repair). It opened a contract, a 400-paragraph file and a file
+      with every format; it read back centring, justification with 1.5
+      spacing and a 1.25 cm first-line indent, right alignment at 14pt, a
+      2.5 cm indent, double spacing, mixed strike/superscript/subscript, list
+      strings 1. a) b) i. 2. 3., a restart at 1, bullets • ◦ ▪ and two pages.
+      A deliberately broken control file failed to open, so the check is
+      real. The API's docx engine (a temporary Go test, removed) normalised,
+      compiled and rendered the same files, and Word opened the results with
+      the formatting intact. **`ExportAsFixedFormat` (PDF) hangs Word under
+      automation here; do not use it.** Iterating `Paragraphs` with PowerShell
+      `foreach` is also best avoided; index with `Item(i)`.
+    - **User feedback:** first version "ficou bom"; formatting added after.
+      **The formatted editor has not been seen in a browser yet**: the pane's
+      session had expired.
+    - `contrast.test.ts` now normalises CRLF. With `core.autocrlf` a checkout
+      writes CRLF, and a Python rewrite in text mode on Windows does too;
+      that broke the test once. Rewrite files with `write_bytes`.
+
 ### Next step
+
+**See the block editor signed in** — the user signs in the browser pane.
+Create a template using every toolbar control (alignment, size, lists with
+Tab levels, indents, spacing, page break, marks, fields inserted and renamed),
+save it, check the generation screen's preview draws the same, generate a
+document and open it; then "Editar", change something, save as version 2,
+and confirm the leave guard asks only while there are unsaved changes. Delete
+the test template afterwards.
 
 **Points from the 2026-09-14 review, awaiting the user's decision:**
 - Documents inside an open batch are newest first (the only order the API
@@ -937,21 +1020,9 @@ _Update this section as work proceeds. It is what a fresh session reads first._
   spreadsheet's headers, because placeholder names are ASCII and `humanize`
   does not guess accents. Column matching works either way.
 
-After that, **the block editor**, the last piece of the original plan. The user asked for an
-explanation first (it is at the end of the plan file) and has not decided yet;
-it also needs a rich-text editor dependency, to be agreed. It needs the docx
-`build` module: blocks → `word/document.xml` → `writeZip`. Write the writer and
-**open its output in Word before building any interface around it** — that is
-the step that decides whether the whole idea works. Store the block tree as
-`imobiliary/source.json` inside the archive so the template can be reopened; the
-API preserves unknown parts byte for byte, which is proven by a test on its
-side.
-
-Deferred deliberately, for a later conversation: **batch generation from a
-`.csv`**, mainly exports from Google Forms.
-
-Add components with `shadcn add table tabs toast progress` as screens need them
-— **never `shadcn init` again**, which would overwrite the theme.
+Not in the editor on purpose, for now: fonts, colours, highlight, tables,
+images, headers and footers. Tables are the costly one: the block model,
+writer, reader and preview would all change.
 
 ### Adding a shadcn component, in practice
 
