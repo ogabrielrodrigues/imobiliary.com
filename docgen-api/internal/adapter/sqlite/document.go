@@ -76,7 +76,12 @@ func (r *DocumentRepository) List(ctx context.Context, ownerID uuid.UUID, filter
 		query += ` AND batch_id = ?`
 		args = append(args, idOf(*filter.BatchID))
 	}
-	query += ` ORDER BY id DESC LIMIT ? OFFSET ?`
+	// Ids are UUIDv7, so their order is creation order.
+	if filter.OldestFirst {
+		query += ` ORDER BY id ASC LIMIT ? OFFSET ?`
+	} else {
+		query += ` ORDER BY id DESC LIMIT ? OFFSET ?`
+	}
 	args = append(args, limit, offset)
 
 	rows, err := r.db.read.QueryContext(ctx, query, args...)

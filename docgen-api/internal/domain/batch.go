@@ -40,6 +40,9 @@ type HistoryEntry struct {
 type DocumentFilter struct {
 	TemplateID *uuid.UUID
 	BatchID    *uuid.UUID
+	// OldestFirst lists in the order the documents were generated instead of
+	// newest first. Inside a batch that is the order of its spreadsheet rows.
+	OldestFirst bool
 }
 
 // ValidateBatchName checks a batch's name, which is shown in the history and

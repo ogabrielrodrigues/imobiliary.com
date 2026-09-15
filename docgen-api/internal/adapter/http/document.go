@@ -133,6 +133,16 @@ func (s *Server) handleListDocuments(w http.ResponseWriter, r *http.Request) {
 		writeError(w, s.logger, err)
 		return
 	}
+	switch r.URL.Query().Get("order") {
+	case "", "newest":
+	case "oldest":
+		filter.OldestFirst = true
+	default:
+		v := &domain.ValidationError{}
+		v.Add("order", "must be newest or oldest")
+		writeError(w, s.logger, v)
+		return
+	}
 
 	limit, offset := pagination(r)
 	docs, err := s.documents.List(r.Context(), userFrom(r.Context()).ID, filter, limit, offset)

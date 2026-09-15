@@ -170,6 +170,41 @@ func TestDocumentsAndHistoryFilterByTemplateAndBatch(t *testing.T) {
 
 	expectFieldError(t, server.get("/v1/history?template_id=nope", session.AccessToken), "template_id")
 	expectFieldError(t, server.get("/v1/documents?batch_id=nope", session.AccessToken), "batch_id")
+	expectFieldError(t, server.get("/v1/documents?order=sideways", session.AccessToken), "order")
+}
+
+func TestDocumentsListInGenerationOrderOnRequest(t *testing.T) {
+	server := newTestServer(t, defaultServerOptions())
+	session := server.registerAndLogin("order@example.com")
+	lease := server.uploadNamed(session.AccessToken, "Locação")
+
+	batch := server.createBatch(session.AccessToken, lease.ID, "Linhas")
+	for _, name := range []string{"primeira", "segunda", "terceira"} {
+		server.generateNamed(session.AccessToken, lease.ID, batch.ID, name, "Ana")
+	}
+
+	names := func(query string) []string {
+		var documents documentListBody
+		decode(t, server.get("/v1/documents?batch_id="+batch.ID+query, session.AccessToken), http.StatusOK, &documents)
+		out := make([]string, 0, len(documents.Items))
+		for _, item := range documents.Items {
+			out = append(out, item.Filename)
+		}
+		return out
+	}
+
+	if got, want := strings.Join(names(""), ","), "terceira.docx,segunda.docx,primeira.docx"; got != want {
+		t.Errorf("default order = %s, want %s", got, want)
+	}
+	if got, want := strings.Join(names("&order=newest"), ","), "terceira.docx,segunda.docx,primeira.docx"; got != want {
+		t.Errorf("order=newest = %s, want %s", got, want)
+	}
+	if got, want := strings.Join(names("&order=oldest"), ","), "primeira.docx,segunda.docx,terceira.docx"; got != want {
+		t.Errorf("order=oldest = %s, want %s", got, want)
+	}
+	if got, want := strings.Join(names("&order=oldest&limit=1&offset=1"), ","), "segunda.docx"; got != want {
+		t.Errorf("order=oldest paged = %s, want %s", got, want)
+	}
 }
 
 func TestBatchArchiveHoldsEveryDocument(t *testing.T) {

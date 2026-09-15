@@ -125,7 +125,7 @@ func (s *Batches) WriteArchive(ctx context.Context, ownerID, id uuid.UUID, w io.
 	batchID := id
 	var documents []domain.Document
 	for offset := 0; ; offset += archivePageSize {
-		page, err := s.documents.List(ctx, ownerID, domain.DocumentFilter{BatchID: &batchID}, archivePageSize, offset)
+		page, err := s.documents.List(ctx, ownerID, domain.DocumentFilter{BatchID: &batchID, OldestFirst: true}, archivePageSize, offset)
 		if err != nil {
 			return err
 		}
@@ -137,15 +137,15 @@ func (s *Batches) WriteArchive(ctx context.Context, ownerID, id uuid.UUID, w io.
 
 	names := make([]string, len(documents))
 	for i := range documents {
-		names[len(documents)-1-i] = documents[i].Filename
+		names[i] = documents[i].Filename
 	}
 	names = archiveNames(names)
 
 	archive := zip.NewWriter(w)
-	for i := len(documents) - 1; i >= 0; i-- {
+	for i := range documents {
 		doc := &documents[i]
 		entry, err := archive.CreateHeader(&zip.FileHeader{
-			Name:     names[len(documents)-1-i],
+			Name:     names[i],
 			Method:   zip.Store,
 			Modified: doc.CreatedAt,
 		})
