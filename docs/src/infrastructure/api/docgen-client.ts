@@ -395,7 +395,11 @@ function createDocumentGateway(http: Transport): DocumentGateway {
       const body = await http.json<{ items: ApiDocument[] }>(
         ctx,
         "GET",
-        `/v1/documents${listQuery(page, { template_id: filter?.templateId, batch_id: filter?.batchId })}`,
+        `/v1/documents${listQuery(page, {
+          template_id: filter?.templateId,
+          batch_id: filter?.batchId,
+          order: filter?.order,
+        })}`,
       );
       return body.items.map(toDocument);
     },

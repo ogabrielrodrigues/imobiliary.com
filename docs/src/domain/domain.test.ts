@@ -130,10 +130,10 @@ describe("grouping placeholders", () => {
 
     assert.equal(groups.length, 2);
     assert.equal(groups[0]?.key, "locatario");
-    assert.equal(groups[0]?.label, "Locatario");
+    assert.equal(groups[0]?.label, "Locatário");
     assert.deepEqual(
       groups[0]?.fields.map((f) => f.label),
-      ["Nome", "Cpf"],
+      ["Nome", "CPF"],
     );
   });
 
@@ -146,7 +146,7 @@ describe("grouping placeholders", () => {
     assert.equal(groups[0]?.key, null);
     assert.deepEqual(
       groups[0]?.fields.map((f) => f.label),
-      ["Valor aluguel", "Cpf"],
+      ["Valor aluguel", "CPF"],
     );
   });
 
@@ -179,10 +179,27 @@ describe("grouping placeholders", () => {
     assert.deepEqual(groupPlaceholders([]), []);
   });
 
-  it("makes a fragment readable without inventing accents", () => {
+  it("makes a fragment readable", () => {
     assert.equal(humanize("nome_completo"), "Nome completo");
-    // "locatario" is not turned into "locatário": the data does not say so.
-    assert.equal(humanize("locatario"), "Locatario");
+  });
+
+  it("restores the accents of words with a single reading", () => {
+    assert.equal(humanize("locatario"), "Locatário");
+    assert.equal(humanize("data_mes"), "Data mês");
+    assert.equal(humanize("endereco_do_imovel"), "Endereço do imóvel");
+    assert.equal(humanize("valor_caucao"), "Valor caução");
+  });
+
+  it("writes acronyms in capitals", () => {
+    assert.equal(humanize("cpf"), "CPF");
+    assert.equal(humanize("locador_cnpj"), "Locador CNPJ");
+    assert.equal(humanize("cep_imovel"), "CEP imóvel");
+  });
+
+  it("leaves words that could mean two things as they were typed", () => {
+    // "e" may be "é" and "pais" may be "país": guessing would sometimes be wrong.
+    assert.equal(humanize("pais_e_filhos"), "Pais e filhos");
+    assert.equal(humanize("campo_desconhecido"), "Campo desconhecido");
   });
 });
 

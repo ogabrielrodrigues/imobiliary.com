@@ -87,9 +87,8 @@ export const getHistory = createServerFn({ method: "GET" })
   );
 
 /**
- * One page of the documents inside a batch, newest first like the rest of the
- * history: the API lists documents in that order only. The batch's ZIP is the
- * one place they come in generation order.
+ * One page of the documents inside a batch, in the order they were generated:
+ * the order of the spreadsheet's rows, and of the batch's ZIP.
  */
 export const listBatchDocuments = createServerFn({ method: "GET" })
   .validator((input: { batchId: string; page?: number }) => ({
@@ -106,7 +105,7 @@ export const listBatchDocuments = createServerFn({ method: "GET" })
             docgen().documents.list(
               ctx,
               { limit: HISTORY_PAGE_SIZE + 1, offset: data.page * HISTORY_PAGE_SIZE },
-              { batchId: data.batchId },
+              { batchId: data.batchId, order: "oldest" },
             ),
             collectPages((page) => docgen().templates.list(ctx, page)),
           ]);

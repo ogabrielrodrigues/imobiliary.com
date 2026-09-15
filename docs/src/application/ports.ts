@@ -116,6 +116,8 @@ export interface FileContent {
 export interface DocumentFilter {
   readonly templateId?: string | undefined;
   readonly batchId?: string | undefined;
+  /** "oldest" lists in generation order; the API's default is newest first. */
+  readonly order?: "newest" | "oldest" | undefined;
 }
 
 export interface BatchGateway {

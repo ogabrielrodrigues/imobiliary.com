@@ -101,18 +101,69 @@ function prefixOf(name: string): string | null {
 }
 
 /**
- * Makes a snake_case fragment readable: underscores become spaces and the
- * first letter is capitalised.
+ * Makes a snake_case fragment readable: underscores become spaces, known words
+ * get their accents back, acronyms are capitalised, and so is the first letter.
  *
- * Accents are not restored. The API's names are ASCII, and guessing that
- * `locatario` was meant to be "locatário" would be inventing information —
- * better a plain label than a wrong one.
+ * Placeholder names are ASCII, so `locatario_nome` cannot carry the accent of
+ * "locatário". The words below are the ones contracts and property records
+ * use, where the ASCII spelling can only mean one accented word. A word that
+ * could mean two things is left out and shown as typed: "e" may be "é",
+ * "pais" may be "país", "esta" may be "está". Anything not listed stays as it
+ * is, so a label is never wrong, only sometimes unaccented.
  */
 export function humanize(fragment: string): string {
-  const words = fragment.replaceAll("_", " ").trim();
-  if (words === "") return fragment;
-  return words.charAt(0).toUpperCase() + words.slice(1);
+  const words = fragment
+    .split("_")
+    .filter((word) => word !== "")
+    .map((word) => ACRONYMS.has(word) ? word.toUpperCase() : (ACCENTED.get(word) ?? word));
+  if (words.length === 0) return fragment;
+  const text = words.join(" ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
+
+/** Shown in capitals: "cpf" reads as "CPF". */
+const ACRONYMS: ReadonlySet<string> = new Set([
+  "cpf", "cnpj", "rg", "cep", "uf", "iptu", "itbi", "cnh", "crea", "creci", "oab", "pis", "nis",
+  "ctps", "ie", "im", "cnae", "pix", "ted", "doc", "fgts", "inss", "igpm", "ipca", "incc", "tr",
+  "selic", "sac", "ltda", "me", "mei", "eireli", "sa", "id",
+]);
+
+/**
+ * ASCII spelling to accented word, for words with a single reading. Kept to the
+ * vocabulary of leases, sales, receipts and registrations.
+ */
+const ACCENTED: ReadonlyMap<string, string> = new Map([
+  ["locatario", "locatário"], ["locataria", "locatária"], ["proprietario", "proprietário"],
+  ["proprietaria", "proprietária"], ["usufrutuario", "usufrutuário"],
+  ["beneficiario", "beneficiário"], ["cessionario", "cessionário"], ["promissario", "promissário"],
+  ["mandatario", "mandatário"], ["responsavel", "responsável"], ["conjuge", "cônjuge"],
+  ["viuvo", "viúvo"], ["viuva", "viúva"], ["uniao", "união"], ["estavel", "estável"],
+  ["profissao", "profissão"], ["funcionario", "funcionário"], ["socio", "sócio"],
+  ["socia", "sócia"], ["sindico", "síndico"], ["sindica", "síndica"],
+  ["imobiliaria", "imobiliária"], ["cartorio", "cartório"], ["tabeliao", "tabelião"],
+  ["orgao", "órgão"], ["numero", "número"], ["codigo", "código"], ["emissao", "emissão"],
+  ["expedicao", "expedição"], ["matricula", "matrícula"], ["inscricao", "inscrição"],
+  ["certidao", "certidão"], ["procuracao", "procuração"], ["razao", "razão"], ["titulo", "título"],
+  ["credito", "crédito"], ["debito", "débito"], ["agencia", "agência"], ["imovel", "imóvel"],
+  ["imoveis", "imóveis"], ["endereco", "endereço"], ["municipio", "município"],
+  ["condominio", "condomínio"], ["edificio", "edifício"], ["predio", "prédio"], ["area", "área"],
+  ["util", "útil"], ["terreo", "térreo"], ["mobilia", "mobília"], ["eletrica", "elétrica"],
+  ["hidraulica", "hidráulica"], ["agua", "água"], ["gas", "gás"], ["preco", "preço"],
+  ["calcao", "caução"], ["caucao", "caução"], ["fianca", "fiança"], ["correcao", "correção"],
+  ["indice", "índice"], ["comissao", "comissão"], ["cobranca", "cobrança"],
+  ["quitacao", "quitação"], ["rescisao", "rescisão"], ["renovacao", "renovação"],
+  ["prorrogacao", "prorrogação"], ["locacao", "locação"], ["administracao", "administração"],
+  ["intermediacao", "intermediação"], ["alienacao", "alienação"],
+  ["transferencia", "transferência"], ["clausula", "cláusula"], ["obrigacao", "obrigação"],
+  ["obrigacoes", "obrigações"], ["condicao", "condição"], ["condicoes", "condições"],
+  ["observacao", "observação"], ["observacoes", "observações"], ["descricao", "descrição"],
+  ["referencia", "referência"], ["servico", "serviço"], ["servicos", "serviços"],
+  ["manutencao", "manutenção"], ["periodo", "período"], ["duracao", "duração"],
+  ["vigencia", "vigência"], ["inicio", "início"], ["termino", "término"], ["mes", "mês"],
+  ["ultimo", "último"], ["proximo", "próximo"], ["unico", "único"], ["minimo", "mínimo"],
+  ["maximo", "máximo"], ["liquido", "líquido"], ["eletronico", "eletrônico"], ["genero", "gênero"],
+  ["familia", "família"],
+]);
 
 /** How a placeholder is written inside a template. */
 export function placeholderSyntax(name: string): string {
