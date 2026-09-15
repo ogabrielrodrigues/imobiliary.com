@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const api = join(root, "docgen-api");
 const docs = join(root, "docs");
+const imobiliary = join(root, "imobiliary-api");
 
 const GOVULNCHECK = "golang.org/x/vuln/cmd/govulncheck@v1.8.0";
 const REDOCLY = "@redocly/cli@2.52.0";
@@ -33,6 +34,13 @@ const steps = [
   { name: "go vet", cwd: api, command: "go", args: ["vet", "./..."] },
   { name: "go vet (integration)", cwd: api, command: "go", args: ["vet", "-tags=integration", "./..."] },
   { name: "Go tests, with integration", cwd: api, command: "go", args: ["test", "-tags=integration", "./..."] },
+  { name: "imobiliary-api: Go advisories", cwd: imobiliary, command: "go", args: ["run", GOVULNCHECK, "./..."] },
+  { name: "imobiliary-api: gofmt", cwd: imobiliary, command: "gofmt", args: ["-l", "."], expectEmpty: true },
+  { name: "imobiliary-api: go vet", cwd: imobiliary, command: "go", args: ["vet", "./..."] },
+  { name: "imobiliary-api: go vet (integration)", cwd: imobiliary, command: "go", args: ["vet", "-tags=integration", "./..."] },
+  // Unit tests only for now: the integration suite needs a local PostgreSQL,
+  // and joins this list once the development database is part of the setup.
+  { name: "imobiliary-api: Go tests", cwd: imobiliary, command: "go", args: ["test", "./..."] },
   { name: "platform: types, layers, tests", cwd: docs, command: "pnpm", args: ["check"] },
   // npx rather than pnpm dlx: dlx cannot choose between the package's two
   // binaries, and it records the version in pnpm-workspace.yaml as it goes.

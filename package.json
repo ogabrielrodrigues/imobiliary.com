@@ -16,6 +16,11 @@
     "docgen:build": "cd docgen-api && go build ./...",
     "docgen:test": "cd docgen-api && go test ./...",
     "docgen:test:integration": "cd docgen-api && go test -tags=integration ./...",
+    "imobiliary:migrate": "cd imobiliary-api && go run ./cmd/imobiliary migrate",
+    "imobiliary:dev": "cd imobiliary-api && go run ./cmd/imobiliary serve",
+    "imobiliary:build": "cd imobiliary-api && go build ./...",
+    "imobiliary:test": "cd imobiliary-api && go test ./...",
+    "imobiliary:test:integration": "cd imobiliary-api && go test -tags=integration ./...",
     "security": "node scripts/security.mjs"
   }
 }

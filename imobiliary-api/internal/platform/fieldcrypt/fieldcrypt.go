@@ -187,3 +187,6 @@ func (k *Keyring) Index(scope [16]byte, value string) []byte {
 	mac.Write([]byte(value))
 	return mac.Sum(nil)
 }
+
+// CurrentVersion is the key version new values are sealed with.
+func (k *Keyring) CurrentVersion() byte { return k.current }
