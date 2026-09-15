@@ -340,7 +340,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-11 — TanStack Query, Table and Form done; the editor is what remains
+**Last updated:** 2026-09-14 — batches, history and naming done and reviewed signed in; next: warn before leaving a running batch
 
 ### Done
 
@@ -906,7 +906,31 @@ _Update this section as work proceeds. It is what a fresh session reads first._
 
 ### Next step
 
-**The block editor**, the last piece of the original plan. The user asked for an
+**Warn before leaving a batch that is still running** — saved by the user on
+2026-09-14 to do right after compacting the session. The batch page
+(`docs/src/routes/_app/templates.$templateId_.lote.tsx`) generates row by row
+in the browser, so closing the tab, reloading or navigating away mid-run stops
+the batch silently: rows already generated stay, the rest never happen. The
+intended fix:
+- while `phase === "running"`, register a `beforeunload` handler that calls
+  `event.preventDefault()` (the browser shows its own generic prompt; custom
+  text is ignored by every modern browser);
+- block in-app navigation too, with TanStack Router's `useBlocker`
+  (`shouldBlockFn` while running, `withResolver` to show a confirmation in the
+  app's `AlertDialog`, mounted only once asked, as every dialog here);
+- say on the page, beside the progress bar, that leaving stops the batch;
+- verify signed in: start a batch of a few rows, try a link, a reload and the
+  back button, and confirm that "Parar" then leaving no longer asks.
+
+**Other points from the 2026-09-14 review, awaiting the user's decision:**
+- Documents inside an open batch are newest first (the only order the API
+  lists); generation order would need an order parameter on
+  `GET /v1/documents`.
+- Field labels have no accents ("Locatario", "Mes") on screen and in the model
+  spreadsheet's headers, because placeholder names are ASCII and `humanize`
+  does not guess accents. Column matching works either way.
+
+After that, **the block editor**, the last piece of the original plan. The user asked for an
 explanation first (it is at the end of the plan file) and has not decided yet;
 it also needs a rich-text editor dependency, to be agreed. It needs the docx
 `build` module: blocks → `word/document.xml` → `writeZip`. Write the writer and
