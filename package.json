@@ -7,14 +7,15 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "pnpm --filter ./docs dev",
-    "build": "pnpm --filter ./docs build",
-    "typecheck": "pnpm --filter ./docs typecheck",
-    "test": "pnpm --filter ./docs test",
-    "api:dev": "cd docgen-api && go run ./cmd/docgen",
-    "api:build": "cd docgen-api && go build ./...",
-    "api:test": "cd docgen-api && go test ./...",
-    "api:test:integration": "cd docgen-api && go test -tags=integration ./...",
+    "docs:dev": "pnpm --filter ./docs dev",
+    "docs:build": "pnpm --filter ./docs build",
+    "docs:typecheck": "pnpm --filter ./docs typecheck",
+    "docs:test": "pnpm --filter ./docs test",
+    "docs:check": "pnpm --filter ./docs check",
+    "docgen:dev": "cd docgen-api && go run ./cmd/docgen",
+    "docgen:build": "cd docgen-api && go build ./...",
+    "docgen:test": "cd docgen-api && go test ./...",
+    "docgen:test:integration": "cd docgen-api && go test -tags=integration ./...",
     "security": "node scripts/security.mjs"
   }
 }

@@ -11,12 +11,22 @@ anything.
 ## What this is
 
 **Imobiliary** — property management for independent brokers, small agencies
-and owners. This repository holds its document half:
+and owners. This repository holds the document half, finished, and the main
+platform, being built:
 
 | Directory | What | Runs at |
 |---|---|---|
 | `docgen-api/` | DOCX rendering API, Go | a private subdomain |
-| `docs/` | web platform, TypeScript | `docs.imobiliary.com` |
+| `docs/` | document platform, TypeScript | `docs.imobiliary.com` |
+| `imobiliary-api/` | rental management API, Go + PostgreSQL | a private subdomain |
+| `web/` | rental management platform, TypeScript | `imobiliary.com` |
+| `packages/ui/` | design tokens, themes, accessibility, shared by both platforms | — |
+
+**The main platform follows `PLANO.md`** (in Portuguese, decided with the user
+over five rounds on 2026-09-15). Read it before touching `imobiliary-api/`,
+`web/` or `packages/ui/`: identity, tenancy, the data model and the legal rules
+are settled there and must not be re-derived. Its section "Imobiliary (main
+platform)" below carries what was learned while building it.
 
 `docgen` is the permanent **internal** name — module, packages, `DOCGEN_*` env
 prefix. *Imobiliary Docs* is the **product** name and appears only in what users
@@ -247,6 +257,17 @@ system's `{{.locatario.nome}}` would be rejected by the API.
 **Status vocabulary.** Only what the server sustains. A generated document is
 always "Pronto". "Gerando" is a transient button state. A failure is a message,
 not a row. No draft, no archive.
+
+---
+
+## Imobiliary (main platform)
+
+Phases in `PLANO.md` §7. Root scripts are prefixed by project (`docgen:*`,
+`docs:*`, `imobiliary:*`, `web:*`).
+
+Platform copy (every text a user reads) avoids AI writing tics: no em dash, no
+habitual triplets, nothing the system does not actually do. The user asked for
+this explicitly.
 
 ---
 
@@ -1085,8 +1106,8 @@ root during hydration fails the whole route into the error boundary.
 ### Running it
 
 ```bash
-pnpm api:dev    # the Go API on :8080
-pnpm dev        # the platform on :3000
+pnpm docgen:dev   # the docgen API on :8080
+pnpm docs:dev     # the docs platform on :3000
 ```
 
 `docs/.env` needs `SESSION_SECRET` (32+ chars) or the platform refuses to

@@ -34,7 +34,7 @@ that became stable in Go 1.27.
 ## Running
 
 Every command below runs from this directory, `docgen-api/`. From the
-repository root, `pnpm api:dev` and the other `api:*` scripts do the same thing.
+repository root, `pnpm docgen:dev` and the other `docgen:*` scripts do the same thing.
 
 ```sh
 export DOCGEN_JWT_SECRET="at-least-32-bytes-of-secret-material"

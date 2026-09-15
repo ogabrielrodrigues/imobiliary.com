@@ -37,13 +37,13 @@ cp docgen-api/.env.example docgen-api/.env
 Fill in `DOCGEN_JWT_SECRET` with at least 32 bytes, then:
 
 ```bash
-pnpm api:dev
+pnpm docgen:dev
 ```
 
 And, in a second terminal, the platform:
 
 ```bash
-pnpm dev
+pnpm docs:dev
 ```
 
 ## Checks
@@ -64,11 +64,11 @@ has been run against a planted vulnerable dependency to confirm it fails.
 The halves can also be checked on their own:
 
 ```bash
-pnpm api:test && pnpm api:test:integration
+pnpm docgen:test && pnpm docgen:test:integration
 ```
 
 ```bash
-pnpm typecheck && pnpm test
+pnpm docs:check
 ```
 
 Vulnerabilities are reported as described in [SECURITY.md](SECURITY.md).
