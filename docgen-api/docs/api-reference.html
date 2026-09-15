@@ -1092,7 +1092,7 @@ Your plan is {{.plan}} at {{.amount}} per month.</code></pre>
           <span class="chip chip-get">GET</span>
           <span class="path">/v1/documents</span>
         </div>
-        <p>Returns <code>{"items": […]}</code>, newest first, with the same <code>limit</code> and <code>offset</code> parameters. It includes the documents inside batches; for the history that shows a batch as one entry, see <a href="#history"><code>GET /v1/history</code></a>.</p>
+        <p>Returns <code>{"items": […]}</code>, newest first unless <code>order=oldest</code>, with the same <code>limit</code> and <code>offset</code> parameters. It includes the documents inside batches; for the history that shows a batch as one entry, see <a href="#history"><code>GET /v1/history</code></a>.</p>
         <div class="fields">
           <div class="field">
             <div><span class="field-name">template_id</span><br><span class="field-type">query · uuid</span></div>
