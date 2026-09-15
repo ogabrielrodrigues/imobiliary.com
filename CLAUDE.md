@@ -340,7 +340,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-14 — batches, history and naming done and reviewed signed in; next: warn before leaving a running batch
+**Last updated:** 2026-09-14 — leaving a running batch now asks first; next: the open decisions below, then the block editor
 
 ### Done
 
@@ -904,25 +904,32 @@ _Update this section as work proceeds. It is what a fresh session reads first._
     - The Ajustes tab list is 32px with a 1px subpixel overflow, clipped by
       `overflow-y-hidden`: not visible, not a bug.
 
+32. **Leaving a running batch asks first.** The batch page generates row by
+    row in the browser, so leaving mid-run stopped it silently.
+    - TanStack Router's `useBlocker` (`disabled` unless `phase === "running"`,
+      `withResolver`) blocks links and the back button with an `AlertDialog`
+      ("Continuar aqui" / "Sair e interromper"), mounted only while blocked.
+      **While registered it also answers `beforeunload`** (`enableBeforeUnload`,
+      handled inside `@tanstack/history`), so no listener of our own: a reload
+      or a closed tab gets the browser's own prompt.
+    - Leaving sets the stop flag, and so does unmounting: an awaiting loop
+      outlives its component.
+    - **A stop during a 429 wait sends nothing more**, and that row goes back to
+      pending ("Continuar") instead of reading as a failure. Before, one retry
+      still went out after the stop.
+    - The page says beside the progress bar that leaving or reloading
+      interrupts the batch.
+    - Verified signed in, with request counting: a link and the back button
+      open the dialog; "Continuar aqui" restores the address and keeps
+      generating; "Sair" stops (no generation request after it); after "Parar"
+      or the end, leaving asks nothing and `beforeunload` is not prevented.
+      **The batch keeps generating while the dialog is open**, on purpose. Chrome
+      shows the reload prompt only after a real user gesture, so synthetic
+      clicks cannot show it. Test batches deleted.
+
 ### Next step
 
-**Warn before leaving a batch that is still running** — saved by the user on
-2026-09-14 to do right after compacting the session. The batch page
-(`docs/src/routes/_app/templates.$templateId_.lote.tsx`) generates row by row
-in the browser, so closing the tab, reloading or navigating away mid-run stops
-the batch silently: rows already generated stay, the rest never happen. The
-intended fix:
-- while `phase === "running"`, register a `beforeunload` handler that calls
-  `event.preventDefault()` (the browser shows its own generic prompt; custom
-  text is ignored by every modern browser);
-- block in-app navigation too, with TanStack Router's `useBlocker`
-  (`shouldBlockFn` while running, `withResolver` to show a confirmation in the
-  app's `AlertDialog`, mounted only once asked, as every dialog here);
-- say on the page, beside the progress bar, that leaving stops the batch;
-- verify signed in: start a batch of a few rows, try a link, a reload and the
-  back button, and confirm that "Parar" then leaving no longer asks.
-
-**Other points from the 2026-09-14 review, awaiting the user's decision:**
+**Points from the 2026-09-14 review, awaiting the user's decision:**
 - Documents inside an open batch are newest first (the only order the API
   lists); generation order would need an order parameter on
   `GET /v1/documents`.

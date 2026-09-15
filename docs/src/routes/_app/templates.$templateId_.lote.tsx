@@ -8,14 +8,24 @@ import {
   IconRefresh,
   IconStack2,
 } from "@tabler/icons-react";
-import { useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useBlocker } from "@tanstack/react-router";
 
 import { summaryOf, type Failure } from "@/application/result";
 import { Dropzone } from "@/components/dropzone";
 import { FormField } from "@/components/form-field";
 import { LoadFailure, PageBody, PageHeader } from "@/components/page";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -134,6 +144,26 @@ function BatchScreen({ template }: { readonly template: Template }) {
   const [failure, setFailure] = useState<Failure | null>(null);
   const [savingZip, setSavingZip] = useState(false);
   const stop = useRef(false);
+
+  // The run lives in this page: leaving it would stop the batch half done, so
+  // leaving asks first. The router's blocker covers links and the back button,
+  // and while registered it also answers the browser's beforeunload, which
+  // shows the browser's own prompt on a reload or a closed tab.
+  const leaving = useBlocker({
+    shouldBlockFn: () => true,
+    disabled: phase !== "running",
+    enableBeforeUnload: true,
+    withResolver: true,
+  });
+
+  // A loop still awaiting a generation outlives the component; tell it to stop
+  // once the page is gone, so nothing keeps generating out of sight.
+  useEffect(
+    () => () => {
+      stop.current = true;
+    },
+    [],
+  );
 
   const rows: readonly PreparedRow[] = useMemo(() => {
     if (sheet === null) return [];
@@ -258,12 +288,19 @@ function BatchScreen({ template }: { readonly template: Template }) {
         setWaiting(seconds);
         await sleep(seconds * 1000);
         setWaiting(null);
+        // A stop, or leaving the page, during the wait sends nothing more.
+        if (stop.current) break;
         result = await attempt();
       }
 
+      // A row stopped while it waited was never generated: it goes back to
+      // waiting with the rows not reached, instead of reading as a failure.
+      const interrupted = !result.ok && result.failure.kind === "rate_limit" && stop.current;
       const outcome: RowStatus = result.ok
         ? { state: "done" }
-        : { state: "failed", message: rowMessage(result.failure) };
+        : interrupted
+          ? { state: "queued" }
+          : { state: "failed", message: rowMessage(result.failure) };
       setStatuses((previous) => ({ ...previous, [row.index]: outcome }));
     }
 
@@ -453,6 +490,13 @@ function BatchScreen({ template }: { readonly template: Template }) {
                 : `${batchCount(done)} ${done === 1 ? "gerado" : "gerados"}${failed.length > 0 ? `, ${failed.length} com erro` : ""}.`}
             </p>
 
+            {phase === "running" && (
+              <p className="text-caption text-muted-foreground">
+                Mantenha esta página aberta até o fim. Sair ou recarregar interrompe o lote: os
+                documentos já gerados ficam no histórico, os demais não são gerados.
+              </p>
+            )}
+
             {phase === "running" ? (
               <Button
                 type="button"
@@ -494,6 +538,39 @@ function BatchScreen({ template }: { readonly template: Template }) {
               </div>
             )}
           </Step>
+        )}
+
+        {/* Mounted only while a navigation waits on it: a Base UI dialog does
+            not survive hydration, and this one is never needed on the server. */}
+        {leaving.status === "blocked" && (
+          <AlertDialog
+            open
+            onOpenChange={(open) => {
+              if (!open) leaving.reset();
+            }}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Sair e interromper o lote?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  O lote ainda está gerando ({settled} de {total}). Os documentos já gerados ficam no
+                  histórico; os demais não serão gerados.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Continuar aqui</AlertDialogCancel>
+                <AlertDialogAction
+                  variant="destructive"
+                  onClick={() => {
+                    stop.current = true;
+                    leaving.proceed();
+                  }}
+                >
+                  Sair e interromper
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         )}
       </PageBody>
     </>
