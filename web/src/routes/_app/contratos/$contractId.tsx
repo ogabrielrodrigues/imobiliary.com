@@ -115,7 +115,10 @@ function ContractPage() {
           </Term>
           {contract.terminatedOn !== null && <Term label="Rescisão">{formatDate(contract.terminatedOn)}</Term>}
           <Term label="Assinatura">{formatDate(contract.signedOn)}</Term>
-          <Term label="Vencimento">Dia {contract.dueDay}, o primeiro no início</Term>
+          <Term label="Vencimento">
+            Dia {contract.dueDay}, {contract.advanceRent ? "com o primeiro no início" : "depois de cada mês vencido"}
+          </Term>
+          <Term label="Aluguel antecipado">{contract.advanceRent ? "Sim" : "Não"}</Term>
           <Term label="Reajuste">{indexLabel(contract.adjustmentIndex)}</Term>
           <Term label="Garantia">
             {guaranteeLabel(contract.guaranteeKind)}

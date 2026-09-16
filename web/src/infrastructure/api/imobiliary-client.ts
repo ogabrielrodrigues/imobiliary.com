@@ -581,6 +581,7 @@ interface ContractTermsBody {
   property_id: string;
   registry: string;
   guarantee_kind: GuaranteeKind;
+  advance_rent: boolean;
   deposit_amount: string;
   rent: string;
   current_rent: string;
@@ -630,6 +631,7 @@ function toContractTerms(b: ContractTermsBody): ContractTerms {
     propertyId: b.property_id,
     registry: b.registry,
     guaranteeKind: b.guarantee_kind,
+    advanceRent: b.advance_rent,
     depositAmount: b.deposit_amount,
     rent: b.rent,
     currentRent: b.current_rent,
@@ -684,6 +686,8 @@ function contractPayload(c: ContractInput): string {
     property_id: c.propertyId,
     registry: c.registry.trim(),
     guarantee_kind: c.guaranteeKind,
+    // Left out until chosen, so the API's refusal names the field.
+    ...(c.advanceRent === null ? {} : { advance_rent: c.advanceRent }),
     ...(c.guaranteeKind === "deposit" ? { deposit_amount: money(c.depositAmount) } : {}),
     rent: money(c.rent),
     admin_fee: percent(c.adminFee),

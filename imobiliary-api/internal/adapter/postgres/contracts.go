@@ -66,12 +66,12 @@ func (r *contractRepository) Create(ctx context.Context, c *domain.Contract, sch
 	_, err := r.q.Exec(ctx,
 		`INSERT INTO contracts (id, organization_id, property_id, registry, guarantee_kind, deposit_amount,
 			rent, current_rent, admin_fee, late_penalty_rate, late_interest_rate, due_day, adjustment_index,
-			signed_on, starts_on, expires_on, terminated_on, version, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NULL, 1, $17, $17)`,
+			signed_on, starts_on, expires_on, terminated_on, version, created_at, updated_at, advance_rent)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NULL, 1, $17, $17, $18)`,
 		pgUUID(c.ID), pgUUID(r.organizationID), pgUUID(c.PropertyID), c.Registry, string(c.GuaranteeKind),
 		int64(c.DepositAmount), int64(c.Rent), int64(c.CurrentRent), int32(c.AdminFee),
 		int32(c.LatePenaltyRate), int32(c.LateInterestRate), c.DueDay, string(c.AdjustmentIndex),
-		pgDate(c.SignedOn), pgDate(c.StartsOn), pgDate(c.ExpiresOn), c.CreatedAt)
+		pgDate(c.SignedOn), pgDate(c.StartsOn), pgDate(c.ExpiresOn), c.CreatedAt, c.AdvanceRent)
 	if err != nil {
 		return fmt.Errorf("postgres: create contract: %w", contractConflict(err))
 	}
@@ -86,12 +86,12 @@ func (r *contractRepository) Replace(ctx context.Context, c *domain.Contract, ve
 		`UPDATE contracts SET property_id = $2, registry = $3, guarantee_kind = $4, deposit_amount = $5,
 			rent = $6, current_rent = $7, admin_fee = $8, late_penalty_rate = $9, late_interest_rate = $10,
 			due_day = $11, adjustment_index = $12, signed_on = $13, starts_on = $14, expires_on = $15,
-			version = version + 1, updated_at = $16
+			advance_rent = $18, version = version + 1, updated_at = $16
 		  WHERE id = $1 AND version = $17`,
 		pgUUID(c.ID), pgUUID(c.PropertyID), c.Registry, string(c.GuaranteeKind), int64(c.DepositAmount),
 		int64(c.Rent), int64(c.CurrentRent), int32(c.AdminFee), int32(c.LatePenaltyRate),
 		int32(c.LateInterestRate), c.DueDay, string(c.AdjustmentIndex), pgDate(c.SignedOn),
-		pgDate(c.StartsOn), pgDate(c.ExpiresOn), c.UpdatedAt, version)
+		pgDate(c.StartsOn), pgDate(c.ExpiresOn), c.UpdatedAt, version, c.AdvanceRent)
 	if err != nil {
 		return fmt.Errorf("postgres: update contract: %w", contractConflict(err))
 	}
@@ -151,7 +151,7 @@ func (r *contractRepository) writeRents(ctx context.Context, contractID uuid.UUI
 	return nil
 }
 
-const contractColumns = `c.id, c.property_id, c.registry, c.guarantee_kind, c.deposit_amount, c.rent,
+const contractColumns = `c.id, c.property_id, c.registry, c.guarantee_kind, c.advance_rent, c.deposit_amount, c.rent,
 	c.current_rent, c.admin_fee, c.late_penalty_rate, c.late_interest_rate, c.due_day, c.adjustment_index,
 	c.signed_on, c.starts_on, c.expires_on, c.terminated_on, c.version, c.created_at, c.updated_at`
 
@@ -164,7 +164,7 @@ func (r *contractRepository) scanContract(row pgx.Row, extra ...any) (*domain.Co
 		fee, penalty, interest      int32
 		signed, starts, expires, tt pgtype.Date
 	)
-	dest := append([]any{&id, &property, &c.Registry, &guarantee, &deposit, &rent, &current, &fee, &penalty,
+	dest := append([]any{&id, &property, &c.Registry, &guarantee, &c.AdvanceRent, &deposit, &rent, &current, &fee, &penalty,
 		&interest, &c.DueDay, &index, &signed, &starts, &expires, &tt, &c.Version, &c.CreatedAt, &c.UpdatedAt}, extra...)
 	if err := row.Scan(dest...); err != nil {
 		return nil, noRows(err, "postgres: contract")

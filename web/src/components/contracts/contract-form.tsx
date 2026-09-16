@@ -360,6 +360,36 @@ export function ContractForm({
                 </div>
               )}
             </form.Field>
+            <form.Field name="advanceRent">
+              {(field) => (
+                <div className="md:w-1/2">
+                  <SelectField
+                    label="Aluguel antecipado"
+                    hint={
+                      field.state.value === true
+                        ? "Cada mês é pago no início, o primeiro na data de início do contrato."
+                        : field.state.value === false
+                          ? "Cada mês é pago depois de vencido, no dia do vencimento do mês seguinte."
+                          : "Se o aluguel de cada mês é pago no início dele."
+                    }
+                    error={serverError("advanceRent") ?? visibleError(field.state.meta, shown)}
+                    value={field.state.value === null ? "" : field.state.value ? "sim" : "nao"}
+                    onBlur={field.handleBlur}
+                    onChange={(next) => {
+                      setFailure(null);
+                      field.handleChange(next === "" ? null : next === "sim");
+                      // A choice is complete once made; validate it now.
+                      field.handleBlur();
+                    }}
+                    options={[
+                      ["", "Escolha"],
+                      ["sim", "Sim"],
+                      ["nao", "Não"],
+                    ]}
+                  />
+                </div>
+              )}
+            </form.Field>
             {values.guaranteeKind === "surety" && (
               <>
                 {party("guarantorIds", "Fiadores", "Pessoas físicas, que não sejam locatárias.", true)}
@@ -415,8 +445,10 @@ export function ContractForm({
               </form.Field>
             </div>
             <p className="font-reading text-small text-muted-foreground">
-              O primeiro aluguel vence no início do contrato. Os seguintes vencem no dia escolhido de cada mês, ou no
-              último dia quando o mês é mais curto.
+              {values.advanceRent
+                ? "O primeiro aluguel vence no início do contrato. Os seguintes vencem no dia escolhido de cada mês, "
+                : "Cada aluguel vence no dia escolhido do mês seguinte ao mês que ele paga, "}
+              ou no último dia quando o mês é mais curto.
             </p>
           </Section>
         </>
@@ -526,6 +558,7 @@ function Review({
     [`${ROLE_LABELS.landlord}es`, names(values.landlordIds)],
     [`${ROLE_LABELS.tenant}s`, names(values.tenantIds)],
     ["Garantia", guaranteeLabel(values.guaranteeKind)],
+    ["Aluguel antecipado", values.advanceRent ? "Sim" : "Não"],
   ];
   if (values.guarantorIds.length > 0) rows.push(["Fiadores", names(values.guarantorIds)]);
   if (values.guarantorSpouseIds.length > 0) rows.push(["Cônjuges dos fiadores", names(values.guarantorSpouseIds)]);

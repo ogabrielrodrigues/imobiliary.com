@@ -67,7 +67,7 @@ func (f *leaseFixture) contract(registry, starts, expires string, extra ...any) 
 	body := map[string]any{
 		"property_id": f.property.ID, "registry": registry, "rent": "1500.00",
 		"signed_on": starts, "starts_on": starts, "expires_on": expires, "due_day": 10,
-		"adjustment_index": "igpm", "guarantee_kind": "none",
+		"adjustment_index": "igpm", "guarantee_kind": "none", "advance_rent": true,
 		"parties": []map[string]any{{"person_id": f.tenant.ID, "role": "tenant"}},
 	}
 	for i := 0; i+1 < len(extra); i += 2 {
@@ -233,6 +233,43 @@ func TestLegalNoticesNeedAcknowledgement(t *testing.T) {
 	a.expect(http.StatusOK, http.MethodPost, "/v1/contracts/preview", f.admin.access, deposit).decode(t, &preview)
 	if !slices.Equal(preview.Notices, []string{"advance_rent", "deposit_limit"}) {
 		t.Errorf("a deposit above three rents raised %v", preview.Notices)
+	}
+}
+
+func TestAdvanceRentIsTheOfficesChoice(t *testing.T) {
+	f := newLease(t)
+	a := f.a
+	var preview struct {
+		Schedule []struct {
+			DueOn string `json:"due_on"`
+		} `json:"schedule"`
+		Notices []string `json:"notices"`
+	}
+
+	// Without advance rent a guarantee needs no acknowledgement, and the first
+	// month is paid on the due day of the next one.
+	body := f.contract("V-1", "2026-10-01", "2027-09-30", "advance_rent", false, "guarantee_kind", "deposit", "deposit_amount", "3000.00")
+	a.expect(http.StatusOK, http.MethodPost, "/v1/contracts/preview", f.admin.access, body).decode(t, &preview)
+	if len(preview.Notices) != 0 || len(preview.Schedule) != 12 || preview.Schedule[0].DueOn != "2026-11-10" ||
+		preview.Schedule[11].DueOn != "2027-10-10" {
+		t.Fatalf("without advance rent: notices %v, schedule %v", preview.Notices, preview.Schedule)
+	}
+	c := f.create(body)
+	if c.Rents[0].DueOn != "2026-11-10" {
+		t.Errorf("stored first rent due %s", c.Rents[0].DueOn)
+	}
+
+	// With it, the same guarantee asks for the acknowledgement.
+	body["advance_rent"] = true
+	a.expect(http.StatusOK, http.MethodPost, "/v1/contracts/preview", f.admin.access, body).decode(t, &preview)
+	if !slices.Equal(preview.Notices, []string{"advance_rent"}) || preview.Schedule[0].DueOn != "2026-10-01" {
+		t.Errorf("with advance rent: notices %v, schedule %v", preview.Notices, preview.Schedule)
+	}
+
+	delete(body, "advance_rent")
+	missing := a.expect(http.StatusUnprocessableEntity, http.MethodPost, "/v1/contracts/preview", f.admin.access, body)
+	if !strings.Contains(string(missing.body), `"advance_rent"`) {
+		t.Errorf("an absent choice says %s", missing.body)
 	}
 }
 

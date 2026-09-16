@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Imobiliary API
-  version: "0.4.0"
+  version: "0.4.1"
   summary: Rental property management for brokers, small agencies and owners.
   description: |
     The API behind the Imobiliary platform. It covers identity and the office
@@ -1167,8 +1167,10 @@ paths:
       summary: Register a contract
       description: |
         Creates the contract and its schedule: one instalment per month of the
-        term, the first due on `starts_on` and each later one on `due_day`
-        (the month's last day when shorter). With no landlord among the
+        term, on `due_day` (the month's last day when shorter). With
+        `advance_rent` the first is due on `starts_on` and each month is paid
+        at its start; without it each month is paid on the due day of the
+        month after it. With no landlord among the
         parties, the property's owners become the landlords.
 
         A property holds one contract per period; an overlap is refused on
@@ -1863,7 +1865,7 @@ components:
     NoticeCode:
       type: string
       description: |
-        `advance_rent`: the first rent is due on the start while there is a
+        `advance_rent`: the office chose rent in advance while there is a
         guarantee (Lei 8.245/91, arts. 20, 42 and 43, III).
         `guarantor_spouse_consent`: a married guarantor, outside total
         separation of property, without the spouse as a party (CC art. 1.647,
@@ -1880,7 +1882,7 @@ components:
 
     ContractInput:
       type: object
-      required: [property_id, registry, rent, signed_on, starts_on, expires_on, parties]
+      required: [property_id, registry, advance_rent, rent, signed_on, starts_on, expires_on, parties]
       properties:
         property_id: { $ref: "#/components/schemas/ID" }
         registry: { type: string, minLength: 1, maxLength: 60, description: "The office's own number for the contract, unique in the office." }
@@ -1888,6 +1890,7 @@ components:
           type: string
           enum: [none, deposit, surety, surety_insurance, fund_assignment]
           description: One per contract (art. 37, sole paragraph). Default `none`.
+        advance_rent: { type: boolean, description: "Whether each month is paid at its start. The office's choice, with no default." }
         deposit_amount: { $ref: "#/components/schemas/Money", description: Required with `deposit` and refused otherwise. }
         rent: { $ref: "#/components/schemas/Money" }
         admin_fee: { type: string, description: "Percentage, default 10.", examples: ["10"] }
@@ -1912,11 +1915,12 @@ components:
 
     ContractTerms:
       type: object
-      required: [property_id, registry, guarantee_kind, deposit_amount, rent, current_rent, admin_fee, late_penalty_rate, late_interest_rate, due_day, adjustment_index, signed_on, starts_on, expires_on, terminated_on, status]
+      required: [property_id, registry, guarantee_kind, advance_rent, deposit_amount, rent, current_rent, admin_fee, late_penalty_rate, late_interest_rate, due_day, adjustment_index, signed_on, starts_on, expires_on, terminated_on, status]
       properties:
         property_id: { $ref: "#/components/schemas/ID" }
         registry: { type: string }
         guarantee_kind: { type: string }
+        advance_rent: { type: boolean }
         deposit_amount: { $ref: "#/components/schemas/Money" }
         rent: { $ref: "#/components/schemas/Money" }
         current_rent: { $ref: "#/components/schemas/Money", description: The rent after adjustments. }

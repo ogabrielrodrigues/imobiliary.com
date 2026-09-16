@@ -73,7 +73,7 @@ export const NOTICES: Readonly<Record<NoticeCode, { readonly title: string; read
   advance_rent: {
     title: "Aluguel antecipado com garantia",
     text:
-      "O primeiro aluguel vence no início do contrato e o contrato tem garantia. A Lei 8.245/91 (art. 20) " +
+      "O contrato prevê aluguel antecipado e tem garantia. A Lei 8.245/91 (art. 20) " +
       "só permite cobrar o aluguel antecipado quando não há garantia, e a cobrança indevida é contravenção " +
       "penal (art. 43, III).",
   },
@@ -163,6 +163,8 @@ export interface ContractInput {
   readonly propertyId: string;
   readonly registry: string;
   readonly guaranteeKind: GuaranteeKind;
+  /** Whether each month is paid at its start; null until the office chooses. */
+  readonly advanceRent: boolean | null;
   readonly depositAmount: string;
   readonly rent: string;
   readonly adminFee: string;
@@ -203,6 +205,7 @@ export interface ContractTerms {
   readonly propertyId: string;
   readonly registry: string;
   readonly guaranteeKind: GuaranteeKind;
+  readonly advanceRent: boolean;
   readonly depositAmount: string;
   readonly rent: string;
   readonly currentRent: string;
@@ -255,6 +258,7 @@ export function emptyContract(): ContractInput {
     propertyId: "",
     registry: "",
     guaranteeKind: "none",
+    advanceRent: null,
     depositAmount: "",
     rent: "",
     adminFee: "10",
@@ -280,6 +284,7 @@ export function contractToInput(c: Contract): ContractInput {
     propertyId: c.propertyId,
     registry: c.registry,
     guaranteeKind: c.guaranteeKind,
+    advanceRent: c.advanceRent,
     depositAmount: c.guaranteeKind === "deposit" ? moneyFromApi(c.depositAmount) : "",
     rent: moneyFromApi(c.rent),
     adminFee: shareFromApi(c.adminFee),
@@ -315,7 +320,7 @@ export type ContractStep = "property" | "parties" | "terms" | "review";
 
 export function stepOfField(field: string): ContractStep {
   if (field === "propertyId" || field === "registry" || field === "property_id") return "property";
-  if (field.startsWith("parties") || /Ids$/.test(field) || field === "guaranteeKind" || field === "guarantee_kind") {
+  if (field.startsWith("parties") || /Ids$/.test(field) || field === "guaranteeKind" || field === "advanceRent") {
     return "parties";
   }
   if (field === "acknowledgments" || field === "rents" || field === "terminated_on") return "review";
@@ -366,6 +371,8 @@ export function validateContract(c: ContractInput): FieldError[] {
   }
   if (partiesOf(c).length > MAX_PARTIES) add("tenantIds", `Informe no máximo ${MAX_PARTIES} partes no total.`);
 
+  if (c.advanceRent === null) add("advanceRent", "Informe se o aluguel é antecipado.");
+
   const rent = parseMoney(c.rent);
   if (c.rent.trim() === "") add("rent", "Informe o valor do aluguel.");
   else if (rent === null) add("rent", "Use um valor como 1.500,00.");
@@ -406,6 +413,7 @@ export function contractFormField(apiField: string): string {
   const map: Record<string, string> = {
     property_id: "propertyId",
     guarantee_kind: "guaranteeKind",
+    advance_rent: "advanceRent",
     deposit_amount: "depositAmount",
     admin_fee: "adminFee",
     late_penalty_rate: "latePenaltyRate",

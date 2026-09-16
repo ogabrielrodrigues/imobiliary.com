@@ -52,8 +52,8 @@ var adjustmentIndexes = []AdjustmentIndex{"igpm", "ipca", "inpc", "ivar", "igpdi
 type NoticeCode string
 
 const (
-	// NoticeAdvanceRent: the first instalment is due when the lease starts,
-	// which is rent paid in advance, while the contract also has a guarantee.
+	// NoticeAdvanceRent: the office chose rent paid in advance, the first
+	// instalment due when the lease starts, while the contract also has a guarantee.
 	// Lei 8.245 art. 20 allows advance rent only without a guarantee; art. 43,
 	// III makes demanding it otherwise a misdemeanour.
 	NoticeAdvanceRent NoticeCode = "advance_rent"
@@ -93,6 +93,10 @@ type Contract struct {
 	// Registry is the office's own number for the contract, unique within it.
 	Registry      string
 	GuaranteeKind GuaranteeKind
+	// AdvanceRent is the office's choice: true, each month is paid at its
+	// start, the first on the day the lease starts; false, each month is paid
+	// after it, the first on the due day of the following month.
+	AdvanceRent bool
 	// DepositAmount exists only with a deposit guarantee.
 	DepositAmount Money
 	// Rent is the amount agreed at signing; CurrentRent follows the
@@ -270,17 +274,23 @@ func TermMonths(starts, expires Date) int {
 	return max(months, 1)
 }
 
-// Schedule is every instalment of a contract, as the plan settles it: one per
-// month of term, the first due on the start date, instalment k after it due on
-// the due day of the k-1th month after the start, a day the month lacks
-// falling on its last day. Every instalment is a whole month's rent; there is
-// no pro rata.
+// Schedule is every instalment of a contract: one per month of term, a day
+// the month lacks falling on its last day, every one a whole month's rent with
+// no pro rata. In advance, the first is due on the start date and instalment k
+// on the due day of the k-1th month after the start. Otherwise instalment k is
+// due on the due day of the kth month after the start, after the month it pays.
 func Schedule(c *Contract) []Instalment {
 	n := TermMonths(c.StartsOn, c.ExpiresOn)
 	out := make([]Instalment, 0, n)
 	for k := 1; k <= n; k++ {
-		due := c.StartsOn
-		if k > 1 {
+		var due Date
+		switch {
+		case !c.AdvanceRent:
+			month := c.StartsOn.AddMonths(k)
+			due = DateInMonth(month.Year(), month.Month(), c.DueDay)
+		case k == 1:
+			due = c.StartsOn
+		default:
 			month := c.StartsOn.AddMonths(k - 1)
 			due = DateInMonth(month.Year(), month.Month(), c.DueDay)
 		}
@@ -299,8 +309,7 @@ type PartyPerson struct {
 // Notices lists the legal notices a contract raises, in a stable order.
 func Notices(c *Contract, people map[uuid.UUID]PartyPerson) []NoticeCode {
 	var out []NoticeCode
-	if c.GuaranteeKind != GuaranteeNone {
-		// The first instalment is always due at the start.
+	if c.AdvanceRent && c.GuaranteeKind != GuaranteeNone {
 		out = append(out, NoticeAdvanceRent)
 	}
 	if c.GuaranteeKind == GuaranteeSurety {

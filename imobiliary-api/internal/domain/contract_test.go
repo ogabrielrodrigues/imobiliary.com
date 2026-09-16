@@ -22,6 +22,7 @@ func validContract(t *testing.T) *Contract {
 		PropertyID:       uuid.NewV7(),
 		Registry:         " 2026/ 001 ",
 		GuaranteeKind:    GuaranteeNone,
+		AdvanceRent:      true,
 		Rent:             150000,
 		CurrentRent:      150000,
 		AdminFee:         DefaultAdminFee,
@@ -74,6 +75,24 @@ func TestScheduleFollowsTheDueDay(t *testing.T) {
 	c.StartsOn, c.ExpiresOn = date(t, "2026-01-10"), date(t, "2026-03-09")
 	if due := Schedule(c)[1].DueOn.String(); due != "2026-02-28" {
 		t.Errorf("February instalment due %s", due)
+	}
+}
+
+func TestScheduleWithoutAdvanceRent(t *testing.T) {
+	c := validContract(t)
+	c.AdvanceRent = false
+	c.StartsOn, c.ExpiresOn, c.DueDay = date(t, "2027-12-20"), date(t, "2028-04-19"), 31
+	got := Schedule(c)
+
+	// Each month is paid after it: the first on the due day of January.
+	want := []string{"2028-01-31", "2028-02-29", "2028-03-31", "2028-04-30"}
+	if len(got) != len(want) {
+		t.Fatalf("%d instalments, want %d", len(got), len(want))
+	}
+	for i, inst := range got {
+		if inst.DueOn.String() != want[i] || inst.Sequence != i+1 {
+			t.Errorf("instalment %d = %+v, want due %s", i+1, inst, want[i])
+		}
 	}
 }
 
@@ -146,6 +165,13 @@ func TestNotices(t *testing.T) {
 	if got := Notices(c, people); !slices.Equal(got, []NoticeCode{NoticeAdvanceRent}) {
 		t.Errorf("with the spouse consenting %v", got)
 	}
+
+	// Rent paid after each month raises nothing, whatever the guarantee.
+	c.AdvanceRent = false
+	if got := Notices(c, people); len(got) != 0 {
+		t.Errorf("without advance rent %v", got)
+	}
+	c.AdvanceRent = true
 
 	separate := married
 	separate.PropertyRegime = RegimeTotalSeparation

@@ -416,6 +416,7 @@ func changedContractFields(before, after *domain.Contract) []string {
 	add("property_id", before.PropertyID != after.PropertyID)
 	add("registry", before.Registry != after.Registry)
 	add("guarantee_kind", before.GuaranteeKind != after.GuaranteeKind)
+	add("advance_rent", before.AdvanceRent != after.AdvanceRent)
 	add("deposit_amount", before.DepositAmount != after.DepositAmount)
 	add("rent", before.Rent != after.Rent)
 	add("admin_fee", before.AdminFee != after.AdminFee)

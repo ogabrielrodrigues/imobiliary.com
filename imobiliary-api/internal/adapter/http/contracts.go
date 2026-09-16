@@ -50,6 +50,7 @@ type contractTermsBody struct {
 	PropertyID       string                 `json:"property_id"`
 	Registry         string                 `json:"registry"`
 	GuaranteeKind    domain.GuaranteeKind   `json:"guarantee_kind"`
+	AdvanceRent      bool                   `json:"advance_rent"`
 	DepositAmount    domain.Money           `json:"deposit_amount"`
 	Rent             domain.Money           `json:"rent"`
 	CurrentRent      domain.Money           `json:"current_rent"`
@@ -67,7 +68,7 @@ type contractTermsBody struct {
 
 func presentTerms(c *domain.Contract, today domain.Date) contractTermsBody {
 	return contractTermsBody{
-		PropertyID: c.PropertyID.String(), Registry: c.Registry, GuaranteeKind: c.GuaranteeKind,
+		PropertyID: c.PropertyID.String(), Registry: c.Registry, GuaranteeKind: c.GuaranteeKind, AdvanceRent: c.AdvanceRent,
 		DepositAmount: c.DepositAmount, Rent: c.Rent, CurrentRent: c.CurrentRent, AdminFee: c.AdminFee,
 		LatePenaltyRate: c.LatePenaltyRate, LateInterestRate: c.LateInterestRate, DueDay: c.DueDay,
 		AdjustmentIndex: c.AdjustmentIndex, SignedOn: c.SignedOn, StartsOn: c.StartsOn,
@@ -136,6 +137,7 @@ type contractRequest struct {
 	PropertyID       string              `json:"property_id"`
 	Registry         string              `json:"registry"`
 	GuaranteeKind    string              `json:"guarantee_kind"`
+	AdvanceRent      *bool               `json:"advance_rent"`
 	DepositAmount    string              `json:"deposit_amount"`
 	Rent             string              `json:"rent"`
 	AdminFee         string              `json:"admin_fee"`
@@ -159,6 +161,12 @@ func (body contractRequest) toContract() (*domain.Contract, []domain.NoticeCode,
 		AdjustmentIndex: domain.AdjustmentIndex(body.AdjustmentIndex),
 		AdminFee:        domain.DefaultAdminFee,
 		LatePenaltyRate: domain.DefaultLatePenalty, LateInterestRate: domain.DefaultLateInterest,
+	}
+	// A choice the office makes, so it has no default.
+	if body.AdvanceRent == nil {
+		v.Add("advance_rent", "is required")
+	} else {
+		c.AdvanceRent = *body.AdvanceRent
 	}
 	if body.PropertyID != "" {
 		if id, err := uuid.Parse(body.PropertyID); err == nil {

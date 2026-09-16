@@ -1440,6 +1440,13 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       termination with a date before the start refused then accepted (3 rents
       left), list filters and search, property deletion refused while the
       contract existed, 375px without sideways scroll. Test data deleted.
+    - **Advance rent is a choice** (user's request, 2026-09-16; migration
+      0009, `advance_rent` required in the request, OpenAPI 0.4.1). In
+      advance: instalment 1 on the start, then the due day of each following
+      month, and the `advance_rent` notice when there is a guarantee. Not in
+      advance: instalment k on the due day of the kth month after the start,
+      and no notice. Existing contracts became `true`. The choice sits beside
+      the guarantee in the Partes step.
 
 ### Next step
 

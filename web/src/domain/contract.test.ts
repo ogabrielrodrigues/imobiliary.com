@@ -25,6 +25,7 @@ const valid: ContractInput = {
   ...emptyContract(),
   propertyId: "p1",
   registry: "2026/001",
+  advanceRent: true,
   rent: "1.500,00",
   signedOn: "2026-09-20",
   startsOn: "2026-10-01",
@@ -88,6 +89,7 @@ describe("validateContract", () => {
 
   it("asks for what is missing", () => {
     assert.deepEqual(fields(emptyContract()).sort(), [
+      "advanceRent",
       "expiresOn",
       "landlordIds",
       "propertyId",
@@ -134,6 +136,8 @@ describe("the API's answers", () => {
     assert.equal(contractFormField("parties[2].person_id"), "parties");
     assert.equal(stepOfField("parties"), "parties");
     assert.equal(stepOfField("registry"), "property");
+    assert.equal(contractFormField("advance_rent"), "advanceRent");
+    assert.equal(stepOfField("advanceRent"), "parties");
     assert.equal(translateContractProblem({ field: "rent", message: "new" }).message, "Valor não aceito. Confira este campo.");
   });
 
