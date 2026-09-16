@@ -361,7 +361,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-15 — imobiliary-api runs against a local PostgreSQL 18, integration suite and pnpm security green; packages/ui and web still to do
+**Last updated:** 2026-09-15 — phase 0 done but for the production-start decision: imobiliary-api, packages/ui and web all green, pnpm security at 15 checks
 
 ### Done
 
@@ -1119,18 +1119,47 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       `imobiliary-api/.env` itself, so `pnpm imobiliary:test:integration` needs
       nothing exported. A leftover `imobiliary_template_<digest>` database is
       deliberate and reused.
-    - **Not started:** `packages/ui`, `web`, the production-start
-      investigation.
+36. **`packages/ui` and `web`** (`036ef84`, `91a0137`), the rest of phase 0.
+    - **`packages/ui`** holds what both platforms must agree on: the three
+      themes and both high-contrast palettes, the rem type scale, the base
+      layer, the accessibility preferences and their head script, the fonts,
+      and `cn` with the scale. Components stay per app, as shadcn intends.
+    - **Tailwind is not imported by the package.** Its source detection starts
+      at the stylesheet that imports it, so from the package it would scan the
+      package instead of the app. Each app keeps
+      `@import "tailwindcss"`, `tw-animate-css` and `shadcn/tailwind.css`, then
+      imports `@imobiliary/ui/tokens.css`.
+    - **The localStorage key is a parameter now**, through
+      `accessibilityStorage(key)`: `web` uses `imobiliary_accessibility`, and
+      `docs` keeps `imobiliary_docs_accessibility` when it migrates.
+    - **A third font, Inter Variable**, as `--font-reading` (`font-reading`),
+      for text that is read rather than scanned and for columns of money.
+    - **`docs` still has its own copies**, untouched. Its migration is phase 8
+      and must be proved with the computed-style hash at 1280px.
+    - **`shadcn init` asks for a project name even with `-y`**, and it creates
+      the project in a subdirectory of that name. Piping answers in gives the
+      directory a name made of the piped text; the contents were moved up and
+      the rest of the scaffold (eslint, prettier, vitest, devtools, Lucide,
+      Geist) dropped.
+    - `web` runs on **:3001**, has `.claude/launch.json` entry "web", and the
+      root gains `web:*` and `ui:check`. `pnpm security` is 15 checks.
+    - **Not started:** the production start, below.
 
 ### Next step
 
 **Finish phase 0 of `PLANO.md`.** The user asked to stop after the API
 skeleton. In order:
 
-The database half is done and verified. What is left of phase 0:
-`packages/ui`, then `web`, then the production-start investigation (bring any
-adapter dependency to the user before adding it). Phase 1 follows in
-`PLANO.md` §7.
+**Phase 0 is done except for one decision.** `vite build` in `web` produces
+`dist/client` and `dist/server/server.js`, and that file default-exports a
+`{ fetch }` handler: it listens to nothing, which is exactly the open item
+`docs` has carried since it was written. Serving that handler through the
+`srvx` node adapter was tried here and works — the page, `/robots.txt` and the
+production CSP all answer — but **`dist/client` is not served by it**, so
+static assets 404 without either a static layer in the Node entry or a proxy
+in front. Both halves of that are a dependency decision and are with the user.
+
+Then phase 1 in `PLANO.md` §7: identity and organisation.
 
 Deferred by the user, unchanged: **deploy** and the **legal items** of the
 docs platform. See Open items.
