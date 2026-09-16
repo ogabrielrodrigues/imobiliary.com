@@ -24,6 +24,12 @@ docs/.tanstack/
 docs/.vite/
 docs/src/routeTree.gen.ts
 
+# --- web (TanStack Start) ---------------------------------------------------
+web/dist/
+web/.tanstack/
+web/.vite/
+web/src/routeTree.gen.ts
+
 # --- Editors and OS ----------------------------------------------------------
 .DS_Store
 Thumbs.db

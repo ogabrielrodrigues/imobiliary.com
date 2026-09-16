@@ -16,6 +16,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const api = join(root, "docgen-api");
 const docs = join(root, "docs");
 const imobiliary = join(root, "imobiliary-api");
+const web = join(root, "web");
+const ui = join(root, "packages", "ui");
 
 const GOVULNCHECK = "golang.org/x/vuln/cmd/govulncheck@v1.8.0";
 const REDOCLY = "@redocly/cli@2.52.0";
@@ -43,6 +45,8 @@ const steps = [
   // copied from a template.
   { name: "imobiliary-api: Go tests, with integration", cwd: imobiliary, command: "go", args: ["test", "-tags=integration", "./..."] },
   { name: "platform: types, layers, tests", cwd: docs, command: "pnpm", args: ["check"] },
+  { name: "design package: types and tests", cwd: ui, command: "pnpm", args: ["check"] },
+  { name: "web: types, layers, tests", cwd: web, command: "pnpm", args: ["check"] },
   // npx rather than pnpm dlx: dlx cannot choose between the package's two
   // binaries, and it records the version in pnpm-workspace.yaml as it goes.
   { name: "OpenAPI lint", cwd: api, command: "npx", args: ["--yes", REDOCLY, "lint", "openapi.yaml"] },

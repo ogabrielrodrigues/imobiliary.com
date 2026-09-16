@@ -1,0 +1,15 @@
+/*
+  The platform's stylesheet.
+
+  Tailwind is imported here rather than in @imobiliary/ui, because Tailwind's
+  source detection starts at the file that imports it: from the package it
+  would scan the package instead of this app.
+
+  Everything both platforms must agree on — the three themes, the type scale,
+  the accessibility preferences and the self-hosted fonts — comes from the
+  package. Rules that belong to this app go below its import.
+*/
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@imobiliary/ui/tokens.css";

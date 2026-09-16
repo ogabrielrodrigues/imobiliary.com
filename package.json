@@ -21,6 +21,10 @@
     "imobiliary:build": "cd imobiliary-api && go build ./...",
     "imobiliary:test": "cd imobiliary-api && go test ./...",
     "imobiliary:test:integration": "cd imobiliary-api && go test -tags=integration ./...",
+    "web:dev": "pnpm --filter ./web dev",
+    "web:build": "pnpm --filter ./web build",
+    "web:check": "pnpm --filter ./web check",
+    "ui:check": "pnpm --filter ./packages/ui check",
     "security": "node scripts/security.mjs"
   }
 }
