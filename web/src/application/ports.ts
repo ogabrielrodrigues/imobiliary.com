@@ -26,6 +26,13 @@ import type {
   PersonKind,
 } from "../domain/person.ts";
 import type { PropertiesPage, Property, PropertyInput } from "../domain/property.ts";
+import type {
+  Contract,
+  ContractInput,
+  ContractPreview,
+  ContractsPage,
+  ContractStatus,
+} from "../domain/contract.ts";
 
 /**
  * What a single call to the API needs beyond its arguments.
@@ -121,6 +128,22 @@ export interface PropertiesGateway {
   get(ctx: CallContext, id: string): Promise<Property>;
   create(ctx: CallContext, input: PropertyInput): Promise<Property>;
   update(ctx: CallContext, id: string, version: number, input: PropertyInput): Promise<Property>;
+  remove(ctx: CallContext, id: string): Promise<void>;
+}
+
+/** The office's leases. */
+export interface ContractsGateway {
+  list(
+    ctx: CallContext,
+    query: { q?: string; propertyId?: string; personId?: string; status?: ContractStatus; cursor?: string; limit?: number },
+  ): Promise<ContractsPage>;
+  /** The schedule and the notices the terms raise, without saving anything. */
+  preview(ctx: CallContext, input: ContractInput): Promise<ContractPreview>;
+  get(ctx: CallContext, id: string): Promise<Contract>;
+  create(ctx: CallContext, input: ContractInput): Promise<Contract>;
+  update(ctx: CallContext, id: string, version: number, input: ContractInput): Promise<Contract>;
+  terminate(ctx: CallContext, id: string, version: number, on: string): Promise<Contract>;
+  /** A contract with a paid rent is an InUseError. */
   remove(ctx: CallContext, id: string): Promise<void>;
 }
 

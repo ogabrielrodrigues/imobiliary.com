@@ -59,6 +59,13 @@ function PropertyPage() {
           <div className="flex min-w-0 flex-col gap-1">
             <h1 className="text-title-lg font-semibold tracking-[-0.015em] break-words">{addressLine(property.address)}</h1>
             <span className="text-small text-muted-foreground">{addressPlace(property.address)}</span>
+            <Link
+              to="/contratos"
+              search={{ imovel: property.id }}
+              className="self-start text-small text-muted-foreground underline hover:text-foreground"
+            >
+              Ver contratos deste imóvel
+            </Link>
           </div>
           <DeleteProperty id={property.id} label={addressLine(property.address)} />
         </div>

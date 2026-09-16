@@ -12,6 +12,7 @@
 
 import type {
   CallContext,
+  ContractsGateway,
   CurrentAccount,
   IdentityGateway,
   Invitation,
@@ -56,6 +57,24 @@ import {
   type PropertyAddress,
   type PropertyInput,
 } from "../../domain/property.ts";
+import {
+  moneyForApi,
+  parseMoney,
+  parsePercent,
+  partiesOf,
+  percentForApi,
+  type AdjustmentIndex,
+  type Contract,
+  type ContractInput,
+  type ContractPreview,
+  type ContractsPage,
+  type ContractStatus,
+  type ContractTerms,
+  type GuaranteeKind,
+  type NoticeCode,
+  type PartyRole,
+  type RentStatus,
+} from "../../domain/contract.ts";
 import { Transport } from "./transport.ts";
 
 // --- the shapes the API answers with ----------------------------------------
@@ -168,6 +187,7 @@ export function createGateways(transport: Transport): {
   privacy: PrivacyGateway;
   people: PeopleGateway;
   properties: PropertiesGateway;
+  contracts: ContractsGateway;
 } {
   return {
     identity: new IdentityClient(transport),
@@ -177,6 +197,7 @@ export function createGateways(transport: Transport): {
     privacy: new PrivacyClient(transport),
     people: new PeopleClient(transport),
     properties: new PropertiesClient(transport),
+    contracts: new ContractsClient(transport),
   };
 }
 
@@ -553,6 +574,203 @@ class PropertiesClient implements PropertiesGateway {
 
   async remove(ctx: CallContext, id: string): Promise<void> {
     await this.transport.send(ctx, "DELETE", `/v1/properties/${encodeURIComponent(id)}`);
+  }
+}
+
+interface ContractTermsBody {
+  property_id: string;
+  registry: string;
+  guarantee_kind: GuaranteeKind;
+  deposit_amount: string;
+  rent: string;
+  current_rent: string;
+  admin_fee: string;
+  late_penalty_rate: string;
+  late_interest_rate: string;
+  due_day: number;
+  adjustment_index: AdjustmentIndex;
+  signed_on: string;
+  starts_on: string;
+  expires_on: string;
+  terminated_on: string | null;
+  status: ContractStatus;
+}
+
+interface ContractBody extends ContractTermsBody {
+  id: string;
+  property: { id: string; address: PropertyAddressBody };
+  parties: { person_id: string; role: PartyRole; name: string; kind: PersonKind }[];
+  acknowledgments: { code: NoticeCode; acknowledged_at: string }[];
+  rents: {
+    id: string;
+    sequence: number;
+    due_on: string;
+    amount: string;
+    late_fee: string;
+    amount_paid: string | null;
+    paid_on: string | null;
+    status: RentStatus;
+  }[];
+  version: number;
+}
+
+interface ContractsPageBody {
+  contracts: (ContractTermsBody & { id: string; address: PropertyAddressBody; tenant_names: string[] })[];
+  next_cursor?: string;
+}
+
+interface ContractPreviewBody {
+  schedule: { sequence: number; due_on: string; amount: string }[];
+  notices: NoticeCode[];
+  total: string;
+}
+
+function toContractTerms(b: ContractTermsBody): ContractTerms {
+  return {
+    propertyId: b.property_id,
+    registry: b.registry,
+    guaranteeKind: b.guarantee_kind,
+    depositAmount: b.deposit_amount,
+    rent: b.rent,
+    currentRent: b.current_rent,
+    adminFee: b.admin_fee,
+    latePenaltyRate: b.late_penalty_rate,
+    lateInterestRate: b.late_interest_rate,
+    dueDay: b.due_day,
+    adjustmentIndex: b.adjustment_index,
+    signedOn: b.signed_on,
+    startsOn: b.starts_on,
+    expiresOn: b.expires_on,
+    terminatedOn: b.terminated_on,
+    status: b.status,
+  };
+}
+
+function toContract(b: ContractBody): Contract {
+  return {
+    ...toContractTerms(b),
+    id: b.id,
+    address: toPropertyAddress(b.property.address),
+    parties: b.parties.map((p) => ({ personId: p.person_id, role: p.role, name: p.name, kind: p.kind })),
+    acknowledgments: b.acknowledgments.map((a) => ({ code: a.code, acknowledgedAt: a.acknowledged_at })),
+    rents: b.rents.map((r) => ({
+      id: r.id,
+      sequence: r.sequence,
+      dueOn: r.due_on,
+      amount: r.amount,
+      lateFee: r.late_fee,
+      amountPaid: r.amount_paid,
+      paidOn: r.paid_on,
+      status: r.status,
+    })),
+    version: b.version,
+  };
+}
+
+/**
+ * Amounts and percentages leave as the API reads them, with a dot. A value
+ * that does not parse is sent as typed, so the API's refusal lands on its field.
+ */
+function contractPayload(c: ContractInput): string {
+  const money = (value: string) => {
+    const cents = parseMoney(value);
+    return cents === null ? value : moneyForApi(cents);
+  };
+  const percent = (value: string) => {
+    const millionths = parsePercent(value);
+    return millionths === null ? value : percentForApi(millionths);
+  };
+  return JSON.stringify({
+    property_id: c.propertyId,
+    registry: c.registry.trim(),
+    guarantee_kind: c.guaranteeKind,
+    ...(c.guaranteeKind === "deposit" ? { deposit_amount: money(c.depositAmount) } : {}),
+    rent: money(c.rent),
+    admin_fee: percent(c.adminFee),
+    late_penalty_rate: percent(c.latePenaltyRate),
+    late_interest_rate: percent(c.lateInterestRate),
+    due_day: c.dueDay.trim() === "" ? 0 : Number(c.dueDay),
+    adjustment_index: c.adjustmentIndex,
+    signed_on: c.signedOn,
+    starts_on: c.startsOn,
+    expires_on: c.expiresOn,
+    parties: partiesOf(c).map((p) => ({ person_id: p.personId, role: p.role })),
+    acknowledgments: c.acknowledgments,
+  });
+}
+
+class ContractsClient implements ContractsGateway {
+  constructor(private readonly transport: Transport) {}
+
+  async list(
+    ctx: CallContext,
+    query: { q?: string; propertyId?: string; personId?: string; status?: ContractStatus; cursor?: string; limit?: number },
+  ): Promise<ContractsPage> {
+    const params = new URLSearchParams();
+    if (query.q) params.set("q", query.q);
+    if (query.propertyId) params.set("property_id", query.propertyId);
+    if (query.personId) params.set("person_id", query.personId);
+    if (query.status) params.set("status", query.status);
+    if (query.cursor) params.set("cursor", query.cursor);
+    if (query.limit !== undefined) params.set("limit", String(query.limit));
+    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const body = await this.transport.json<ContractsPageBody>(ctx, "GET", `/v1/contracts${suffix}`);
+    return {
+      contracts: body.contracts.map((c) => ({
+        ...toContractTerms(c),
+        id: c.id,
+        address: toPropertyAddress(c.address),
+        tenantNames: c.tenant_names,
+      })),
+      nextCursor: body.next_cursor ?? null,
+    };
+  }
+
+  async preview(ctx: CallContext, input: ContractInput): Promise<ContractPreview> {
+    const response = await this.transport.send(ctx, "POST", "/v1/contracts/preview", {
+      body: contractPayload(input),
+      contentType: "application/json",
+    });
+    const body = (await response.json()) as ContractPreviewBody;
+    return {
+      schedule: body.schedule.map((i) => ({ sequence: i.sequence, dueOn: i.due_on, amount: i.amount })),
+      notices: body.notices,
+      total: body.total,
+    };
+  }
+
+  async get(ctx: CallContext, id: string): Promise<Contract> {
+    return toContract(await this.transport.json<ContractBody>(ctx, "GET", `/v1/contracts/${encodeURIComponent(id)}`));
+  }
+
+  async create(ctx: CallContext, input: ContractInput): Promise<Contract> {
+    const response = await this.transport.send(ctx, "POST", "/v1/contracts", {
+      body: contractPayload(input),
+      contentType: "application/json",
+    });
+    return toContract((await response.json()) as ContractBody);
+  }
+
+  async update(ctx: CallContext, id: string, version: number, input: ContractInput): Promise<Contract> {
+    const response = await this.transport.send(ctx, "PUT", `/v1/contracts/${encodeURIComponent(id)}`, {
+      body: contractPayload(input),
+      contentType: "application/json",
+      ifMatch: `"${version}"`,
+    });
+    return toContract((await response.json()) as ContractBody);
+  }
+
+  async terminate(ctx: CallContext, id: string, version: number, on: string): Promise<Contract> {
+    const response = await this.transport.send(ctx, "POST", `/v1/contracts/${encodeURIComponent(id)}/termination`, {
+      body: JSON.stringify({ terminated_on: on }),
+      contentType: "application/json",
+      ifMatch: `"${version}"`,
+    });
+    return toContract((await response.json()) as ContractBody);
+  }
+
+  async remove(ctx: CallContext, id: string): Promise<void> {
+    await this.transport.send(ctx, "DELETE", `/v1/contracts/${encodeURIComponent(id)}`);
   }
 }
 

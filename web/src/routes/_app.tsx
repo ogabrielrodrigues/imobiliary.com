@@ -12,6 +12,7 @@ import {
   IconLayoutDashboard,
   IconLogout,
   IconMenu2,
+  IconReceipt2,
   IconSettings,
   IconUsers,
 } from "@tabler/icons-react";
@@ -47,7 +48,7 @@ export const Route = createFileRoute("/_app")({
 });
 
 interface NavItem {
-  readonly to: "/dashboard" | "/imoveis" | "/pessoas" | "/ajustes";
+  readonly to: "/dashboard" | "/imoveis" | "/pessoas" | "/contratos" | "/ajustes";
   readonly label: string;
   readonly icon: typeof IconLayoutDashboard;
 }
@@ -64,10 +65,11 @@ const PRIMARY: readonly NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: IconLayoutDashboard },
   { to: "/imoveis", label: "Imóveis", icon: IconBuildingEstate },
   { to: "/pessoas", label: "Pessoas", icon: IconUsers },
+  { to: "/contratos", label: "Contratos", icon: IconFileDescription },
 ];
 
 const SOON: readonly { label: string; icon: typeof IconLayoutDashboard }[] = [
-  { label: "Contratos", icon: IconFileDescription },
+  { label: "Aluguéis", icon: IconReceipt2 },
 ];
 
 function AppLayout() {

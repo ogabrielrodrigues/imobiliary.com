@@ -76,6 +76,13 @@ function PersonPage() {
             <span className="font-mono text-micro tracking-[0.1em] text-faint uppercase">
               {KIND_LABELS[person.kind]}
             </span>
+            <Link
+              to="/contratos"
+              search={{ pessoa: person.id }}
+              className="self-start text-small text-muted-foreground underline hover:text-foreground"
+            >
+              Ver contratos desta pessoa
+            </Link>
           </div>
           <DeletePerson id={person.id} name={person.name} />
         </div>
