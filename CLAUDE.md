@@ -366,7 +366,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-16: phase 2 complete (people and addresses, API and web); phase 3 (properties) is next
+**Last updated:** 2026-09-16: phase 3 complete (properties with owners' shares, API and web); phase 4 (contracts and instalments) is next
 
 ### Done
 
@@ -1319,15 +1319,50 @@ _Update this section as work proceeds. It is what a fresh session reads first._
     - Verified in the browser against the user's own servers (web :3001, API
       :8081): everything listed in commit `9e16053`. Test records deleted.
     - **Not done:** TanStack Query and Table are still not in `web` (the list
-      uses loaders and a cursor); no export of people for portability; the
-      sidebar still shows Imóveis and Contratos as "em breve".
+      uses loaders and a cursor); no export of people for portability.
+
+41. **Phase 3: properties** (`a8c5ed6` API, `f6d1469` web).
+    - **The user asked (2026-09-16) that the API and the web dev server stay
+      running while work goes on.** The API now runs in the background with
+      `pnpm imobiliary:dev` on :8081 (the user's own `web/.env` points there);
+      after a migration, run `pnpm imobiliary:migrate`, stop whatever listens
+      on :8081 and start it again. The web dev server on :3001 is the user's
+      and reloads by itself. Inputs also carry placeholders now (see the
+      "Imobiliary (main platform)" section).
+    - **Migration 0006**: `properties` (address row of its own, matrícula,
+      cartório, IPTU, water and energy codes, version) and `property_owners`
+      (share in millionths), with the item 40 guarantees. The owner link to
+      `people` is RESTRICT, so an owner is `409 in_use`.
+    - **Shares add up to exactly 100**, checked by the domain and again by a
+      **deferred constraint trigger at commit** (`check_property_shares`,
+      SQLSTATE 23514), since replacing owners deletes and inserts row by row.
+      A second trigger on `properties` catches a property with no owner.
+    - Updating keeps the address row's id; deleting removes owners and the
+      address. The list orders by folded street and number, searches the
+      address, matrícula and IPTU, and filters by `owner_id`.
+    - `NormalizeAddress` / `validateAddressLines` are shared by people and
+      properties in Go; `addressLineProblems` in the web domain.
+    - **Web:** `domain/property.ts` keeps shares in millionths (`parseShare`
+      accepts a comma, `splitEvenly` gives the remainder to the last owner),
+      `components/properties/property-form.tsx` with a live total and
+      "Dividir igualmente", routes `/imoveis`, `/imoveis/novo`,
+      `/imoveis/$propertyId`, a person's record lists what they own.
+      `SelectField` is shared in `components/select-field.tsx`;
+      `PersonPicker` takes an optional `kind`.
+    - Verified in the browser: everything listed in commit `f6d1469`. Test
+      records deleted.
 
 ### Next step
 
-Phase 3 of `PLANO.md`: properties, with owners and their shares summing to
-100% (a deferred constraint trigger), each property's single address row, and
-the screens. Use `InOrganization`, FORCE RLS and `RESTRICT` to the office as
-in item 40, and extend `PRIVACIDADE.md`, the OpenAPI and its reference page.
+Phase 4 of `PLANO.md` §3.6 and §7: contracts and instalments. The exclusion
+constraint (one contract per property per period), the structural rules
+(one guarantee kind, guarantor only with surety, deposit only with deposit),
+the legal notices with acknowledgement (`advance_rent`,
+`guarantor_spouse_consent`, `deposit_limit`, `adjustment_period`), the
+schedule (instalment 1 on `starts_on`, then `due_day`, day 31 clamped),
+termination and deletion rules, and the multi-step creation screen. Contracts
+must reference properties and people with RESTRICT, which makes the property
+deletion refusal real.
 
 Not in the editor on purpose, for now: fonts, colours, highlight, tables,
 images, headers and footers. Tables are the costly one: the block model,
