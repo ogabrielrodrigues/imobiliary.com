@@ -361,7 +361,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-15 — phase 0 of the main platform started: imobiliary-api skeleton done, PostgreSQL, packages/ui and web still to do
+**Last updated:** 2026-09-15 — imobiliary-api runs against a local PostgreSQL 18, integration suite and pnpm security green; packages/ui and web still to do
 
 ### Done
 
@@ -1100,26 +1100,37 @@ _Update this section as work proceeds. It is what a fresh session reads first._
     - **pgx pulls `golang.org/x/text`, reachable through SCRAM auth**;
       GO-2026-5970 needed v0.39.0. `govulncheck` is clean after it. The proxy
       sometimes times out over IPv6 from this machine: retry.
-    - `pnpm security` runs vulncheck, gofmt, vet (both tags) and unit tests on
-      the new module. **The integration suite is written but has never run**:
-      PostgreSQL is not installed. Add it to `security.mjs` once it passes.
-    - **Not started:** PostgreSQL install and `setup-local.sql`, `packages/ui`,
-      `web`, the production-start investigation.
+    - **Verified against a real PostgreSQL 18** (2026-09-15, `3972387` and the
+      commit after it): migration applied then idempotent, `/healthz`,
+      `/readyz`, the JSON 404 and the metrics listener answered, `/metrics` is
+      404 on the API port, the integration suite passes, `-race` is clean with
+      the WinLibs GCC on PATH, and `pnpm security` reports all 13 checks
+      passing with the integration suite included.
+    - **Three defects that only a real database showed:** a lone field key had
+      to carry a version prefix (a bare base64 key now means version 1);
+      `field_key_version` was logged as `[redacted]` because the redactor
+      matches "key" (renamed `field_seal_version`); every access log read
+      duration 0, since `slog.Duration` logs nanoseconds and Windows' clock
+      granularity rounds a fast handler to zero (now `duration_ms`).
+    - **Local database setup cost an hour of password mismatches.** The roles
+      are in `scripts/setup-local.sql`; passwords live in
+      `%APPDATA%\postgresql\pgpass.conf`, and the test role's line uses `*`
+      for the database because each test creates its own. `pgtest` now reads
+      `imobiliary-api/.env` itself, so `pnpm imobiliary:test:integration` needs
+      nothing exported. A leftover `imobiliary_template_<digest>` database is
+      deliberate and reused.
+    - **Not started:** `packages/ui`, `web`, the production-start
+      investigation.
 
 ### Next step
 
 **Finish phase 0 of `PLANO.md`.** The user asked to stop after the API
 skeleton. In order:
 
-1. The user installs PostgreSQL 18 (`winget install PostgreSQL.PostgreSQL.18`,
-   setting the superuser password in the installer; the assistant must not
-   type passwords), runs `psql -U postgres -f imobiliary-api/scripts/setup-local.sql`,
-   fills `pgpass.conf` and `imobiliary-api/.env`.
-2. Run `pnpm imobiliary:test:integration`; fix what fails; add it to
-   `scripts/security.mjs`; run `pnpm imobiliary:migrate` and
-   `pnpm imobiliary:dev`, check `/readyz` and `/metrics`.
-3. `packages/ui`, then `web`, then the production-start investigation
-   (bring any adapter dependency to the user first).
+The database half is done and verified. What is left of phase 0:
+`packages/ui`, then `web`, then the production-start investigation (bring any
+adapter dependency to the user before adding it). Phase 1 follows in
+`PLANO.md` §7.
 
 Deferred by the user, unchanged: **deploy** and the **legal items** of the
 docs platform. See Open items.

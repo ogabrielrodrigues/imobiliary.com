@@ -26,6 +26,7 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -35,6 +36,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"imobiliary/internal/adapter/postgres"
+	"imobiliary/internal/platform/config"
 )
 
 // templateLockKey serialises template builds across test processes. It spells
@@ -66,13 +68,42 @@ func NewEmptyDatabase(t testing.TB) string {
 	return createDatabase(t, adminURL(t), "template0")
 }
 
+var loadEnvOnce sync.Once
+
 func adminURL(t testing.TB) string {
 	t.Helper()
+	// A test binary runs in its package directory and inherits no .env, so the
+	// module's own file is read once, the same way the commands do. Anything
+	// already in the environment still wins.
+	loadEnvOnce.Do(func() {
+		if root, err := moduleRoot(); err == nil {
+			_ = config.LoadDotEnv(filepath.Join(root, ".env"))
+		}
+	})
 	u := os.Getenv("IMOBILIARY_TEST_DATABASE_URL")
 	if u == "" {
-		t.Fatal("pgtest: IMOBILIARY_TEST_DATABASE_URL is not set; see imobiliary-api/README.md")
+		t.Fatal("pgtest: IMOBILIARY_TEST_DATABASE_URL is not set, and imobiliary-api/.env does not set it; see imobiliary-api/README.md")
 	}
 	return u
+}
+
+// moduleRoot walks up from the working directory to the directory holding
+// go.mod.
+func moduleRoot() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("pgtest: no go.mod above %s", dir)
+		}
+		dir = parent
+	}
 }
 
 func createDatabase(t testing.TB, admin, template string) string {

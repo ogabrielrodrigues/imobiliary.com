@@ -110,9 +110,12 @@ go test ./...
 go test -tags=integration ./...
 ```
 
-Integration tests need `IMOBILIARY_TEST_DATABASE_URL`. `internal/platform/pgtest`
-migrates a template database once per set of migrations and gives each test a
-copy of its own, dropped afterwards.
+Integration tests need `IMOBILIARY_TEST_DATABASE_URL`, which they read from
+this directory's `.env` when it is not already in the environment.
+`internal/platform/pgtest` migrates a template database once per set of
+migrations and gives each test a copy of its own, dropped afterwards. The
+template survives between runs and is rebuilt under a new name whenever a
+migration changes.
 
 Fuzz targets live next to the value types:
 
