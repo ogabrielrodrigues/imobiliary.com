@@ -152,6 +152,11 @@ func (r *organizationRepository) Rename(ctx context.Context, id uuid.UUID, name 
 	return affected(tag, err, "postgres: rename organization")
 }
 
+func (r *organizationRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	tag, err := r.q.Exec(ctx, `DELETE FROM organizations WHERE id = $1`, pgUUID(id))
+	return affected(tag, err, "postgres: delete organization")
+}
+
 func scanOrganization(row pgx.Row) (*domain.Organization, error) {
 	var (
 		o  domain.Organization
@@ -268,7 +273,7 @@ func (r *membershipRepository) Get(ctx context.Context, organizationID, userID u
 
 func (r *membershipRepository) ForUser(ctx context.Context, userID uuid.UUID) ([]usecase.MembershipWithOrganization, error) {
 	rows, err := r.q.Query(ctx,
-		`SELECT o.id, o.name, o.created_at, o.updated_at, m.role
+		`SELECT o.id, o.name, o.created_at, o.updated_at, m.role, m.created_at
 		   FROM memberships m JOIN organizations o ON o.id = m.organization_id
 		  WHERE m.user_id = $1
 		  ORDER BY o.name`, pgUUID(userID))
@@ -281,11 +286,12 @@ func (r *membershipRepository) ForUser(ctx context.Context, userID uuid.UUID) ([
 			id   pgtype.UUID
 			role string
 		)
-		if err := row.Scan(&id, &o.Name, &o.CreatedAt, &o.UpdatedAt, &role); err != nil {
+		var joined time.Time
+		if err := row.Scan(&id, &o.Name, &o.CreatedAt, &o.UpdatedAt, &role, &joined); err != nil {
 			return usecase.MembershipWithOrganization{}, err
 		}
 		o.ID = toUUID(id)
-		return usecase.MembershipWithOrganization{Organization: &o, Role: domain.Role(role)}, nil
+		return usecase.MembershipWithOrganization{Organization: &o, Role: domain.Role(role), JoinedAt: joined}, nil
 	})
 }
 
@@ -338,6 +344,17 @@ func (r *membershipRepository) CountAdmins(ctx context.Context, organizationID u
 		pgUUID(organizationID)).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("postgres: count admins: %w", err)
+	}
+	return count, nil
+}
+
+func (r *membershipRepository) CountMembers(ctx context.Context, organizationID uuid.UUID) (int, error) {
+	var count int
+	err := r.q.QueryRow(ctx,
+		`SELECT count(*) FROM memberships WHERE organization_id = $1`,
+		pgUUID(organizationID)).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("postgres: count members: %w", err)
 	}
 	return count, nil
 }

@@ -33,6 +33,7 @@ type Options struct {
 	MFA           *usecase.MFA
 	Passwords     *usecase.Passwords
 	Organizations *usecase.Organizations
+	Privacy       *usecase.Privacy
 	Auditor       *usecase.Auditor
 	// Signer parses the access tokens this service issued.
 	Signer  *token.Signer
@@ -53,6 +54,7 @@ type Server struct {
 	mfa           *usecase.MFA
 	passwords     *usecase.Passwords
 	organizations *usecase.Organizations
+	privacy       *usecase.Privacy
 	auditor       *usecase.Auditor
 	signer        *token.Signer
 	logger        *slog.Logger
@@ -72,6 +74,7 @@ func NewServer(opts Options) *Server {
 		mfa:           opts.MFA,
 		passwords:     opts.Passwords,
 		organizations: opts.Organizations,
+		privacy:       opts.Privacy,
 		auditor:       opts.Auditor,
 		signer:        opts.Signer,
 		logger:        opts.Logger,
@@ -110,6 +113,14 @@ func (s *Server) Handler() http.Handler {
 	enrolling := chain2(s.requireAuth, s.limitWrites)
 	mux.Handle("POST /v1/me/totp", enrolling(http.HandlerFunc(s.handleStartEnrollment)))
 	mux.Handle("POST /v1/me/totp/confirm", enrolling(http.HandlerFunc(s.handleConfirmEnrollment)))
+
+	// The data subject's rights. Reachable before enrolment as well: someone
+	// may want a copy of their data, or to leave, without first being made to
+	// set up a second factor. Erasure checks a password, so it is charged to
+	// the credential limiter too.
+	mux.Handle("GET /v1/me/export", enrolling(http.HandlerFunc(s.handleExport)))
+	mux.Handle("POST /v1/me/deletion",
+		chain2(s.requireAuth, s.limitCredentials, s.limitWrites)(http.HandlerFunc(s.handleDeleteAccount)))
 
 	// Signed in, and past the enrolment rule.
 	authenticated := chain2(s.requireAuth, s.requireEnrolled)

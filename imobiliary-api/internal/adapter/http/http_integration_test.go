@@ -128,8 +128,12 @@ func newAPI(t *testing.T) *api {
 		Repositories: repos, Transactor: db, Hasher: hasher, Tokens: signer,
 		Mailer: box, RefreshTTL: 30 * 24 * time.Hour, Logger: logger,
 	})
+	sealer := sealing.New(keyring)
 	mfa := usecase.NewMFA(usecase.MFAConfig{
-		Identity: identity, Repositories: repos, Sealer: sealing.New(keyring), Logger: logger,
+		Identity: identity, Repositories: repos, Sealer: sealer, Logger: logger,
+	})
+	privacy := usecase.NewPrivacy(usecase.PrivacyConfig{
+		Identity: identity, Repositories: repos, Hasher: hasher, Sealer: sealer, Mailer: box, Logger: logger,
 	})
 	passwords := usecase.NewPasswords(usecase.PasswordsConfig{
 		Identity: identity, Repositories: repos, Hasher: hasher, Mailer: box,
@@ -152,6 +156,7 @@ func newAPI(t *testing.T) *api {
 
 	server := httptest.NewServer(adapterhttp.NewServer(adapterhttp.Options{
 		Identity: identity, MFA: mfa, Passwords: passwords, Organizations: organizations,
+		Privacy: privacy,
 		Auditor: usecase.NewAuditor(repos.Audit, time.Now, logger),
 		Signer:  signer, Logger: logger, Metrics: metrics.NewRegistry(),
 		Ready:    func(context.Context) error { return nil },

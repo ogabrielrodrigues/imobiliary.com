@@ -138,6 +138,7 @@ func serve(logger *slog.Logger) error {
 	repos := db.Repositories()
 	hasher := password.NewHasher()
 	auditor := usecase.NewAuditor(repos.Audit, time.Now, logger)
+	sealer := sealing.New(keyring)
 
 	identity := usecase.NewIdentity(usecase.IdentityConfig{
 		Repositories: repos,
@@ -152,7 +153,7 @@ func serve(logger *slog.Logger) error {
 	mfa := usecase.NewMFA(usecase.MFAConfig{
 		Identity:     identity,
 		Repositories: repos,
-		Sealer:       sealing.New(keyring),
+		Sealer:       sealer,
 		Logger:       logger,
 	})
 	passwords := usecase.NewPasswords(usecase.PasswordsConfig{
@@ -173,6 +174,14 @@ func serve(logger *slog.Logger) error {
 		InvitationTTL: cfg.InvitationTTL,
 		Logger:        logger,
 	})
+	privacy := usecase.NewPrivacy(usecase.PrivacyConfig{
+		Identity:     identity,
+		Repositories: repos,
+		Hasher:       hasher,
+		Sealer:       sealer,
+		Mailer:       mailer,
+		Logger:       logger,
+	})
 
 	limiters := adapterhttp.Limiters{
 		Global:      newLimiter(cfg.RateLimits.GlobalPerIP),
@@ -191,6 +200,7 @@ func serve(logger *slog.Logger) error {
 		MFA:               mfa,
 		Passwords:         passwords,
 		Organizations:     organizations,
+		Privacy:           privacy,
 		Auditor:           auditor,
 		Signer:            signer,
 		Logger:            logger,

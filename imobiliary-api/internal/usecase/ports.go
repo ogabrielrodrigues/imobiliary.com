@@ -26,6 +26,10 @@ type OrganizationRepository interface {
 	Create(ctx context.Context, o *domain.Organization) error
 	ByID(ctx context.Context, id uuid.UUID) (*domain.Organization, error)
 	Rename(ctx context.Context, id uuid.UUID, name string, at time.Time) error
+	// Delete removes an office and, through the cascades, its memberships,
+	// invitations and sessions. Only an account closing as the office's sole
+	// member reaches it.
+	Delete(ctx context.Context, id uuid.UUID) error
 }
 
 // UserRepository stores accounts.
@@ -53,6 +57,9 @@ type MembershipRepository interface {
 	// CountAdmins backs the rule that an organisation is never left without
 	// one. It is called inside the transaction that would remove the last.
 	CountAdmins(ctx context.Context, organizationID uuid.UUID) (int, error)
+	// CountMembers tells an office with other people in it from one that is
+	// only its administrator.
+	CountMembers(ctx context.Context, organizationID uuid.UUID) (int, error)
 }
 
 // MembershipWithOrganization is a membership with the office it names, which
@@ -60,6 +67,8 @@ type MembershipRepository interface {
 type MembershipWithOrganization struct {
 	Organization *domain.Organization
 	Role         domain.Role
+	// JoinedAt is when the membership was created.
+	JoinedAt time.Time
 }
 
 // Member is a row of the members list.
@@ -80,6 +89,9 @@ type SessionRepository interface {
 	Rotate(ctx context.Context, previousID uuid.UUID, at time.Time, next *domain.RefreshToken) error
 	Revoke(ctx context.Context, id uuid.UUID, at time.Time) error
 	RevokeAllForUser(ctx context.Context, userID uuid.UUID, at time.Time) error
+	// ForUser lists every refresh token still stored for an account, for the
+	// export. Oldest first.
+	ForUser(ctx context.Context, userID uuid.UUID) ([]*domain.RefreshToken, error)
 	DeleteExpired(ctx context.Context, before time.Time) (int64, error)
 }
 
@@ -102,8 +114,17 @@ type InvitationRepository interface {
 	ByHash(ctx context.Context, hash []byte) (*domain.Invitation, error)
 	ByID(ctx context.Context, organizationID, id uuid.UUID) (*domain.Invitation, error)
 	ForOrganization(ctx context.Context, organizationID uuid.UUID) ([]*domain.Invitation, error)
+	// ForEmail lists the invitations addressed to an address, with the office
+	// that sent each, for the export.
+	ForEmail(ctx context.Context, email string) ([]ReceivedInvitation, error)
 	Accept(ctx context.Context, id uuid.UUID, at time.Time) error
 	Revoke(ctx context.Context, id uuid.UUID, at time.Time) error
+}
+
+// ReceivedInvitation is an invitation seen from the side of the person invited.
+type ReceivedInvitation struct {
+	Invitation       *domain.Invitation
+	OrganizationName string
 }
 
 // MFARepository stores the second factor and its recovery codes.
@@ -136,6 +157,14 @@ type AuditRepository interface {
 	// PurgeAccessRecords removes the records older than the Marco Civil's six
 	// months, and reports how many went.
 	PurgeAccessRecords(ctx context.Context, before time.Time) (int64, error)
+	// EventsByActor and AccessRecordsForUser read back what concerns one
+	// account, for the export. Oldest first.
+	EventsByActor(ctx context.Context, userID uuid.UUID) ([]*domain.AuditEvent, error)
+	AccessRecordsForUser(ctx context.Context, userID uuid.UUID) ([]*domain.AccessRecord, error)
+	// RecordClosedAccount keeps the sealed address of a deleted account, so its
+	// access records still name someone for as long as they are kept.
+	RecordClosedAccount(ctx context.Context, userID uuid.UUID, sealedEmail []byte, at time.Time) error
+	PurgeClosedAccounts(ctx context.Context, before time.Time) (int64, error)
 }
 
 // Repositories is every store one use case may need, gathered so that a

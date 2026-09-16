@@ -560,11 +560,18 @@ func (i *Identity) PurgeExpired(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if sessions+resets+records > 0 {
+	// A closed account is kept only to name its access records, so it goes
+	// once they have.
+	closed, err := i.repos.Audit.PurgeClosedAccounts(ctx, now.Add(-domain.AccessRecordRetention))
+	if err != nil {
+		return err
+	}
+	if sessions+resets+records+closed > 0 {
 		i.logger.Info("purged expired records",
 			slog.Int64("sessions", sessions),
 			slog.Int64("password_resets", resets),
 			slog.Int64("access_records", records),
+			slog.Int64("closed_accounts", closed),
 		)
 	}
 	return nil

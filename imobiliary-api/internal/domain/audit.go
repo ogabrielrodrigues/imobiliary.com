@@ -66,6 +66,9 @@ const (
 	AccessSignInRefused AccessEvent = "sign_in_refused"
 	AccessRefresh       AccessEvent = "refresh"
 	AccessSignOut       AccessEvent = "sign_out"
+	// AccessAccountClosed is the last record an account leaves: its owner
+	// deleted it, from this address.
+	AccessAccountClosed AccessEvent = "account_closed"
 )
 
 // AccessRecord is a record of use of the application from an address, kept for

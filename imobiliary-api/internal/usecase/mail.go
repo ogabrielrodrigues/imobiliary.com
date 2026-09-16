@@ -54,6 +54,22 @@ func passwordChangedMessage(name string) string {
 	)
 }
 
+func accountDeletedMessage(name string) string {
+	return join(
+		"Olá, "+firstName(name)+".",
+		"",
+		"Sua conta no Imobiliary foi excluída, como você pediu. Seus dados de cadastro",
+		"foram apagados, e não é possível entrar com este e-mail até criar uma conta nova.",
+		"",
+		"Os registros de acesso exigidos pelo Marco Civil da Internet ficam guardados por",
+		"seis meses e depois são apagados.",
+		"",
+		"Se não foi você, escreva para o contato indicado na Política de Privacidade.",
+		"",
+		"Imobiliary",
+	)
+}
+
 func invitationMessage(inviter, organization, link string, days int) string {
 	return join(
 		"Olá.",

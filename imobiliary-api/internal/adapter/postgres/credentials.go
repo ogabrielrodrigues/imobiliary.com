@@ -84,6 +84,18 @@ func (r *sessionRepository) RevokeAllForUser(ctx context.Context, userID uuid.UU
 	return nil
 }
 
+func (r *sessionRepository) ForUser(ctx context.Context, userID uuid.UUID) ([]*domain.RefreshToken, error) {
+	rows, err := r.q.Query(ctx,
+		`SELECT `+refreshColumns+` FROM refresh_tokens WHERE user_id = $1 ORDER BY created_at, id`,
+		pgUUID(userID))
+	if err != nil {
+		return nil, fmt.Errorf("postgres: sessions of user: %w", err)
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (*domain.RefreshToken, error) {
+		return scanRefreshToken(row)
+	})
+}
+
 func (r *sessionRepository) DeleteExpired(ctx context.Context, before time.Time) (int64, error) {
 	tag, err := r.q.Exec(ctx, `DELETE FROM refresh_tokens WHERE expires_at < $1`, before)
 	if err != nil {
@@ -211,6 +223,33 @@ func (r *invitationRepository) ForOrganization(ctx context.Context, organization
 	}
 	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (*domain.Invitation, error) {
 		return scanInvitation(row)
+	})
+}
+
+func (r *invitationRepository) ForEmail(ctx context.Context, email string) ([]usecase.ReceivedInvitation, error) {
+	rows, err := r.q.Query(ctx,
+		`SELECT `+prefixed(invitationColumns, "i")+`, o.name
+		   FROM invitations i JOIN organizations o ON o.id = i.organization_id
+		  WHERE i.email = $1 ORDER BY i.created_at, i.id`, email)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: invitations to address: %w", err)
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (usecase.ReceivedInvitation, error) {
+		var (
+			i           domain.Invitation
+			id, org, by pgtype.UUID
+			role, name  string
+		)
+		err := row.Scan(&id, &org, &i.Email, &role, &i.TokenHash, &by,
+			&i.ExpiresAt, &i.CreatedAt, &i.AcceptedAt, &i.RevokedAt, &name)
+		if err != nil {
+			return usecase.ReceivedInvitation{}, err
+		}
+		i.ID, i.OrganizationID, i.Role = toUUID(id), toUUID(org), domain.Role(role)
+		if by.Valid {
+			i.InvitedBy = toUUID(by)
+		}
+		return usecase.ReceivedInvitation{Invitation: &i, OrganizationName: name}, nil
 	})
 }
 
@@ -418,6 +457,70 @@ func (r *auditRepository) PurgeAccessRecords(ctx context.Context, before time.Ti
 	tag, err := r.q.Exec(ctx, `DELETE FROM access_records WHERE occurred_at < $1`, before)
 	if err != nil {
 		return 0, fmt.Errorf("postgres: purge access records: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
+func (r *auditRepository) EventsByActor(ctx context.Context, userID uuid.UUID) ([]*domain.AuditEvent, error) {
+	rows, err := r.q.Query(ctx,
+		`SELECT id, organization_id, actor_id, action, entity_type, entity_id, fields,
+			request_id, ip, occurred_at
+		   FROM audit_events WHERE actor_id = $1 ORDER BY occurred_at, id`, pgUUID(userID))
+	if err != nil {
+		return nil, fmt.Errorf("postgres: audit events of actor: %w", err)
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (*domain.AuditEvent, error) {
+		var (
+			e                   domain.AuditEvent
+			id, org, actor, ent pgtype.UUID
+			action              string
+		)
+		err := row.Scan(&id, &org, &actor, &action, &e.EntityType, &ent, &e.Fields,
+			&e.RequestID, &e.IP, &e.OccurredAt)
+		if err != nil {
+			return nil, err
+		}
+		e.ID, e.OrganizationID, e.ActorID, e.EntityID = toUUID(id), toNullUUID(org), toNullUUID(actor), toNullUUID(ent)
+		e.Action = domain.AuditAction(action)
+		return &e, nil
+	})
+}
+
+func (r *auditRepository) AccessRecordsForUser(ctx context.Context, userID uuid.UUID) ([]*domain.AccessRecord, error) {
+	rows, err := r.q.Query(ctx,
+		`SELECT id, user_id, event, ip, port, occurred_at
+		   FROM access_records WHERE user_id = $1 ORDER BY occurred_at, id`, pgUUID(userID))
+	if err != nil {
+		return nil, fmt.Errorf("postgres: access records of user: %w", err)
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (*domain.AccessRecord, error) {
+		var (
+			rec      domain.AccessRecord
+			id, user pgtype.UUID
+			event    string
+		)
+		if err := row.Scan(&id, &user, &event, &rec.IP, &rec.Port, &rec.OccurredAt); err != nil {
+			return nil, err
+		}
+		rec.ID, rec.UserID, rec.Event = toUUID(id), toNullUUID(user), domain.AccessEvent(event)
+		return &rec, nil
+	})
+}
+
+func (r *auditRepository) RecordClosedAccount(ctx context.Context, userID uuid.UUID, sealedEmail []byte, at time.Time) error {
+	_, err := r.q.Exec(ctx,
+		`INSERT INTO closed_accounts (user_id, email, closed_at) VALUES ($1, $2, $3)`,
+		pgUUID(userID), sealedEmail, at)
+	if err != nil {
+		return fmt.Errorf("postgres: record closed account: %w", err)
+	}
+	return nil
+}
+
+func (r *auditRepository) PurgeClosedAccounts(ctx context.Context, before time.Time) (int64, error) {
+	tag, err := r.q.Exec(ctx, `DELETE FROM closed_accounts WHERE closed_at < $1`, before)
+	if err != nil {
+		return 0, fmt.Errorf("postgres: purge closed accounts: %w", err)
 	}
 	return tag.RowsAffected(), nil
 }
