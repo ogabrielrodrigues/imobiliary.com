@@ -71,7 +71,16 @@ once. A migration already applied is never edited: its checksum is recorded,
 and both commands refuse a database whose history no longer matches the
 embedded files.
 
-## Endpoints so far
+## Endpoints
+
+The contract is [`openapi.yaml`](openapi.yaml): identity, sessions with the
+second factor, the office, invitations, the export and the deletion of an
+account. `TestOpenAPIDescribesEveryRoute` fails when a route and the document
+disagree. A readable version is `docs/api-reference.html`, published as an
+artifact at https://claude.ai/artifact/KPjGcnhCBB93KuekDTeMao; republish that
+file to the same URL when the contract changes.
+
+Outside the contract:
 
 | Route | Purpose |
 |---|---|

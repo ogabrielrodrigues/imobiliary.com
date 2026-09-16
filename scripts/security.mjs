@@ -50,6 +50,7 @@ const steps = [
   // npx rather than pnpm dlx: dlx cannot choose between the package's two
   // binaries, and it records the version in pnpm-workspace.yaml as it goes.
   { name: "OpenAPI lint", cwd: api, command: "npx", args: ["--yes", REDOCLY, "lint", "openapi.yaml"] },
+  { name: "imobiliary-api: OpenAPI lint", cwd: imobiliary, command: "npx", args: ["--yes", REDOCLY, "lint", "openapi.yaml"] },
 ];
 
 for (const [index, step] of steps.entries()) {

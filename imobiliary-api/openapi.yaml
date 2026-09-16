@@ -1,0 +1,1232 @@
+openapi: 3.1.0
+
+info:
+  title: Imobiliary API
+  version: "0.1.0"
+  summary: Rental property management for brokers, small agencies and owners.
+  description: |
+    The API behind the Imobiliary platform. Phase 1 covers identity and the
+    office: accounts, sessions with a second factor, members and invitations,
+    and the account holder's rights under the LGPD. People, properties,
+    contracts and rents arrive in later phases.
+
+    ## Offices and roles
+
+    Data belongs to an office (an organisation). An account works inside one
+    office at a time and may belong to several. Inside an office it is either
+    `admin`, who manages members, invitations and the office itself, or
+    `member`. An office is never left without an administrator.
+
+    ## Authentication
+
+    A session is two credentials.
+
+    - The **access token** is a JWT signed with Ed25519, valid for 15 minutes,
+      sent as `Authorization: Bearer <token>`. It names the account and the
+      office. The membership behind it is read again on every request, so a
+      role change or a removal takes effect at once, not when the token
+      expires. A token minted before the account's last password change is
+      refused.
+    - The **refresh token** is an opaque secret exchanged at
+      `POST /v1/sessions/refresh` for a new pair. Each one is spent once.
+      Presenting a spent one ends every session of the account, because two
+      parties hold it and the owner cannot be told from the thief.
+
+    ## The second factor
+
+    TOTP (RFC 6238, 30 seconds, 6 digits, SHA-1). Optional for a member,
+    mandatory for an administrator. When an account has it, signing in answers
+    with a **challenge** instead of a session, and `POST /v1/sessions/mfa`
+    completes it with a code from the app or a recovery code. A challenge
+    lasts five minutes and allows one attempt.
+
+    An administrator who has not enrolled yet receives a session flagged
+    `mfa_enrollment_required`. That session reaches only the enrolment
+    endpoints, `GET /v1/me/export` and `POST /v1/me/deletion`; everything else
+    answers `403 mfa_enrollment_required`.
+
+    ## Errors
+
+    Every failure has the same body, `{"error": {"code", "message", "fields"}}`.
+    Branch on `code`, which is stable; `message` is prose and may change.
+    `fields` appears on `422 validation_failed` and names each input that was
+    refused, all at once.
+
+    Several causes deliberately share one answer. A wrong password, an unknown
+    address, a spent link, a wrong code, an expired or reused session are all
+    `401 unauthorized`. Registration and password recovery answer `202`
+    whether or not the address has an account. Telling these apart is what an
+    attacker would be asking for.
+
+    ## Limits
+
+    Three token buckets, each answering `429 rate_limited` with `Retry-After`
+    in whole seconds:
+
+    - every request, per client address (IPv6 per /64): 10/s, burst 60;
+    - endpoints where a secret is guessed, per client address: one every
+      5 seconds, burst 10;
+    - authenticated writes, per account: 2/s, burst 20.
+
+    Request bodies are limited to 1 MiB.
+
+    ## Conventions
+
+    - Bodies are `application/json`; anything else is `415`. Malformed JSON,
+      duplicate member names and trailing data are `400`. Unknown members are
+      ignored.
+    - Identifiers are UUIDv7 strings. Instants are RFC 3339 with an offset.
+    - Every response carries `X-Request-ID`, `Cache-Control: no-store` and
+      `X-Content-Type-Options: nosniff`. A valid W3C `traceparent` is carried
+      into the logs.
+    - The service binds to loopback and speaks plain HTTP. TLS is terminated
+      by the proxy in front of it.
+  contact:
+    name: Imobiliary
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+
+servers:
+  - url: http://127.0.0.1:8081
+    description: Local development
+
+tags:
+  - name: Accounts
+    description: Opening an account and recovering a password.
+  - name: Sessions
+    description: Signing in, the second step, refreshing and signing out.
+  - name: Me
+    description: The signed-in account.
+  - name: Second factor
+    description: Enrolling TOTP and managing recovery codes.
+  - name: Privacy
+    description: The account holder's rights under the LGPD.
+  - name: Office
+    description: The office the session works in, and its members.
+  - name: Invitations
+    description: Inviting someone, and joining from the mailed link.
+  - name: Operations
+    description: Probes for the orchestrator.
+
+security:
+  - bearer: []
+
+paths:
+  # --- accounts ---------------------------------------------------------------
+
+  /v1/accounts:
+    post:
+      tags: [Accounts]
+      summary: Open an account and its office
+      description: |
+        Creates the account and the office it administers, with the account as
+        its administrator. The first sign-in will ask for second-factor
+        enrolment.
+
+        Answers `202` with no body for any well-formed request, including an
+        address that already has an account. The owner of that address is told
+        by mail instead. Nobody is signed in by this call.
+      operationId: register
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, name, password, organization_name, terms_version]
+              properties:
+                email: { type: string, format: email, maxLength: 254 }
+                name: { type: string, minLength: 1, maxLength: 120 }
+                password: { $ref: "#/components/schemas/NewPassword" }
+                organization_name: { type: string, minLength: 1, maxLength: 120 }
+                terms_version:
+                  type: string
+                  description: The version of the terms the person accepted.
+                  examples: ["1.0"]
+      responses:
+        "202": { description: "Accepted. Check the mailbox, then sign in." }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/password/forgot:
+    post:
+      tags: [Accounts]
+      summary: Ask for a reset link
+      description: |
+        Mails a link to set a new password, valid for 30 minutes and usable
+        once. Always `202`, whether or not the address has an account.
+      operationId: forgotPassword
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string }
+      responses:
+        "202": { description: Accepted. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/password/reset:
+    post:
+      tags: [Accounts]
+      summary: Set a new password from the link
+      description: |
+        Spends the link and replaces the password. Every session of the account
+        ends, and any other reset link stops working.
+      operationId: resetPassword
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token: { type: string, description: The secret from the link. }
+                password: { $ref: "#/components/schemas/NewPassword" }
+      responses:
+        "204": { description: The password was set. Sign in with it. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  # --- sessions ---------------------------------------------------------------
+
+  /v1/sessions:
+    post:
+      tags: [Sessions]
+      summary: Sign in
+      description: |
+        Checks the password. The answer is either a session, or, for an
+        account with a second factor, a challenge to complete at
+        `POST /v1/sessions/mfa`. Both list the offices the account belongs to.
+
+        Without `organization_id` the session opens in the first office by
+        name. Naming an office the account does not belong to is `403`, as is
+        an account that belongs to no office any more.
+      operationId: signIn
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+                organization_id: { $ref: "#/components/schemas/ID" }
+      responses:
+        "200":
+          description: A session, or the challenge for the second factor.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SignInResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+    delete:
+      tags: [Sessions]
+      summary: Sign out
+      description: |
+        Revokes the refresh token. Always `204`, whether or not it matched a
+        live session. The access token in hand keeps working until it expires,
+        at most 15 minutes; a client discards it.
+      operationId: signOut
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefreshRequest" }
+      responses:
+        "204": { description: Signed out. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/sessions/mfa:
+    post:
+      tags: [Sessions]
+      summary: Complete a sign-in with the second factor
+      description: |
+        Spends the challenge, right code or wrong. A refused code means signing
+        in again for a new challenge. `code` is the six digits from the app or
+        one of the recovery codes; a recovery code is spent too.
+      operationId: completeSecondFactor
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challenge, code]
+              properties:
+                challenge: { type: string }
+                code: { type: string }
+                organization_id: { $ref: "#/components/schemas/ID" }
+      responses:
+        "200":
+          description: The session.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/sessions/refresh:
+    post:
+      tags: [Sessions]
+      summary: Exchange a refresh token for a new pair
+      description: |
+        Spends the refresh token and returns a new session in the same office.
+        A spent token presented again ends every session of the account. Two
+        concurrent requests with one token: one succeeds, the other is `401`.
+        A client should share one refresh between its concurrent calls.
+      operationId: refreshSession
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefreshRequest" }
+      responses:
+        "200":
+          description: The new session.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/sessions/switch:
+    post:
+      tags: [Sessions]
+      summary: Move the session to another office
+      description: |
+        Spends the refresh token and returns a session in the named office,
+        which the account must belong to.
+      operationId: switchOrganization
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token, organization_id]
+              properties:
+                refresh_token: { type: string }
+                organization_id: { $ref: "#/components/schemas/ID" }
+      responses:
+        "200":
+          description: The session in the other office.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  # --- me ---------------------------------------------------------------------
+
+  /v1/me:
+    get:
+      tags: [Me]
+      summary: The signed-in account
+      operationId: getMe
+      responses:
+        "200":
+          description: The account, where it works and what it may do.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/me/password:
+    post:
+      tags: [Me]
+      summary: Change the password
+      description: |
+        Replaces the password for someone who knows the current one. **Every
+        session ends, this one included**: the access token that made this
+        request is refused from now on, so the client signs in again. The
+        account's address is told by mail.
+      operationId: changePassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              properties:
+                current_password: { type: string }
+                new_password: { $ref: "#/components/schemas/NewPassword" }
+      responses:
+        "204": { description: Changed. Sign in again. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  # --- second factor ----------------------------------------------------------
+
+  /v1/me/totp:
+    post:
+      tags: [Second factor]
+      summary: Start enrolment
+      description: |
+        Generates a secret and stores it unconfirmed. Nothing changes for
+        signing in until `POST /v1/me/totp/confirm` proves a code from it.
+        Starting again replaces the previous attempt; an account whose second
+        factor is already on gets `409`. Reachable by a session that still owes
+        enrolment.
+      operationId: startEnrollment
+      responses:
+        "200":
+          description: The secret, as base32 and as an otpauth URI for a QR code.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [secret, uri]
+                properties:
+                  secret: { type: string, examples: ["JBSWY3DPEHPK3PXP"] }
+                  uri:
+                    type: string
+                    description: An `otpauth://totp/` address with the issuer and the account's email in its label.
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+    delete:
+      tags: [Second factor]
+      summary: Turn the second factor off
+      description: An administrator may not; that is `403 forbidden`.
+      operationId: disableSecondFactor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PasswordRequest" }
+      responses:
+        "204": { description: Turned off. The recovery codes are gone too. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/me/totp/confirm:
+    post:
+      tags: [Second factor]
+      summary: Confirm enrolment with a code
+      description: |
+        Proves a code from the app and turns the second factor on. The step of
+        the accepted code is recorded, so the next code must come from a later
+        step. The ten recovery codes in the response exist in readable form
+        only here; the service keeps their digests.
+
+        `409` when there is no enrolment to confirm.
+      operationId: confirmEnrollment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CodeRequest" }
+      responses:
+        "200":
+          description: On, with the recovery codes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecoveryCodes" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/me/totp/recovery-codes:
+    post:
+      tags: [Second factor]
+      summary: Replace the recovery codes
+      description: |
+        Issues ten new codes. The previous list stops working. `409` when the
+        second factor is off.
+      operationId: regenerateRecoveryCodes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PasswordRequest" }
+      responses:
+        "200":
+          description: The new codes, shown once.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecoveryCodes" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  # --- privacy ----------------------------------------------------------------
+
+  /v1/me/export:
+    get:
+      tags: [Privacy]
+      summary: A copy of the account's data
+      description: |
+        The access right of LGPD art. 18, II: the account, its memberships,
+        the second-factor state, stored sessions, invitations received, the
+        audit events the account acted in and its access records, oldest first.
+
+        No secret is included: no password hash, TOTP secret, token or code
+        digest. The export is recorded in the audit trail. Reachable by a
+        session that still owes enrolment; charged to the write budget.
+      operationId: exportAccount
+      responses:
+        "200":
+          description: The copy.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccountExport" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/me/deletion:
+    post:
+      tags: [Privacy]
+      summary: Delete the account
+      description: |
+        The erasure right of LGPD art. 18, VI, confirmed with the password.
+        Immediate and permanent. A POST with a body, rather than a DELETE on
+        `/v1/me`, because proxies may drop the body of a DELETE.
+
+        **Erased:** the account, its memberships, sessions, second factor,
+        recovery codes and pending resets. An office whose only member is this
+        account is erased with it.
+
+        **Kept, as the law requires:** the access records (Marco Civil art. 15)
+        keep the account's identifier, and the account's address is kept
+        sealed with the field key so they still identify someone. Both are
+        purged six months after the deletion (LGPD art. 16, I). The audit
+        trail keeps its entries without the actor; each office the account
+        belonged to gets a `user.deleted` entry.
+
+        **Refused** with `422` on `organizations` while the account is the only
+        administrator of an office that has other members. Make someone else an
+        administrator first.
+
+        Reachable by a session that still owes enrolment. Charged to both the
+        credential limit and the write budget. The address is mailed afterwards.
+      operationId: deleteAccount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PasswordRequest" }
+      responses:
+        "204": { description: Deleted. Every credential the client holds is now refused. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  # --- office -----------------------------------------------------------------
+
+  /v1/organization:
+    get:
+      tags: [Office]
+      summary: The office the session works in
+      operationId: getOrganization
+      responses:
+        "200":
+          description: The office.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Organization" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+    patch:
+      tags: [Office]
+      summary: Rename the office
+      description: Administrators only.
+      operationId: renameOrganization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 120 }
+      responses:
+        "204": { description: Renamed. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/organization/members:
+    get:
+      tags: [Office]
+      summary: Who works in the office
+      description: Every member may read it. Ordered by name.
+      operationId: listMembers
+      responses:
+        "200":
+          description: The members.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [members]
+                properties:
+                  members:
+                    type: array
+                    items: { $ref: "#/components/schemas/Member" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/organization/members/{userID}:
+    parameters:
+      - name: userID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+    patch:
+      tags: [Office]
+      summary: Change a member's role
+      description: |
+        Administrators only. Demoting the last administrator is `422` on
+        `role`. A demotion applies to the member's open session at once.
+      operationId: changeRole
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role: { $ref: "#/components/schemas/Role" }
+      responses:
+        "204": { description: Changed. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      tags: [Office]
+      summary: Remove a member
+      description: |
+        Administrators only. Ends the member's sessions; their account remains
+        and may belong to other offices. Removing yourself is `409`; removing
+        the last administrator is `422` on `role`.
+      operationId: removeMember
+      responses:
+        "204": { description: Removed. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  # --- invitations ------------------------------------------------------------
+
+  /v1/organization/invitations:
+    get:
+      tags: [Invitations]
+      summary: The office's invitations
+      description: Administrators only. Newest first, every status.
+      operationId: listInvitations
+      responses:
+        "200":
+          description: The invitations.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [invitations]
+                properties:
+                  invitations:
+                    type: array
+                    items: { $ref: "#/components/schemas/Invitation" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    post:
+      tags: [Invitations]
+      summary: Invite someone
+      description: |
+        Administrators only. Mails a link valid for seven days. The secret is
+        never in this response. An address with an invitation already pending
+        in this office is `409`.
+      operationId: invite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email: { type: string, format: email, maxLength: 254 }
+                role: { $ref: "#/components/schemas/Role" }
+      responses:
+        "201":
+          description: Sent.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Invitation" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/organization/invitations/{invitationID}:
+    delete:
+      tags: [Invitations]
+      summary: Revoke an invitation
+      description: |
+        Administrators only. Only a pending invitation can be revoked; one that
+        was accepted, revoked or belongs to another office is `404`.
+      operationId: revokeInvitation
+      parameters:
+        - name: invitationID
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/ID" }
+      responses:
+        "204": { description: Revoked. The link no longer works. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/invitations/lookup:
+    post:
+      tags: [Invitations]
+      summary: Read an invitation by its link
+      description: |
+        For the screen that shows who is inviting whom. A POST with the secret
+        in the body, not in a path that logs and history would keep. A link
+        that is unknown, spent, revoked or expired is `401`.
+      operationId: lookupInvitation
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TokenRequest" }
+      responses:
+        "200":
+          description: The invitation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PendingInvitation" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/invitations/accept:
+    post:
+      tags: [Invitations]
+      summary: Join from the link
+      description: |
+        Joins the office with the invitation's role, once. When the address has
+        no account, `name`, `password` and `terms_version` create one; when it
+        has, they are ignored. No session is returned: sign in afterwards.
+      operationId: acceptInvitation
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+                name: { type: string, minLength: 1, maxLength: 120 }
+                password: { $ref: "#/components/schemas/NewPassword" }
+                terms_version: { type: string }
+      responses:
+        "204": { description: Joined. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  # --- operations -------------------------------------------------------------
+
+  /healthz:
+    get:
+      tags: [Operations]
+      summary: Liveness
+      description: Answers while the process serves requests. Checks nothing else.
+      operationId: live
+      security: []
+      responses:
+        "200":
+          description: Alive.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Status" }
+
+  /readyz:
+    get:
+      tags: [Operations]
+      summary: Readiness
+      description: Answers `200` when the database responds within two seconds.
+      operationId: ready
+      security: []
+      responses:
+        "200":
+          description: Ready.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Status" }
+        "503":
+          description: Not ready. The reason is in the log only.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT (EdDSA)
+
+  schemas:
+    ID:
+      type: string
+      format: uuid
+      examples: ["01923f6e-8b1a-7c3d-9e2f-4a5b6c7d8e9f"]
+
+    Instant:
+      type: string
+      format: date-time
+
+    Role:
+      type: string
+      enum: [admin, member]
+
+    NewPassword:
+      type: string
+      minLength: 12
+      maxLength: 256
+      description: Length is the only rule. At least 12 characters.
+
+    PasswordRequest:
+      type: object
+      required: [password]
+      properties:
+        password: { type: string }
+
+    CodeRequest:
+      type: object
+      required: [code]
+      properties:
+        code: { type: string, examples: ["492039"] }
+
+    TokenRequest:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string }
+
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token: { type: string }
+
+    RecoveryCodes:
+      type: object
+      required: [recovery_codes]
+      properties:
+        recovery_codes:
+          type: array
+          minItems: 10
+          maxItems: 10
+          items: { type: string }
+
+    Status:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ok, ready] }
+
+    User:
+      type: object
+      required: [id, email, name, created_at, totp_enabled]
+      properties:
+        id: { $ref: "#/components/schemas/ID" }
+        email: { type: string }
+        name: { type: string }
+        created_at: { $ref: "#/components/schemas/Instant" }
+        totp_enabled: { type: boolean }
+        terms_version: { type: string, description: Omitted when empty. }
+        terms_accepted_at: { $ref: "#/components/schemas/Instant" }
+
+    Organization:
+      type: object
+      required: [id, name, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/ID" }
+        name: { type: string }
+        created_at: { $ref: "#/components/schemas/Instant" }
+
+    Membership:
+      type: object
+      required: [organization, role]
+      properties:
+        organization: { $ref: "#/components/schemas/Organization" }
+        role: { $ref: "#/components/schemas/Role" }
+
+    Session:
+      type: object
+      required:
+        - user
+        - organization
+        - role
+        - access_token
+        - access_expires_at
+        - refresh_token
+        - refresh_expires_at
+        - mfa_enrollment_required
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+        organization: { $ref: "#/components/schemas/Organization" }
+        role: { $ref: "#/components/schemas/Role" }
+        access_token: { type: string }
+        access_expires_at: { $ref: "#/components/schemas/Instant" }
+        refresh_token: { type: string }
+        refresh_expires_at: { $ref: "#/components/schemas/Instant" }
+        mfa_enrollment_required:
+          type: boolean
+          description: This session may only enrol a second factor and exercise the privacy rights.
+
+    SignInResult:
+      type: object
+      description: |
+        `session` when `mfa_required` is false; `challenge` and
+        `challenge_expires_at` when it is true. Never both.
+      required: [mfa_required, organizations]
+      properties:
+        mfa_required: { type: boolean }
+        session: { $ref: "#/components/schemas/Session" }
+        challenge: { type: string }
+        challenge_expires_at: { $ref: "#/components/schemas/Instant" }
+        organizations:
+          type: array
+          items: { $ref: "#/components/schemas/Membership" }
+
+    Me:
+      type: object
+      required: [user, organization, role, organizations, mfa_enrollment_required, recovery_codes_left]
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+        organization: { $ref: "#/components/schemas/Organization" }
+        role: { $ref: "#/components/schemas/Role" }
+        organizations:
+          type: array
+          items: { $ref: "#/components/schemas/Membership" }
+        mfa_enrollment_required: { type: boolean }
+        recovery_codes_left: { type: integer, minimum: 0 }
+
+    Member:
+      type: object
+      required: [user, role, joined_at]
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+        role: { $ref: "#/components/schemas/Role" }
+        joined_at: { $ref: "#/components/schemas/Instant" }
+
+    InvitationStatus:
+      type: string
+      enum: [pending, accepted, revoked, expired]
+
+    Invitation:
+      type: object
+      required: [id, email, role, status, created_at, expires_at]
+      properties:
+        id: { $ref: "#/components/schemas/ID" }
+        email: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        status: { $ref: "#/components/schemas/InvitationStatus" }
+        created_at: { $ref: "#/components/schemas/Instant" }
+        expires_at: { $ref: "#/components/schemas/Instant" }
+
+    PendingInvitation:
+      type: object
+      required: [organization, email, role, account_exists]
+      properties:
+        organization: { $ref: "#/components/schemas/Organization" }
+        email: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        account_exists:
+          type: boolean
+          description: When true, accepting needs no name or password.
+
+    AccountExport:
+      type: object
+      required:
+        - exported_at
+        - account
+        - memberships
+        - second_factor
+        - sessions
+        - invitations_received
+        - audit_events
+        - access_records
+      properties:
+        exported_at: { $ref: "#/components/schemas/Instant" }
+        account:
+          type: object
+          required: [id, email, name, created_at, updated_at, password_changed_at, terms_version, terms_accepted_at]
+          properties:
+            id: { $ref: "#/components/schemas/ID" }
+            email: { type: string }
+            name: { type: string }
+            created_at: { $ref: "#/components/schemas/Instant" }
+            updated_at: { $ref: "#/components/schemas/Instant" }
+            password_changed_at: { type: [string, "null"], format: date-time }
+            terms_version: { type: string }
+            terms_accepted_at: { type: [string, "null"], format: date-time }
+        memberships:
+          type: array
+          items:
+            type: object
+            required: [organization, role, joined_at]
+            properties:
+              organization: { $ref: "#/components/schemas/Organization" }
+              role: { $ref: "#/components/schemas/Role" }
+              joined_at: { $ref: "#/components/schemas/Instant" }
+        second_factor:
+          type: object
+          required: [enabled, confirmed_at, recovery_codes_left]
+          properties:
+            enabled: { type: boolean }
+            confirmed_at: { type: [string, "null"], format: date-time }
+            recovery_codes_left: { type: integer, minimum: 0 }
+        sessions:
+          type: array
+          description: Refresh tokens still stored, without the tokens themselves.
+          items:
+            type: object
+            required: [id, organization_id, created_at, expires_at, used_at, revoked_at]
+            properties:
+              id: { $ref: "#/components/schemas/ID" }
+              organization_id: { $ref: "#/components/schemas/ID" }
+              created_at: { $ref: "#/components/schemas/Instant" }
+              expires_at: { $ref: "#/components/schemas/Instant" }
+              used_at: { type: [string, "null"], format: date-time }
+              revoked_at: { type: [string, "null"], format: date-time }
+        invitations_received:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - organization_id
+              - organization_name
+              - role
+              - status
+              - created_at
+              - expires_at
+              - accepted_at
+              - revoked_at
+            properties:
+              id: { $ref: "#/components/schemas/ID" }
+              organization_id: { $ref: "#/components/schemas/ID" }
+              organization_name: { type: string }
+              role: { $ref: "#/components/schemas/Role" }
+              status: { $ref: "#/components/schemas/InvitationStatus" }
+              created_at: { $ref: "#/components/schemas/Instant" }
+              expires_at: { $ref: "#/components/schemas/Instant" }
+              accepted_at: { type: [string, "null"], format: date-time }
+              revoked_at: { type: [string, "null"], format: date-time }
+        audit_events:
+          type: array
+          items:
+            type: object
+            required: [id, organization_id, action, entity_type, entity_id, fields, request_id, ip, occurred_at]
+            properties:
+              id: { $ref: "#/components/schemas/ID" }
+              organization_id: { type: [string, "null"], format: uuid }
+              action:
+                type: string
+                description: Past tense and stable, such as `user.password_changed`.
+              entity_type: { type: string }
+              entity_id: { type: [string, "null"], format: uuid }
+              fields:
+                type: array
+                description: The names of what changed, never the values.
+                items: { type: string }
+              request_id: { type: string }
+              ip: { type: [string, "null"] }
+              occurred_at: { $ref: "#/components/schemas/Instant" }
+        access_records:
+          type: array
+          items:
+            type: object
+            required: [id, event, ip, port, occurred_at]
+            properties:
+              id: { $ref: "#/components/schemas/ID" }
+              event:
+                type: string
+                enum: [sign_in, sign_in_refused, refresh, sign_out, account_closed]
+              ip: { type: [string, "null"] }
+              port: { type: integer }
+              occurred_at: { $ref: "#/components/schemas/Instant" }
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - validation_failed
+                - not_found
+                - conflict
+                - unauthorized
+                - forbidden
+                - mfa_required
+                - mfa_enrollment_required
+                - rate_limited
+                - bad_request
+                - unsupported_media_type
+                - payload_too_large
+                - internal_error
+                - unavailable
+                - precondition_failed
+            message: { type: string }
+            fields:
+              type: array
+              items:
+                type: object
+                required: [field, message]
+                properties:
+                  field: { type: string }
+                  message: { type: string }
+
+  responses:
+    BadRequest:
+      description: The body could not be read, or is larger than 1 MiB (`413`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: |
+        Authentication failed. One answer for a missing or refused token, a
+        wrong password or code, and a spent or unknown link.
+      headers:
+        WWW-Authenticate:
+          description: Sent when the bearer token was missing or refused.
+          schema: { type: string, examples: ["Bearer"] }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: |
+        `forbidden`: the caller may not do this, or does not belong to the
+        office. `mfa_enrollment_required`: the session must enrol a second
+        factor first.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: No such resource in this office.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: The request conflicts with the current state.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    UnsupportedMediaType:
+      description: The body must be `application/json`.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationFailed:
+      description: The request was read and refused. `fields` lists every problem.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: Too many requests.
+      headers:
+        Retry-After:
+          description: Whole seconds to wait.
+          schema: { type: integer, minimum: 1 }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

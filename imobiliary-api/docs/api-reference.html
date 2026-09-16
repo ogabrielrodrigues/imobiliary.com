@@ -1,0 +1,413 @@
+<title>Imobiliary API Reference</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fustat:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --ground:     #F6F5F2;
+    --surface:    #FFFFFF;
+    --sunk:       #EEECE7;
+    --ink:        #17191E;
+    --ink-soft:   #555B66;
+    --ink-faint:  #7A808B;
+    --rule:       #E2DFD8;
+    --rule-firm:  #C9C5BC;
+    --accent:     #8A5A00;
+    --accent-bg:  #F6E9CC;
+    --get:        #1F6B55;
+    --post:       #2F58A0;
+    --patch:      #7A4FA0;
+    --delete:     #A33A2A;
+    --font-display: "Fustat", "Segoe UI", system-ui, sans-serif;
+    --font-body: "Inter", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:#0B0D10; --surface:#12151A; --sunk:#191D24; --ink:#E8EAEE; --ink-soft:#9AA3B2;
+      --ink-faint:#828C9B; --rule:#262B34; --rule-firm:#343B47; --accent:#EDB548; --accent-bg:#2A2212;
+      --get:#5FC49F; --post:#7FA6F0; --patch:#C09AE8; --delete:#F08A76;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:#0B0D10; --surface:#12151A; --sunk:#191D24; --ink:#E8EAEE; --ink-soft:#9AA3B2;
+    --ink-faint:#828C9B; --rule:#262B34; --rule-firm:#343B47; --accent:#EDB548; --accent-bg:#2A2212;
+    --get:#5FC49F; --post:#7FA6F0; --patch:#C09AE8; --delete:#F08A76;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font: 15px/1.65 var(--font-body);
+    padding-inline: 16px;
+  }
+  .shell { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 56px; }
+  nav.rail { position: sticky; top: 0; align-self: start; max-height: 100vh; overflow-y: auto; padding-block: 40px; }
+  .brand { font: 700 19px/1 var(--font-display); letter-spacing: -0.01em; }
+  .brand span { color: var(--accent); font-weight: 600; }
+  .rail .ver { font: 12px var(--font-mono); color: var(--ink-faint); margin-top: 6px; }
+  .rail h3 { font: 600 11px var(--font-mono); text-transform: uppercase; letter-spacing: .1em; color: var(--ink-faint); margin: 26px 0 8px; }
+  .rail ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  .rail a { color: var(--ink-soft); text-decoration: none; font-size: 14px; display: block; padding: 3px 0; }
+  .rail a:hover, .rail a:focus-visible { color: var(--ink); }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+  main { padding-block: 40px 96px; min-width: 0; }
+  header.top { padding-bottom: 32px; border-bottom: 1px solid var(--rule); }
+  .eyebrow { font: 500 12px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+  h1 { font: 700 40px/1.1 var(--font-display); letter-spacing: -0.025em; margin: 10px 0 14px; text-wrap: balance; }
+  h2 { font: 600 26px/1.2 var(--font-display); letter-spacing: -0.015em; margin: 0 0 14px; text-wrap: balance; }
+  h3.op { font: 600 17px/1.3 var(--font-display); margin: 0; }
+  p { margin: 0 0 12px; max-width: 68ch; }
+  .lede { font-size: 17px; color: var(--ink-soft); max-width: 62ch; }
+  code, .mono { font-family: var(--font-mono); font-size: .88em; }
+  p code, li code, td code { background: var(--sunk); padding: 1px 5px; border-radius: 4px; }
+  section.block { padding-block: 44px 8px; border-bottom: 1px solid var(--rule); }
+  section.block > p, section.block > ul { color: var(--ink-soft); }
+  ul.plain { padding-left: 18px; max-width: 68ch; }
+  ul.plain li { margin-bottom: 6px; }
+
+  .facts { display: flex; flex-wrap: wrap; gap: 10px 28px; margin-top: 22px; font: 13px var(--font-mono); color: var(--ink-soft); }
+  .facts b { color: var(--ink); font-weight: 500; }
+
+  .op-card { padding-block: 22px; border-top: 1px solid var(--rule); display: grid; gap: 10px; }
+  .op-card:first-of-type { border-top: 0; }
+  .sig { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .m { font: 600 11px/1 var(--font-mono); letter-spacing: .06em; padding: 5px 7px; border-radius: 4px; border: 1px solid currentColor; min-width: 58px; text-align: center; }
+  .m.get { color: var(--get); } .m.post { color: var(--post); } .m.patch { color: var(--patch); } .m.delete { color: var(--delete); }
+  .path { font: 500 15px var(--font-mono); overflow-wrap: anywhere; }
+  .access { font: 11px var(--font-mono); color: var(--ink-faint); border: 1px dashed var(--rule-firm); padding: 3px 7px; border-radius: 999px; }
+  .access.admin { color: var(--accent); border-style: solid; border-color: var(--accent); background: var(--accent-bg); }
+  .op-card p { color: var(--ink-soft); margin: 0; }
+  .io { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 16px; font-size: 13.5px; }
+  .io dt { font: 11px var(--font-mono); text-transform: uppercase; letter-spacing: .08em; color: var(--ink-faint); padding-top: 3px; }
+  .io dd { margin: 0; color: var(--ink-soft); }
+  .io dd code { background: none; padding: 0; color: var(--ink); }
+
+  .table-wrap { overflow-x: auto; margin: 8px 0 18px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th { text-align: left; font: 11px var(--font-mono); text-transform: uppercase; letter-spacing: .08em; color: var(--ink-faint); padding: 8px 12px 8px 0; border-bottom: 1px solid var(--rule-firm); }
+  td { padding: 9px 12px 9px 0; border-bottom: 1px solid var(--rule); color: var(--ink-soft); vertical-align: top; }
+  td:first-child { white-space: nowrap; color: var(--ink); }
+  .num { font-variant-numeric: tabular-nums; }
+
+  pre { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font: 13px/1.6 var(--font-mono); margin: 6px 0 18px; }
+  .k { color: var(--accent); }
+
+  .note { border-left: 2px solid var(--accent); padding: 2px 0 2px 14px; color: var(--ink-soft); max-width: 68ch; margin: 10px 0 18px; }
+
+  @media (max-width: 860px) {
+    .shell { grid-template-columns: 1fr; gap: 0; }
+    nav.rail { position: static; max-height: none; padding-block: 28px 0; }
+    .rail ul { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+    h1 { font-size: 32px; }
+    .io { grid-template-columns: 1fr; }
+    .io dt { padding-top: 8px; }
+  }
+</style>
+
+<div class="shell">
+  <nav class="rail" aria-label="Sections">
+    <div class="brand">imobiliary <span>api</span></div>
+    <div class="ver">v0.1.0 · phase 1</div>
+    <h3>Guide</h3>
+    <ul>
+      <li><a href="#auth">Authentication</a></li>
+      <li><a href="#second-factor">Second factor</a></li>
+      <li><a href="#errors">Errors</a></li>
+      <li><a href="#limits">Rate limits</a></li>
+    </ul>
+    <h3>Endpoints</h3>
+    <ul>
+      <li><a href="#accounts">Accounts</a></li>
+      <li><a href="#sessions">Sessions</a></li>
+      <li><a href="#me">Me and second factor</a></li>
+      <li><a href="#privacy">Privacy</a></li>
+      <li><a href="#office">Office</a></li>
+      <li><a href="#invitations">Invitations</a></li>
+      <li><a href="#operations">Operations</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <header class="top">
+      <div class="eyebrow">Reference</div>
+      <h1>Imobiliary API</h1>
+      <p class="lede">The service behind the rental management platform. Phase 1 covers identity and the office: accounts, sessions with a second factor, members, invitations, and the account holder's rights under the LGPD.</p>
+      <div class="facts">
+        <span>base <b>http://127.0.0.1:8081</b></span>
+        <span>format <b>application/json</b></span>
+        <span>ids <b>UUIDv7</b></span>
+        <span>instants <b>RFC 3339</b></span>
+        <span>contract <b>openapi.yaml</b></span>
+      </div>
+    </header>
+
+    <section class="block" id="auth">
+      <h2>Authentication</h2>
+      <p>Data belongs to an office. An account works in one office at a time, as <code>admin</code> or <code>member</code>, and may belong to several. A session is two credentials.</p>
+      <ul class="plain">
+        <li>The <strong>access token</strong> is a JWT signed with Ed25519, valid for 15 minutes, sent as <code>Authorization: Bearer</code>. The membership behind it is read again on every request, so a role change or a removal applies at once. A token minted before the last password change is refused.</li>
+        <li>The <strong>refresh token</strong> is an opaque secret, spent once at <code>POST /v1/sessions/refresh</code>. Presenting a spent one ends every session of the account: two parties hold it, and the owner cannot be told from the thief. Share one refresh between concurrent calls.</li>
+      </ul>
+      <pre><span class="k">POST</span> /v1/sessions
+{ "email": "ana@example.com", "password": "uma senha bem longa" }
+
+<span class="k">200</span> { "mfa_required": true, "challenge": "…", "challenge_expires_at": "…", "organizations": […] }</pre>
+    </section>
+
+    <section class="block" id="second-factor">
+      <h2>Second factor</h2>
+      <p>TOTP per RFC 6238: 30-second steps, 6 digits, SHA-1. Optional for a member, mandatory for an administrator.</p>
+      <p>For an account with it, signing in answers with a challenge. <code>POST /v1/sessions/mfa</code> completes it with a code from the app or a recovery code. A challenge lasts five minutes and allows one attempt, right or wrong.</p>
+      <p class="note">An administrator who has not enrolled receives a session flagged <code>mfa_enrollment_required</code>. It reaches only the enrolment endpoints, the export and the deletion. Everything else answers <code>403 mfa_enrollment_required</code>.</p>
+    </section>
+
+    <section class="block" id="errors">
+      <h2>Errors</h2>
+      <p>Every failure has one shape. Branch on <code>code</code>; <code>message</code> is prose and may change. <code>fields</code> lists every refused input at once.</p>
+      <pre>{ "error": { "code": "validation_failed", "message": "…",
+             "fields": [ { "field": "password", "message": "is required" } ] } }</pre>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Status</th><th>Code</th><th>Means</th></tr></thead>
+          <tbody>
+            <tr><td class="num">400</td><td><code>bad_request</code></td><td>Malformed JSON, duplicate member names or trailing data. Unknown members are ignored.</td></tr>
+            <tr><td class="num">401</td><td><code>unauthorized</code></td><td>One answer for a refused token, a wrong password or code, a spent or unknown link, a reused session.</td></tr>
+            <tr><td class="num">403</td><td><code>forbidden</code></td><td>Not allowed, or not a member of that office.</td></tr>
+            <tr><td class="num">403</td><td><code>mfa_enrollment_required</code></td><td>Enrol a second factor first.</td></tr>
+            <tr><td class="num">404</td><td><code>not_found</code></td><td>No such resource in this office.</td></tr>
+            <tr><td class="num">409</td><td><code>conflict</code></td><td>The current state forbids it, such as a pending invitation for the same address.</td></tr>
+            <tr><td class="num">413</td><td><code>payload_too_large</code></td><td>Body over 1 MiB.</td></tr>
+            <tr><td class="num">415</td><td><code>unsupported_media_type</code></td><td>Send <code>application/json</code>.</td></tr>
+            <tr><td class="num">422</td><td><code>validation_failed</code></td><td>Read and refused; see <code>fields</code>.</td></tr>
+            <tr><td class="num">429</td><td><code>rate_limited</code></td><td>Wait <code>Retry-After</code> seconds.</td></tr>
+            <tr><td class="num">500</td><td><code>internal_error</code></td><td>Logged with the request id; nothing leaks.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Registration and password recovery answer <code>202</code> whether or not the address has an account. Telling those apart is what an attacker would be asking.</p>
+    </section>
+
+    <section class="block" id="limits">
+      <h2>Rate limits</h2>
+      <p>Three token buckets. Each refusal is <code>429</code> with <code>Retry-After</code> in whole seconds, rounded up.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Bucket</th><th>Keyed by</th><th>Rate</th><th>Burst</th></tr></thead>
+          <tbody>
+            <tr><td>Every request</td><td>client address, IPv6 per /64</td><td class="num">10 / s</td><td class="num">60</td></tr>
+            <tr><td>Credentials</td><td>client address</td><td class="num">1 / 5 s</td><td class="num">10</td></tr>
+            <tr><td>Writes</td><td>account</td><td class="num">2 / s</td><td class="num">20</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Every response carries <code>X-Request-ID</code>, <code>Cache-Control: no-store</code> and <code>X-Content-Type-Options: nosniff</code>. A valid <code>traceparent</code> is carried into the logs.</p>
+    </section>
+
+    <section class="block" id="accounts">
+      <h2>Accounts</h2>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/accounts</span><span class="access">public · credentials</span></div>
+        <p>Opens an account and the office it administers. Always <code>202</code> for a well-formed request; the owner of a taken address is told by mail. Nobody is signed in.</p>
+        <dl class="io"><dt>Body</dt><dd><code>email</code>, <code>name</code>, <code>password</code> (12 to 256), <code>organization_name</code>, <code>terms_version</code></dd><dt>Answers</dt><dd><code>202</code> · <code>422</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/password/forgot</span><span class="access">public · credentials</span></div>
+        <p>Mails a reset link valid for 30 minutes, usable once. Always <code>202</code>.</p>
+        <dl class="io"><dt>Body</dt><dd><code>email</code></dd><dt>Answers</dt><dd><code>202</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/password/reset</span><span class="access">public · credentials</span></div>
+        <p>Spends the link and sets the password. Every session ends; other reset links stop working.</p>
+        <dl class="io"><dt>Body</dt><dd><code>token</code>, <code>password</code></dd><dt>Answers</dt><dd><code>204</code> · <code>401</code> spent or unknown link · <code>422</code></dd></dl>
+      </article>
+    </section>
+
+    <section class="block" id="sessions">
+      <h2>Sessions</h2>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/sessions</span><span class="access">public · credentials</span></div>
+        <p>Checks the password and returns a session, or a challenge when the account has a second factor. Without <code>organization_id</code> the session opens in the first office by name.</p>
+        <dl class="io"><dt>Body</dt><dd><code>email</code>, <code>password</code>, optional <code>organization_id</code></dd><dt>Answers</dt><dd><code>200</code> <code>SignInResult</code> · <code>401</code> · <code>403</code> not a member, or no office left</dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/sessions/mfa</span><span class="access">public · credentials</span></div>
+        <p>Completes a sign-in with a code from the app or a recovery code. The challenge is spent either way.</p>
+        <dl class="io"><dt>Body</dt><dd><code>challenge</code>, <code>code</code>, optional <code>organization_id</code></dd><dt>Answers</dt><dd><code>200</code> <code>Session</code> · <code>401</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/sessions/refresh</span><span class="access">public · credentials</span></div>
+        <p>Spends the refresh token for a new pair in the same office. A replay ends every session of the account.</p>
+        <dl class="io"><dt>Body</dt><dd><code>refresh_token</code></dd><dt>Answers</dt><dd><code>200</code> <code>Session</code> · <code>401</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/sessions/switch</span><span class="access">public · credentials</span></div>
+        <p>Spends the refresh token for a session in another office the account belongs to.</p>
+        <dl class="io"><dt>Body</dt><dd><code>refresh_token</code>, <code>organization_id</code></dd><dt>Answers</dt><dd><code>200</code> <code>Session</code> · <code>401</code> · <code>403</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m delete">DELETE</span><span class="path">/v1/sessions</span><span class="access">public · credentials</span></div>
+        <p>Revokes the refresh token. Always <code>204</code>. The access token in hand lives out its 15 minutes; discard it.</p>
+        <dl class="io"><dt>Body</dt><dd><code>refresh_token</code></dd><dt>Answers</dt><dd><code>204</code></dd></dl>
+      </article>
+    </section>
+
+    <section class="block" id="me">
+      <h2>Me and second factor</h2>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/me</span><span class="access">session</span></div>
+        <p>The account, the office it works in, its role, every office it belongs to and the recovery codes left.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>Me</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/me/password</span><span class="access">session · writes</span></div>
+        <p>Replaces the password. Every session ends, this one included; the client signs in again. The address is told by mail.</p>
+        <dl class="io"><dt>Body</dt><dd><code>current_password</code>, <code>new_password</code></dd><dt>Answers</dt><dd><code>204</code> · <code>401</code> wrong current password · <code>422</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/me/totp</span><span class="access">before enrolment</span></div>
+        <p>Generates a secret, stored unconfirmed. Starting again replaces the attempt; an account already enrolled gets <code>409</code>.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>{ secret, uri }</code>, the uri an <code>otpauth://totp/</code> address for a QR code</dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/me/totp/confirm</span><span class="access">before enrolment</span></div>
+        <p>Proves a code and turns the factor on. The ten recovery codes exist in readable form only in this response.</p>
+        <dl class="io"><dt>Body</dt><dd><code>code</code></dd><dt>Answers</dt><dd><code>200</code> <code>{ recovery_codes }</code> · <code>401</code> · <code>409</code> nothing to confirm</dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/me/totp/recovery-codes</span><span class="access">session · writes</span></div>
+        <p>Issues ten new codes; the previous list stops working.</p>
+        <dl class="io"><dt>Body</dt><dd><code>password</code></dd><dt>Answers</dt><dd><code>200</code> · <code>401</code> · <code>409</code> factor is off</dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m delete">DELETE</span><span class="path">/v1/me/totp</span><span class="access">session · writes</span></div>
+        <p>Turns the factor off and removes the recovery codes. An administrator may not.</p>
+        <dl class="io"><dt>Body</dt><dd><code>password</code></dd><dt>Answers</dt><dd><code>204</code> · <code>401</code> · <code>403</code> administrator</dd></dl>
+      </article>
+    </section>
+
+    <section class="block" id="privacy">
+      <h2>Privacy</h2>
+      <p>The account holder's rights under LGPD art. 18. Both are reachable before second-factor enrolment, so nobody has to set one up in order to leave.</p>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/me/export</span><span class="access">before enrolment · writes</span></div>
+        <p>Art. 18, II. The account, memberships, second-factor state, stored sessions, invitations received, the audit events the account acted in and its access records, oldest first. No password hash, TOTP secret, token or code digest. The export is itself audited.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>AccountExport</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/me/deletion</span><span class="access">before enrolment · credentials · writes</span></div>
+        <p>Art. 18, VI, confirmed with the password. Immediate and permanent. A POST with a body because proxies may drop the body of a DELETE.</p>
+        <dl class="io">
+          <dt>Body</dt><dd><code>password</code></dd>
+          <dt>Erased</dt><dd>The account, memberships, sessions, second factor, recovery codes, pending resets. An office whose only member is this account goes with it.</dd>
+          <dt>Kept</dt><dd>Access records keep the account id, and its address is kept sealed, for six months (Marco Civil art. 15; LGPD art. 16, I). Audit entries stay without the actor; each office gets <code>user.deleted</code>.</dd>
+          <dt>Answers</dt><dd><code>204</code> · <code>401</code> wrong password · <code>422</code> on <code>organizations</code>: the only administrator of an office with other members</dd>
+        </dl>
+      </article>
+    </section>
+
+    <section class="block" id="office">
+      <h2>Office</h2>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/organization</span><span class="access">session</span></div>
+        <p>The office the session works in.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>Organization</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m patch">PATCH</span><span class="path">/v1/organization</span><span class="access admin">admin</span></div>
+        <p>Renames the office.</p>
+        <dl class="io"><dt>Body</dt><dd><code>name</code> (1 to 120)</dd><dt>Answers</dt><dd><code>204</code> · <code>422</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/organization/members</span><span class="access">session</span></div>
+        <p>Who works in the office, by name. Every member may read it.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>{ members }</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m patch">PATCH</span><span class="path">/v1/organization/members/{userID}</span><span class="access admin">admin</span></div>
+        <p>Changes a role. Demoting the last administrator is refused; a demotion applies to the open session at once.</p>
+        <dl class="io"><dt>Body</dt><dd><code>role</code>: <code>admin</code> or <code>member</code></dd><dt>Answers</dt><dd><code>204</code> · <code>404</code> · <code>422</code> on <code>role</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m delete">DELETE</span><span class="path">/v1/organization/members/{userID}</span><span class="access admin">admin</span></div>
+        <p>Removes a member and ends their sessions. The account remains.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>204</code> · <code>404</code> · <code>409</code> yourself · <code>422</code> last administrator</dd></dl>
+      </article>
+    </section>
+
+    <section class="block" id="invitations">
+      <h2>Invitations</h2>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/organization/invitations</span><span class="access admin">admin</span></div>
+        <p>Every invitation, newest first, with its status: <code>pending</code>, <code>accepted</code>, <code>revoked</code> or <code>expired</code>.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>{ invitations }</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/organization/invitations</span><span class="access admin">admin</span></div>
+        <p>Mails a link valid for seven days. The secret never appears in the response.</p>
+        <dl class="io"><dt>Body</dt><dd><code>email</code>, <code>role</code></dd><dt>Answers</dt><dd><code>201</code> <code>Invitation</code> · <code>409</code> already pending · <code>422</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m delete">DELETE</span><span class="path">/v1/organization/invitations/{invitationID}</span><span class="access admin">admin</span></div>
+        <p>Revokes a pending invitation. Anything else is <code>404</code>.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>204</code> · <code>404</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/invitations/lookup</span><span class="access">public · credentials</span></div>
+        <p>Reads an invitation by its link, for the joining screen. The secret travels in the body, never in a path that logs keep.</p>
+        <dl class="io"><dt>Body</dt><dd><code>token</code></dd><dt>Answers</dt><dd><code>200</code> <code>{ organization, email, role, account_exists }</code> · <code>401</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/invitations/accept</span><span class="access">public · credentials</span></div>
+        <p>Joins the office once. With no account for the address, <code>name</code>, <code>password</code> and <code>terms_version</code> create one. No session is returned.</p>
+        <dl class="io"><dt>Body</dt><dd><code>token</code>, and for a new account <code>name</code>, <code>password</code>, <code>terms_version</code></dd><dt>Answers</dt><dd><code>204</code> · <code>401</code> · <code>422</code></dd></dl>
+      </article>
+    </section>
+
+    <section class="block" id="operations">
+      <h2>Operations</h2>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/healthz</span><span class="access">public</span></div>
+        <p>Alive while the process serves requests. Checks nothing else.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>{ "status": "ok" }</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/readyz</span><span class="access">public</span></div>
+        <p>Ready when the database answers within two seconds. Metrics are served on a separate internal port, never here.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>{ "status": "ready" }</code> · <code>503</code></dd></dl>
+      </article>
+    </section>
+  </main>
+</div>
