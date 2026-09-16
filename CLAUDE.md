@@ -361,7 +361,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-16: phase 1's API and web halves done and verified in the browser; OpenAPI and account deletion/export are next
+**Last updated:** 2026-09-16: phase 1 complete (identity, office, account export and deletion, OpenAPI); phase 2 is next
 
 ### Done
 
@@ -1142,7 +1142,7 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       the rest of the scaffold (eslint, prettier, vitest, devtools, Lucide,
       Geist) dropped.
     - `web` runs on **:3001**, has `.claude/launch.json` entry "web", and the
-      root gains `web:*` and `ui:check`. `pnpm security` is 15 checks.
+      root gains `web:*` and `ui:check`. `pnpm security` is 15 checks (16 since item 39).
     - **The production start is solved, for both platforms** (`f19f30d` and the
       commit after it). `vite build` produces `dist/client` and a
       `dist/server/server.js` that default-exports a `{ fetch }` handler: it
@@ -1229,11 +1229,52 @@ _Update this section as work proceeds. It is what a fresh session reads first._
     - Verified 2026-09-16 against the API on :8085 with `IMOBILIARY_MAIL_LOG`:
       everything listed in the commit `2cee26a`.
 
+39. **Phase 1 closed: account export and deletion, and the OpenAPI**
+    (`6513ebe` API, `c853f54` web, `462a584` contract).
+    - **`GET /v1/me/export`** (LGPD art. 18, II) and **`POST /v1/me/deletion`**
+      (art. 18, VI, with the password; a POST because a DELETE body may be
+      dropped). Both are reachable before second-factor enrolment. The export
+      carries no secret and is audited.
+    - **Migration 0004** drops the foreign key on `access_records.user_id`:
+      it used to null the id on deletion, which left the Marco Civil records
+      naming nobody. `closed_accounts` keeps the deleted account's address
+      sealed (table `closed_accounts`, column `email`, row = user id); both go
+      after six months in the hourly sweep. Audit entries keep no actor; each
+      office gets `user.deleted`.
+    - **Deletion rules:** the only administrator of an office with other
+      members is refused with 422 on `organizations`; an office whose only
+      member is the account is deleted with it. **From phase 2 on, that second
+      rule deletes an office's people and contracts: revisit it against the
+      legal retention in `PLANO.md` §6.3 before business data exists.**
+    - **Web:** Ajustes gains "Meus dados" (`components/settings/data-panel.tsx`,
+      `server/privacy.ts`, `PrivacyGateway`). Privacy policy 1.1.
+    - **A wrong password on any authorised call costs two verifications**:
+      `SessionManager.authorize` reads a 401 as an expired token, rotates and
+      retries. Harmless, but it shows twice in the log and in the credential
+      bucket. Distinguishing a refused password from a refused token would
+      need a different API code.
+    - **`openapi.yaml`** covers all 23 routes; `TestOpenAPIDescribesEveryRoute`
+      compares it with `server.go` as text and was proved to fail on drift.
+      Redocly lint is in `pnpm security` (16 checks). The readable reference,
+      `imobiliary-api/docs/api-reference.html`, is published at
+      `https://claude.ai/artifact/KPjGcnhCBB93KuekDTeMao`; republish that file
+      to the same URL when the contract changes.
+    - **Harness:** after a Vite restart the page can be served before it
+      hydrates; elements then have no `__reactProps` keys and clicks do
+      nothing. Wait, reload, and check for those keys before driving a form.
+    - Verified in the browser: a member's export (eight sections, no token or
+      hash), a wrong password kept the session, the only administrator was
+      refused in Portuguese, and a member was deleted and could not sign in.
+    - **Still missing from the plan's phase 1:** `imobiliary-api/PRIVACIDADE.md`,
+      the article 37 record.
+
 ### Next step
 
-Still in phase 1: the OpenAPI document for `imobiliary-api` and its published
-reference, and account deletion and export (LGPD arts. 18 and 16), API and
-Ajustes "Meus dados". Then phase 2 (people and addresses).
+Phase 2 of `PLANO.md`: people and addresses (sealed fields, blind index,
+search with `pg_trgm` and `unaccent`, representatives, spouse), with the list,
+form and detail screens. Write `imobiliary-api/PRIVACIDADE.md` alongside, since
+phase 2 is the first to store third parties' data, and decide the sole-member
+office deletion rule (item 39) before it.
 
 Not in the editor on purpose, for now: fonts, colours, highlight, tables,
 images, headers and footers. Tables are the costly one: the block model,
