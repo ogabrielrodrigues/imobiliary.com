@@ -16,6 +16,24 @@ var (
 	ErrNotFound      = errors.New("resource not found")
 	ErrAlreadyExists = errors.New("resource already exists")
 	ErrValidation    = errors.New("validation failed")
+
+	// ErrInvalidCredentials covers a wrong password, an unknown address, a
+	// spent link and a bad second factor alike. The transport tells them
+	// apart nowhere: which one it was is exactly what an attacker is asking.
+	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrSessionExpired     = errors.New("session expired")
+	// ErrSessionReused means a refresh token was presented twice. Two parties
+	// hold it and there is no way to tell the owner from the thief, so every
+	// session of the account ends.
+	ErrSessionReused = errors.New("refresh token reused")
+	// ErrPermissionDenied is a member attempting what only an admin may do.
+	ErrPermissionDenied = errors.New("permission denied")
+	// ErrMFARequired means the password was right and the second factor is
+	// still missing.
+	ErrMFARequired = errors.New("second factor required")
+	// ErrConflict is a rule that the request would break, such as removing an
+	// organisation's last administrator.
+	ErrConflict = errors.New("conflicting request")
 )
 
 // FieldError describes a single validation problem, tied to the input field

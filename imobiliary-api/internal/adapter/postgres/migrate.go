@@ -168,11 +168,13 @@ type appliedMigration struct {
 	checksum []byte
 }
 
-type querier interface {
+// rowsQuerier is the little the migration history needs, which both a
+// connection and the pool provide.
+type rowsQuerier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
-func appliedMigrations(ctx context.Context, q querier) ([]appliedMigration, error) {
+func appliedMigrations(ctx context.Context, q rowsQuerier) ([]appliedMigration, error) {
 	rows, err := q.Query(ctx, "SELECT version, checksum FROM schema_migrations ORDER BY version")
 	if err != nil {
 		return nil, fmt.Errorf("postgres: read schema_migrations: %w", err)
