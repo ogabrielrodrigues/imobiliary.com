@@ -2,10 +2,10 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
-	"uuid"
 
 	"imobiliary/internal/domain"
 )
@@ -129,7 +129,9 @@ const (
 //
 // What goes: the account, its memberships, sessions, second factor, recovery
 // codes and pending resets, all by cascade. An office whose only member is
-// this account goes with it, since nobody else could ever reach it.
+// this account goes with it, since nobody else could ever reach it, but only
+// while it holds no people, properties or contracts: otherwise the deletion is
+// refused with 422 on "organization_data".
 //
 // What stays, and why:
 //   - the audit trail, without the actor (the foreign key sets it null). An
@@ -167,7 +169,7 @@ func (p *Privacy) DeleteAccount(ctx context.Context, caller *Caller, password st
 		}
 
 		v := &domain.ValidationError{}
-		var closing []uuid.UUID
+		var closing []MembershipWithOrganization
 		for _, m := range memberships {
 			if m.Role != domain.RoleAdmin {
 				continue
@@ -177,7 +179,7 @@ func (p *Privacy) DeleteAccount(ctx context.Context, caller *Caller, password st
 				return err
 			}
 			if members == 1 {
-				closing = append(closing, m.Organization.ID)
+				closing = append(closing, m)
 				continue
 			}
 			admins, err := repos.Memberships.CountAdmins(ctx, m.Organization.ID)
@@ -217,8 +219,17 @@ func (p *Privacy) DeleteAccount(ctx context.Context, caller *Caller, password st
 			}
 		}
 
-		for _, id := range closing {
-			if err := repos.Organizations.Delete(ctx, id); err != nil {
+		for _, m := range closing {
+			if err := repos.Organizations.Delete(ctx, m.Organization.ID); err != nil {
+				if errors.Is(err, domain.ErrInUse) {
+					// The user chose this rule: an office's people, properties
+					// and contracts are never erased as a side effect of closing
+					// an account. They are deleted one by one, under their own
+					// rules, or the office is handed to someone else first.
+					v := &domain.ValidationError{}
+					v.Addf("organization_data", "%q still holds registered people, properties or contracts", m.Organization.Name)
+					return v
+				}
 				return err
 			}
 		}

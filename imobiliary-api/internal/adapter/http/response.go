@@ -34,6 +34,8 @@ const (
 	codeInternal         errorCode = "internal_error"
 	codeUnavailable      errorCode = "unavailable"
 	codePreconditionFail errorCode = "precondition_failed"
+	codePreconditionReq  errorCode = "precondition_required"
+	codeInUse            errorCode = "in_use"
 )
 
 // errorBody is the single shape every failure takes, so a client needs one
@@ -86,6 +88,17 @@ func writeError(w http.ResponseWriter, logger *slog.Logger, err error) {
 	switch {
 	case errors.Is(err, domain.ErrNotFound):
 		writeFailure(w, logger, http.StatusNotFound, codeNotFound, "resource not found")
+
+	case errors.Is(err, domain.ErrInUse):
+		writeFailure(w, logger, http.StatusConflict, codeInUse, "the resource is still linked to other records")
+
+	case errors.Is(err, domain.ErrPreconditionFailed):
+		writeFailure(w, logger, http.StatusPreconditionFailed, codePreconditionFail,
+			"the resource changed since it was read; read it again")
+
+	case errors.Is(err, domain.ErrPreconditionRequired):
+		writeFailure(w, logger, http.StatusPreconditionRequired, codePreconditionReq,
+			"send If-Match with the version being edited")
 
 	case errors.Is(err, domain.ErrAlreadyExists), errors.Is(err, domain.ErrConflict):
 		writeFailure(w, logger, http.StatusConflict, codeConflict, "the request conflicts with the current state")

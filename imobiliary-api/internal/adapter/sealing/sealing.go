@@ -31,4 +31,9 @@ func (s *Sealer) Open(sealed []byte, table, column string, rowID uuid.UUID) ([]b
 	return s.keys.Open(sealed, fieldcrypt.Context{Table: table, Column: column, RowID: rowID})
 }
 
+// Index derives a blind index scoped to an office.
+func (s *Sealer) Index(organizationID uuid.UUID, value string) []byte {
+	return s.keys.Index(organizationID, value)
+}
+
 var _ usecase.Sealer = (*Sealer)(nil)

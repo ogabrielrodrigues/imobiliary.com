@@ -154,6 +154,11 @@ func (r *organizationRepository) Rename(ctx context.Context, id uuid.UUID, name 
 
 func (r *organizationRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	tag, err := r.q.Exec(ctx, `DELETE FROM organizations WHERE id = $1`, pgUUID(id))
+	// Business rows reference their office with RESTRICT, so an office that
+	// still holds people refuses to go.
+	if isForeignKeyViolation(err) {
+		return fmt.Errorf("postgres: delete organization: %w", domain.ErrInUse)
+	}
 	return affected(tag, err, "postgres: delete organization")
 }
 

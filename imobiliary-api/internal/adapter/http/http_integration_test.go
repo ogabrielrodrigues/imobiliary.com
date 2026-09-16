@@ -132,6 +132,7 @@ func newAPI(t *testing.T) *api {
 	mfa := usecase.NewMFA(usecase.MFAConfig{
 		Identity: identity, Repositories: repos, Sealer: sealer, Logger: logger,
 	})
+	people := usecase.NewPeople(usecase.PeopleConfig{Scope: db, Sealer: sealer, Logger: logger})
 	privacy := usecase.NewPrivacy(usecase.PrivacyConfig{
 		Identity: identity, Repositories: repos, Hasher: hasher, Sealer: sealer, Mailer: box, Logger: logger,
 	})
@@ -156,7 +157,7 @@ func newAPI(t *testing.T) *api {
 
 	server := httptest.NewServer(adapterhttp.NewServer(adapterhttp.Options{
 		Identity: identity, MFA: mfa, Passwords: passwords, Organizations: organizations,
-		Privacy: privacy,
+		Privacy: privacy, People: people,
 		Auditor: usecase.NewAuditor(repos.Audit, time.Now, logger),
 		Signer:  signer, Logger: logger, Metrics: metrics.NewRegistry(),
 		Ready:    func(context.Context) error { return nil },
@@ -181,6 +182,7 @@ func randomBytes(t *testing.T, n int) []byte {
 type response struct {
 	status int
 	body   []byte
+	header http.Header
 }
 
 func (r response) decode(t *testing.T, dst any) {
@@ -240,7 +242,7 @@ func (a *api) do(method, path, accessToken string, body any) response {
 	if err != nil {
 		a.t.Fatal(err)
 	}
-	return response{status: resp.StatusCode, body: payload}
+	return response{status: resp.StatusCode, body: payload, header: resp.Header}
 }
 
 func (a *api) expect(want int, method, path, accessToken string, body any) response {

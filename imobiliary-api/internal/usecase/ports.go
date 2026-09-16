@@ -28,7 +28,8 @@ type OrganizationRepository interface {
 	Rename(ctx context.Context, id uuid.UUID, name string, at time.Time) error
 	// Delete removes an office and, through the cascades, its memberships,
 	// invitations and sessions. Only an account closing as the office's sole
-	// member reaches it.
+	// member reaches it. An office that still holds business data is
+	// domain.ErrInUse: that data is never deleted as a side effect.
 	Delete(ctx context.Context, id uuid.UUID) error
 }
 
@@ -180,6 +181,87 @@ type Repositories struct {
 	Audit         AuditRepository
 }
 
+// StoredPerson is a person as the repository keeps it: the fields in the
+// clear, and the sealed ones as ciphertext with their blind indexes. The use
+// case seals on the way in and opens on the way out; the repository never sees
+// a CPF.
+type StoredPerson struct {
+	// Person carries every field except email, phone, CPF, CNPJ and the birth
+	// date, which travel sealed below.
+	Person    domain.Person
+	Email     []byte
+	Phone     []byte
+	CPF       []byte
+	CPFIndex  []byte
+	CNPJ      []byte
+	CNPJIndex []byte
+	BirthDate []byte
+}
+
+// PersonQuery filters and pages the list of people.
+type PersonQuery struct {
+	// NameContains matches a fragment of the folded name.
+	NameContains string
+	// CPFIndex or CNPJIndex, when set, look one document up exactly.
+	CPFIndex  []byte
+	CNPJIndex []byte
+	Kind      domain.PersonKind
+	After     *PersonCursor
+	Limit     int
+}
+
+// PersonCursor is where a page of the alphabetical list ended.
+type PersonCursor struct {
+	// SortKey is the folded name, as the database orders it.
+	SortKey string
+	ID      uuid.UUID
+}
+
+// PersonLink is what the rules about spouses and representatives need to know
+// of another person.
+type PersonLink struct {
+	ID            uuid.UUID
+	Kind          domain.PersonKind
+	Name          string
+	MaritalStatus domain.MaritalStatus
+	SpouseID      *uuid.UUID
+}
+
+// PersonRepository stores people. It is only ever bound to an
+// organisation-scoped transaction, so row-level security applies to every
+// statement it runs.
+type PersonRepository interface {
+	// Create reports a CPF or CNPJ already registered in the office as a
+	// validation error on that field.
+	Create(ctx context.Context, p *StoredPerson) error
+	// Update replaces the person when its version still matches, reporting
+	// domain.ErrPreconditionFailed otherwise, and increments it.
+	Update(ctx context.Context, p *StoredPerson, version int) error
+	Get(ctx context.Context, id uuid.UUID) (*StoredPerson, error)
+	List(ctx context.Context, q PersonQuery) ([]domain.PersonSummary, []PersonCursor, error)
+	// Links reads the named people, for the spouse and representative rules.
+	// Missing ids are simply absent from the map.
+	Links(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]PersonLink, error)
+	// SetSpouse writes one side of a marriage link and bumps that person's
+	// version, since their record changed.
+	SetSpouse(ctx context.Context, personID uuid.UUID, spouseID *uuid.UUID, at time.Time) error
+	// Delete reports domain.ErrInUse when something still links to the person.
+	Delete(ctx context.Context, id uuid.UUID) error
+}
+
+// ScopedRepositories are the stores of one office's business data, bound to a
+// transaction scoped to it.
+type ScopedRepositories struct {
+	People PersonRepository
+	Audit  AuditRepository
+}
+
+// OrganizationScope runs work inside one office: a transaction in which the
+// database shows that office's rows and no other's.
+type OrganizationScope interface {
+	InOrganization(ctx context.Context, organizationID uuid.UUID, fn func(ScopedRepositories) error) error
+}
+
 // Transactor runs work atomically.
 //
 // Registration creates an organisation, an account, a membership and an audit
@@ -212,4 +294,6 @@ type Mailer interface {
 type Sealer interface {
 	Seal(plaintext []byte, table, column string, rowID uuid.UUID) ([]byte, error)
 	Open(sealed []byte, table, column string, rowID uuid.UUID) ([]byte, error)
+	// Index derives the blind index of a normalised value within an office.
+	Index(organizationID uuid.UUID, value string) []byte
 }

@@ -34,6 +34,14 @@ var (
 	// ErrConflict is a rule that the request would break, such as removing an
 	// organisation's last administrator.
 	ErrConflict = errors.New("conflicting request")
+	// ErrPreconditionFailed means an edit was based on a version that is no
+	// longer current: someone changed the record since it was read.
+	ErrPreconditionFailed = errors.New("precondition failed")
+	// ErrPreconditionRequired means an edit did not say which version it was
+	// based on, so a concurrent change could be silently overwritten.
+	ErrPreconditionRequired = errors.New("precondition required")
+	// ErrInUse is a delete refused because something still links to the row.
+	ErrInUse = errors.New("resource in use")
 )
 
 // FieldError describes a single validation problem, tied to the input field

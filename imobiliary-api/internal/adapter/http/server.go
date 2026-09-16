@@ -34,6 +34,7 @@ type Options struct {
 	Passwords     *usecase.Passwords
 	Organizations *usecase.Organizations
 	Privacy       *usecase.Privacy
+	People        *usecase.People
 	Auditor       *usecase.Auditor
 	// Signer parses the access tokens this service issued.
 	Signer  *token.Signer
@@ -55,6 +56,7 @@ type Server struct {
 	passwords     *usecase.Passwords
 	organizations *usecase.Organizations
 	privacy       *usecase.Privacy
+	people        *usecase.People
 	auditor       *usecase.Auditor
 	signer        *token.Signer
 	logger        *slog.Logger
@@ -75,6 +77,7 @@ func NewServer(opts Options) *Server {
 		passwords:     opts.Passwords,
 		organizations: opts.Organizations,
 		privacy:       opts.Privacy,
+		people:        opts.People,
 		auditor:       opts.Auditor,
 		signer:        opts.Signer,
 		logger:        opts.Logger,
@@ -140,6 +143,13 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /v1/organization/invitations", admin(http.HandlerFunc(s.handleInvitations)))
 	mux.Handle("POST /v1/organization/invitations", admin(http.HandlerFunc(s.handleInvite)))
 	mux.Handle("DELETE /v1/organization/invitations/{invitationID}", admin(http.HandlerFunc(s.handleRevokeInvitation)))
+
+	// People: any member manages them, inside their own office.
+	mux.Handle("GET /v1/people", authenticated(http.HandlerFunc(s.handleListPeople)))
+	mux.Handle("POST /v1/people", write(http.HandlerFunc(s.handleCreatePerson)))
+	mux.Handle("GET /v1/people/{personID}", authenticated(http.HandlerFunc(s.handleGetPerson)))
+	mux.Handle("PUT /v1/people/{personID}", write(http.HandlerFunc(s.handleUpdatePerson)))
+	mux.Handle("DELETE /v1/people/{personID}", write(http.HandlerFunc(s.handleDeletePerson)))
 
 	// Probes, and the catch-all that answers JSON rather than net/http's text.
 	mux.HandleFunc("GET /healthz", s.handleLive)

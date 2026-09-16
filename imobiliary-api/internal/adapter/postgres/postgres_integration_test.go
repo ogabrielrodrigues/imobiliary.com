@@ -136,7 +136,7 @@ func TestInOrganizationScopesTheSettingToTheTransaction(t *testing.T) {
 	db := open(t, pgtest.NewDatabase(t))
 	org := uuid.NewV7()
 
-	err := db.InOrganization(t.Context(), org, func(tx pgx.Tx) error {
+	err := db.InOrganizationTx(t.Context(), org, func(tx pgx.Tx) error {
 		var got string
 		if err := tx.QueryRow(t.Context(), "SELECT current_setting('app.organization_id', true)").Scan(&got); err != nil {
 			return err
@@ -155,7 +155,7 @@ func TestInOrganizationScopesTheSettingToTheTransaction(t *testing.T) {
 	// pool held to one connection, the next transaction's organisation must be
 	// its own and a plain query on that connection must see none.
 	single := open(t, withParam(pgtest.NewDatabase(t), "pool_max_conns=1"))
-	if err := single.InOrganization(t.Context(), org, func(pgx.Tx) error { return nil }); err != nil {
+	if err := single.InOrganizationTx(t.Context(), org, func(pgx.Tx) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
 	if err := single.RequireCurrentSchema(t.Context()); err != nil {
@@ -170,17 +170,17 @@ func TestInOrganizationScopesTheSettingToTheTransaction(t *testing.T) {
 	}
 
 	rollback := errors.New("stop")
-	if err := db.InOrganization(t.Context(), org, func(pgx.Tx) error { return rollback }); !errors.Is(err, rollback) {
-		t.Fatalf("InOrganization did not return the callback's error: %v", err)
+	if err := db.InOrganizationTx(t.Context(), org, func(pgx.Tx) error { return rollback }); !errors.Is(err, rollback) {
+		t.Fatalf("InOrganizationTx did not return the callback's error: %v", err)
 	}
-	if err := db.InOrganization(t.Context(), uuid.Nil(), func(pgx.Tx) error { return nil }); err == nil {
-		t.Fatal("InOrganization accepted the nil organisation")
+	if err := db.InOrganizationTx(t.Context(), uuid.Nil(), func(pgx.Tx) error { return nil }); err == nil {
+		t.Fatal("InOrganizationTx accepted the nil organisation")
 	}
 }
 
 func TestSearchHelperIsAvailable(t *testing.T) {
 	db := open(t, pgtest.NewDatabase(t))
-	err := db.InOrganization(t.Context(), uuid.NewV7(), func(tx pgx.Tx) error {
+	err := db.InOrganizationTx(t.Context(), uuid.NewV7(), func(tx pgx.Tx) error {
 		var got string
 		if err := tx.QueryRow(t.Context(), "SELECT immutable_unaccent('João Conceição')").Scan(&got); err != nil {
 			return err

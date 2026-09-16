@@ -174,6 +174,11 @@ func serve(logger *slog.Logger) error {
 		InvitationTTL: cfg.InvitationTTL,
 		Logger:        logger,
 	})
+	people := usecase.NewPeople(usecase.PeopleConfig{
+		Scope:  db,
+		Sealer: sealer,
+		Logger: logger,
+	})
 	privacy := usecase.NewPrivacy(usecase.PrivacyConfig{
 		Identity:     identity,
 		Repositories: repos,
@@ -201,6 +206,7 @@ func serve(logger *slog.Logger) error {
 		Passwords:         passwords,
 		Organizations:     organizations,
 		Privacy:           privacy,
+		People:            people,
 		Auditor:           auditor,
 		Signer:            signer,
 		Logger:            logger,

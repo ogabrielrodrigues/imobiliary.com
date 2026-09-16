@@ -70,14 +70,14 @@ func (db *DB) RequireCurrentSchema(ctx context.Context) error {
 	return compare(embedded, applied)
 }
 
-// InOrganization runs fn in a transaction scoped to one organisation.
+// InOrganizationTx runs fn in a transaction scoped to one organisation.
 //
 // The organisation is set with set_config(..., true), which lasts only until
 // the transaction ends, so a pooled connection never carries one request's
 // organisation into the next. Row-level security policies read it back with
 // current_setting('app.organization_id', true); outside this function that
 // setting is empty and those policies match no row.
-func (db *DB) InOrganization(ctx context.Context, organizationID uuid.UUID, fn func(pgx.Tx) error) error {
+func (db *DB) InOrganizationTx(ctx context.Context, organizationID uuid.UUID, fn func(pgx.Tx) error) error {
 	if organizationID == uuid.Nil() {
 		return errors.New("postgres: organisation-scoped transaction without an organisation")
 	}

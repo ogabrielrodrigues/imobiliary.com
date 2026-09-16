@@ -30,6 +30,9 @@ const (
 	ActionMemberRemoved       AuditAction = "membership.removed"
 	ActionAccountDeleted      AuditAction = "user.deleted"
 	ActionDataExported        AuditAction = "user.data_exported"
+	ActionPersonCreated       AuditAction = "person.created"
+	ActionPersonUpdated       AuditAction = "person.updated"
+	ActionPersonDeleted       AuditAction = "person.deleted"
 )
 
 // AuditEvent is one entry in the trail.
