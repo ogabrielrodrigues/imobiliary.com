@@ -361,7 +361,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-16 — phase 1's API half done and proved end to end; the web half (screens) is next
+**Last updated:** 2026-09-16: phase 1's API and web halves done and verified in the browser; OpenAPI and account deletion/export are next
 
 ### Done
 
@@ -1202,18 +1202,38 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       settings, legal pages), the OpenAPI document, and account deletion and
       export.
 
+38. **Phase 1, the web half** (`4568c4b` session layer, `8cb8549` screens,
+    `2cee26a` fixes found in the browser).
+    - BFF as in `docs`: `SessionManager`, `RefreshCoordinator`, sealed cookie
+      `imobiliary_session`, which also stores the active organisation, the role
+      and whether the second factor is still owed. `_app` sends an admin without
+      TOTP to `/ajustes?aba=seguranca` and nowhere else.
+    - Screens: `/entrar` (two steps; one challenge is one attempt, a refused
+      code goes back to the password), `/criar-conta`, `/esqueci-senha`,
+      `/redefinir-senha`, `/convite`, `/dashboard` (placeholder), `/ajustes`
+      (Aparência, Acessibilidade, Segurança with password and TOTP, Escritório
+      with members, and invitations for admins only), `/privacidade`,
+      `/termos`, `/licencas`, robots and sitemap.
+    - **A blocked submit is not counted by TanStack Form**, so errors on
+      fields never left stayed hidden. Each form keeps its own `attempted`
+      flag; copy that pattern into every new form.
+    - **After a server function rotates the session, call
+      `router.invalidate()`**: the guard's context keeps the old answer.
+    - **An SSR loader's request has no `Origin`**, so `assertSameOrigin` in a
+      server function called from a loader always refuses. Only mutations
+      called from the browser carry the check.
+    - **Harness:** the pane's typing does not reach React-controlled inputs
+      reliably. Set values with the native `HTMLInputElement` value setter and
+      an `input` event, then `form.requestSubmit()`. After an HMR edit mid-test,
+      reload before trusting what a form does.
+    - Verified 2026-09-16 against the API on :8085 with `IMOBILIARY_MAIL_LOG`:
+      everything listed in the commit `2cee26a`.
+
 ### Next step
 
-**Phase 1's web half.** The API is done and proved; nothing of it is visible
-yet. In order: the BFF session (copy `docs`' SessionManager, RefreshCoordinator
-and cookie store), `/entrar` with the second-factor step, `/criar-conta`,
-`/esqueci-senha`, `/redefinir-senha`, `/convite`, the app shell with the
-sidebar, `/ajustes` (Aparência, Acessibilidade, Segurança with TOTP and
-recovery codes, Organização with members and invitations), the legal pages, and
-the SEO entries for each new public route.
-
-Then, still in phase 1: the OpenAPI document for the new API, and account
-deletion and export (LGPD arts. 18 and 16).
+Still in phase 1: the OpenAPI document for `imobiliary-api` and its published
+reference, and account deletion and export (LGPD arts. 18 and 16), API and
+Ajustes "Meus dados". Then phase 2 (people and addresses).
 
 Not in the editor on purpose, for now: fonts, colours, highlight, tables,
 images, headers and footers. Tables are the costly one: the block model,
