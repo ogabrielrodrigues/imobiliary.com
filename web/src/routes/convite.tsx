@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { MIN_PASSWORD_LENGTH, validateName, validatePassword } from "@/domain/user";
-import { blurThenChange, formErrors, visibleError } from "@/lib/form";
+import { blurThenChange, formErrors, visibleError, submitForm } from "@/lib/form";
 import { pageSeo } from "@/lib/seo";
 import { acceptInvitation, lookupInvitation } from "@/server/organization";
 
@@ -197,7 +197,7 @@ function NewAccount({
         onSubmit={(event) => {
           event.preventDefault();
           setAttempted(true);
-          void form.handleSubmit();
+          void submitForm(form);
         }}
       >
         <form.Field name="name">

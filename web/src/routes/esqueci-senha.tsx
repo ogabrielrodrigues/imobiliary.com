@@ -7,7 +7,7 @@ import { AuthLayout } from "@/components/auth-layout";
 import { BoundFormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
 import { validateEmail } from "@/domain/user";
-import { blurThenChange, formErrors } from "@/lib/form";
+import { blurThenChange, formErrors, submitForm } from "@/lib/form";
 import { pageSeo } from "@/lib/seo";
 import { forgotPassword } from "@/server/password";
 
@@ -101,7 +101,7 @@ function ForgotPasswordPage() {
         onSubmit={(event) => {
           event.preventDefault();
           setAttempted(true);
-          void form.handleSubmit();
+          void submitForm(form);
         }}
       >
         <form.Field name="email">

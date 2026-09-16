@@ -1352,6 +1352,26 @@ _Update this section as work proceeds. It is what a fresh session reads first._
     - Verified in the browser: everything listed in commit `f6d1469`. Test
       records deleted.
 
+42. **Two defects the user reported before phase 4.**
+    - **Submit with `submitForm(form)` (`lib/form.ts`), never
+      `form.handleSubmit()`.** TanStack Form's `_handleSubmit` returns on a first
+      attempt when the form already holds an error, without validating again.
+      With `blurThenChange` an error can be computed and kept hidden (leaving an
+      address field while the owners list was empty) and outlive the change
+      that fixed it (adding the owner, which validated nothing because no field
+      showed an error). The first click on "Cadastrar" then only revealed the
+      stale error. `submitForm` runs `form.validate("submit")` first; every form
+      uses it, and `form.test.ts` proves the bug with `handleSubmit` and the fix.
+      In the pane the bug only reproduces when fields really lose focus:
+      dispatch `focusout`, since the tab never holds focus.
+    - "Dividir igualmente" and the running total show only with two owners or
+      more.
+    - **Icons beside a label sit 1px high on purpose** (`button.tsx`,
+      `[&_svg]:-translate-y-px`, undone on the icon sizes). Fustat's ascent (13)
+      dwarfs its descent (5), so the capitals centre about 1.1px above the box
+      and the icon looked low; measured with canvas font metrics at 13.5px and
+      12.8px, 0.1px after the fix.
+
 ### Next step
 
 Phase 4 of `PLANO.md` §3.6 and §7: contracts and instalments. The exclusion

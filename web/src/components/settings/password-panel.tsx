@@ -5,7 +5,7 @@ import { messageFor, summaryOf, type Failure } from "@/application/result";
 import { BoundFormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
 import { MIN_PASSWORD_LENGTH, validatePassword } from "@/domain/user";
-import { blurThenChange, formErrors } from "@/lib/form";
+import { blurThenChange, formErrors, submitForm } from "@/lib/form";
 import { changePassword } from "@/server/password";
 
 const EMPTY = { current_password: "", new_password: "" };
@@ -79,7 +79,7 @@ export function PasswordPanel() {
         className="flex flex-col gap-4"
         onSubmit={(event) => {
           event.preventDefault();
-          void form.handleSubmit();
+          void submitForm(form);
         }}
       >
         <form.Field name="current_password">

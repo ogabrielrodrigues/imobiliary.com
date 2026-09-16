@@ -22,7 +22,7 @@ import {
   type PropertyAddress,
   type PropertyInput,
 } from "@/domain/property";
-import { blurThenChange, formErrors, visibleError } from "@/lib/form";
+import { blurThenChange, formErrors, visibleError, submitForm } from "@/lib/form";
 import { cn } from "@/lib/utils";
 
 /** The form's values, with a mutable owners list for TanStack Form's helpers. */
@@ -148,7 +148,7 @@ export function PropertyForm({
       onSubmit={(event) => {
         event.preventDefault();
         setAttempted(true);
-        void form.handleSubmit();
+        void submitForm(form);
       }}
     >
       {summary !== null && (
@@ -250,7 +250,10 @@ export function PropertyForm({
               </ul>
             )}
 
-            {list.state.value.length > 0 && (
+            {/* The total and the even split only mean something with two
+                owners or more: a single owner is 100% from the moment they
+                are added. */}
+            {list.state.value.length > 1 && (
               <div className="flex flex-wrap items-center gap-3">
                 <p
                   aria-live="polite"

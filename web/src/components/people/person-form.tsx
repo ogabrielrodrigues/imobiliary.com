@@ -33,7 +33,7 @@ import {
   type PersonKind,
   type PersonSummary,
 } from "@/domain/person";
-import { blurThenChange, formErrors, visibleError } from "@/lib/form";
+import { blurThenChange, formErrors, visibleError, submitForm } from "@/lib/form";
 import { cn } from "@/lib/utils";
 
 /**
@@ -161,7 +161,7 @@ export function PersonForm({
       onSubmit={(event) => {
         event.preventDefault();
         setAttempted(true);
-        void form.handleSubmit();
+        void submitForm(form);
       }}
     >
       {summary !== null && (

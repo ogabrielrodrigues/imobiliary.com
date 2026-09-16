@@ -3,7 +3,9 @@ import { describe, it } from "node:test";
 
 import { ValidationError } from "../domain/errors.ts";
 import { validateRegistration } from "../domain/user.ts";
-import { blurThenChange, formErrors, visibleError } from "./form.ts";
+import { FormApi } from "@tanstack/react-form";
+
+import { blurThenChange, formErrors, submitForm, visibleError } from "./form.ts";
 
 type LogicProps = Parameters<typeof blurThenChange>[0];
 
@@ -119,5 +121,45 @@ describe("visibleError", () => {
 
   it("shows every error once the form was submitted", () => {
     assert.equal(visibleError(invalid, true), "Informe seu e-mail.");
+  });
+});
+
+describe("submitForm", () => {
+  /**
+   * The bug it exists for: an error computed while the form was incomplete and
+   * never shown, then made obsolete by a change that did not validate. The
+   * first submit used to stop there.
+   */
+  async function staleForm() {
+    let submitted = 0;
+    const form = new FormApi({
+      defaultValues: { owners: [] as string[] },
+      validationLogic: blurThenChange,
+      validators: {
+        onDynamic: ({ value }) =>
+          formErrors(value.owners.length === 0 ? [{ field: "owners", message: "Informe ao menos um proprietário." }] : []),
+      },
+      onSubmit: () => {
+        submitted++;
+      },
+    });
+    form.mount();
+    // Leaving another field validates the whole form while owners is empty.
+    form.validate("blur");
+    // The owner arrives without a validation: no field is showing an error.
+    form.setFieldValue("owners", ["pessoa"], { dontValidate: true });
+    return { form, submitted: () => submitted };
+  }
+
+  it("shows the problem it guards against", async () => {
+    const { form, submitted } = await staleForm();
+    await form.handleSubmit();
+    assert.equal(submitted(), 0);
+  });
+
+  it("submits on the first attempt once the form is valid", async () => {
+    const { form, submitted } = await staleForm();
+    await submitForm(form);
+    assert.equal(submitted(), 1);
   });
 });

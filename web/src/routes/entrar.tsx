@@ -5,7 +5,7 @@ import { useForm } from "@tanstack/react-form";
 import { AuthLayout } from "@/components/auth-layout";
 import { BoundFormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
-import { blurThenChange, formErrors } from "@/lib/form";
+import { blurThenChange, formErrors, submitForm } from "@/lib/form";
 import { summaryOf, type Failure } from "@/application/result";
 import { validateEmail, validateSecondFactorCode } from "@/domain/user";
 import { completeSecondFactor, currentUser, signIn } from "@/server/auth";
@@ -111,7 +111,7 @@ function SignInPage() {
         onSubmit={(event) => {
           event.preventDefault();
           setAttempted(true);
-          void form.handleSubmit();
+          void submitForm(form);
         }}
       >
         <form.Field name="email">
@@ -217,7 +217,7 @@ function SecondFactorStep({ challenge }: { readonly challenge: string }) {
         onSubmit={(event) => {
           event.preventDefault();
           setAttempted(true);
-          void form.handleSubmit();
+          void submitForm(form);
         }}
       >
         <form.Field name="code">

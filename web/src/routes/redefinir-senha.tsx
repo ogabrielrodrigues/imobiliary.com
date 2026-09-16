@@ -7,7 +7,7 @@ import { AuthLayout } from "@/components/auth-layout";
 import { BoundFormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
 import { MIN_PASSWORD_LENGTH, validatePassword } from "@/domain/user";
-import { blurThenChange, formErrors } from "@/lib/form";
+import { blurThenChange, formErrors, submitForm } from "@/lib/form";
 import { pageSeo } from "@/lib/seo";
 import { resetPassword } from "@/server/password";
 
@@ -102,7 +102,7 @@ function ResetPasswordPage() {
         onSubmit={(event) => {
           event.preventDefault();
           setAttempted(true);
-          void form.handleSubmit();
+          void submitForm(form);
         }}
       >
         <form.Field name="password">

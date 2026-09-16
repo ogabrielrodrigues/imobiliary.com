@@ -72,6 +72,26 @@ export function formErrors(
   return { fields };
 }
 
+/**
+ * Submits a form after validating it again with what it holds now.
+ *
+ * TanStack Form's handleSubmit gives up on a first attempt when the form
+ * already holds an error, without validating again. With `blurThenChange` an
+ * error can be computed and kept hidden: leaving an address field validates
+ * the whole form while the owners list is still empty, and adding an owner
+ * later does not validate, since no field was showing an error. The first
+ * click on the submit button then met that stale error and did nothing but
+ * reveal it. Validating for "submit" first replaces every stale error with the
+ * current answer, so the first click submits whenever the form is valid.
+ */
+export async function submitForm(form: {
+  validate: (cause: "submit") => unknown;
+  handleSubmit: () => Promise<unknown>;
+}): Promise<void> {
+  await form.validate("submit");
+  await form.handleSubmit();
+}
+
 /** The part of a field's state that decides whether its error is shown. */
 export interface ShownFieldMeta {
   readonly isBlurred: boolean;
