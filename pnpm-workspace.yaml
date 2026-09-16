@@ -1,5 +1,10 @@
 packages:
-  # The web platform served at docs.imobiliary.com.
+  # The document platform served at docs.imobiliary.com.
   - docs
+  # The rental management platform served at imobiliary.com.
+  - web
+  # Shared design tokens, themes and accessibility.
+  - packages/*
 
-# docgen-api is a Go module and deliberately not a workspace package.
+# docgen-api and imobiliary-api are Go modules, deliberately not workspace
+# packages.
