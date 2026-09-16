@@ -2,13 +2,14 @@ openapi: 3.1.0
 
 info:
   title: Imobiliary API
-  version: "0.1.0"
+  version: "0.2.0"
   summary: Rental property management for brokers, small agencies and owners.
   description: |
-    The API behind the Imobiliary platform. Phase 1 covers identity and the
-    office: accounts, sessions with a second factor, members and invitations,
-    and the account holder's rights under the LGPD. People, properties,
-    contracts and rents arrive in later phases.
+    The API behind the Imobiliary platform. It covers identity and the office
+    (accounts, sessions with a second factor, members and invitations, the
+    account holder's rights under the LGPD) and the office's register of
+    people with their addresses. Properties, contracts and rents arrive in
+    later phases.
 
     ## Offices and roles
 
@@ -58,6 +59,20 @@ info:
     whether or not the address has an account. Telling these apart is what an
     attacker would be asking for.
 
+    ## Office data
+
+    People belong to the office the session works in, and every member may
+    manage them. Each request runs in a database transaction scoped to that
+    office with row-level security, so another office's rows are never found:
+    they answer `404`, as a row that does not exist does.
+
+    Email, phone, CPF, CNPJ and birth date are encrypted at rest. A CPF or CNPJ
+    can still be searched exactly, through an index scoped to the office.
+
+    Editing uses optimistic concurrency. A read returns the version in `ETag`;
+    `PUT` must send it back in `If-Match`. A missing `If-Match` is `428`, a
+    version that is no longer current is `412`: read again and redo the edit.
+
     ## Limits
 
     Three token buckets, each answering `429 rate_limited` with `Retry-After`
@@ -106,6 +121,8 @@ tags:
     description: The office the session works in, and its members.
   - name: Invitations
     description: Inviting someone, and joining from the mailed link.
+  - name: People
+    description: The office's register of individuals and companies.
   - name: Operations
     description: Probes for the orchestrator.
 
@@ -555,7 +572,9 @@ paths:
 
         **Refused** with `422` on `organizations` while the account is the only
         administrator of an office that has other members. Make someone else an
-        administrator first.
+        administrator first. Also refused, with `422` on `organization_data`,
+        when an office whose only member is this account still holds people:
+        an office's data is never erased as a side effect of closing an account.
 
         Reachable by a session that still owes enrolment. Charged to both the
         credential limit and the write budget. The address is mailed afterwards.
@@ -815,6 +834,153 @@ paths:
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  # --- people -----------------------------------------------------------------
+
+  /v1/people:
+    get:
+      tags: [People]
+      summary: Search the office's people
+      description: |
+        Alphabetical, ignoring case and accents, paged with `next_cursor`.
+        A `q` that is a valid CPF or CNPJ, formatted or not, finds that
+        document exactly; any other `q` matches a fragment of the name, so
+        "joao" finds "João Silva". Rows carry no sealed field.
+      operationId: listPeople
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: kind, in: query, schema: { $ref: "#/components/schemas/PersonKind" } }
+        - name: limit
+          in: query
+          description: Default 20, at most 100.
+          schema: { type: integer, minimum: 1 }
+        - name: cursor
+          in: query
+          description: The `next_cursor` of the previous page.
+          schema: { type: string }
+      responses:
+        "200":
+          description: A page.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [people]
+                properties:
+                  people:
+                    type: array
+                    items: { $ref: "#/components/schemas/PersonSummary" }
+                  next_cursor:
+                    type: string
+                    description: Absent on the last page.
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    post:
+      tags: [People]
+      summary: Register a person
+      description: |
+        Naming a `spouse_id` writes the link on the spouse's record too, which
+        increments the spouse's version. The spouse must be an individual
+        registered as married or in a stable union and not linked to someone
+        else. Representatives must be individuals. A CPF or CNPJ already
+        registered in the office is `422` on that field.
+      operationId: createPerson
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonInput" }
+      responses:
+        "201":
+          description: Registered.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Person" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/people/{personID}:
+    parameters:
+      - name: personID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+    get:
+      tags: [People]
+      summary: Read a person
+      operationId: getPerson
+      responses:
+        "200":
+          description: The person, sealed fields opened.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Person" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    put:
+      tags: [People]
+      summary: Replace a person
+      description: |
+        The whole record, addresses and representatives included, as of the
+        version in `If-Match`. The kind cannot change. Clearing or replacing
+        `spouse_id` clears the link on the former spouse's record.
+      operationId: updatePerson
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          description: The `ETag` of the read the edit is based on, such as `"3"`.
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonInput" }
+      responses:
+        "200":
+          description: Replaced.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Person" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "428": { $ref: "#/components/responses/PreconditionRequired" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      tags: [People]
+      summary: Delete a person
+      description: |
+        Permanent, with the person's addresses, and recorded in the audit trail
+        without values. Refused with `409 in_use` while something links to
+        the person, such as a company they represent. A spouse keeps their
+        record and loses the link.
+      operationId: deletePerson
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
   # --- operations -------------------------------------------------------------
 
   /healthz:
@@ -851,6 +1017,11 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
 
 components:
+  headers:
+    ETag:
+      description: The record's version, quoted, to send back in `If-Match`.
+      schema: { type: string, examples: ['"1"'] }
+
   securitySchemes:
     bearer:
       type: http
@@ -1141,6 +1312,100 @@ components:
               port: { type: integer }
               occurred_at: { $ref: "#/components/schemas/Instant" }
 
+    PersonKind:
+      type: string
+      enum: [individual, company]
+
+    Address:
+      type: object
+      required: [kind, is_primary, street, city, state, zip_code]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: In responses only. Addresses are replaced as a list on every edit.
+        kind: { type: string, enum: [residential, correspondence, commercial] }
+        is_primary: { type: boolean, description: At most one per person. }
+        street: { type: string, minLength: 1, maxLength: 120 }
+        number: { type: string, maxLength: 20 }
+        complement: { type: string, maxLength: 120 }
+        district: { type: string, maxLength: 120 }
+        city: { type: string, minLength: 1, maxLength: 120 }
+        state:
+          type: string
+          description: One of the 27 UFs. Accepted in any case, answered in capitals.
+          examples: [SP]
+        zip_code:
+          type: string
+          description: CEP. Accepted formatted, answered as eight digits.
+          examples: ["14700000"]
+        observation: { type: string, maxLength: 500 }
+
+    PersonInput:
+      type: object
+      description: |
+        Fields of the other kind must be empty. Optional text is sent as `""`
+        or left out; `spouse_id` and `birth_date` as `null` or left out.
+      required: [kind, name]
+      properties:
+        kind: { $ref: "#/components/schemas/PersonKind" }
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Full name of an individual, legal name of a company.
+        email: { type: string }
+        phone: { type: string, description: "10 to 13 digits, formatting allowed." }
+        cpf: { type: string, description: "Individuals. Formatted or not." }
+        nationality: { type: string, maxLength: 120 }
+        marital_status:
+          type: string
+          enum: ["", single, married, stable_union, divorced, separated, widowed]
+        property_regime:
+          type: string
+          description: Only with married or stable_union.
+          enum: ["", partial_community, universal_community, total_separation, mandatory_separation, final_participation]
+        spouse_id: { type: [string, "null"], format: uuid }
+        occupation: { type: string, maxLength: 120 }
+        birth_date: { type: [string, "null"], format: date }
+        gender:
+          type: string
+          description: "For grammatical agreement in a contract's text only."
+          enum: ["", female, male]
+        cnpj: { type: string, description: "Companies. Alphanumeric CNPJs are accepted." }
+        trade_name: { type: string, maxLength: 200 }
+        representative_ids:
+          type: array
+          maxItems: 10
+          items: { type: string, format: uuid }
+        addresses:
+          type: array
+          maxItems: 10
+          items: { $ref: "#/components/schemas/Address" }
+
+    Person:
+      allOf:
+        - $ref: "#/components/schemas/PersonInput"
+        - type: object
+          required: [id, version, created_at, updated_at, addresses, representative_ids]
+          properties:
+            id: { $ref: "#/components/schemas/ID" }
+            cpf: { type: string, examples: ["529.982.247-25"] }
+            cnpj: { type: string, examples: ["12.ABC.345/01DE-35"] }
+            version: { type: integer, minimum: 1 }
+            created_at: { $ref: "#/components/schemas/Instant" }
+            updated_at: { $ref: "#/components/schemas/Instant" }
+
+    PersonSummary:
+      type: object
+      required: [id, kind, name, trade_name, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/ID" }
+        kind: { $ref: "#/components/schemas/PersonKind" }
+        name: { type: string }
+        trade_name: { type: string }
+        created_at: { $ref: "#/components/schemas/Instant" }
+
     Error:
       type: object
       required: [error]
@@ -1166,6 +1431,8 @@ components:
                 - internal_error
                 - unavailable
                 - precondition_failed
+                - precondition_required
+                - in_use
             message: { type: string }
             fields:
               type: array
@@ -1207,7 +1474,19 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
     Conflict:
-      description: The request conflicts with the current state.
+      description: |
+        The request conflicts with the current state. `in_use` when a delete is
+        refused because other records still link to the resource.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    PreconditionFailed:
+      description: The resource changed since it was read. Read it again and redo the edit.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    PreconditionRequired:
+      description: Send `If-Match` with the version being edited.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }

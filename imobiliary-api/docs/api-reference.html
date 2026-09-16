@@ -112,11 +112,12 @@
 <div class="shell">
   <nav class="rail" aria-label="Sections">
     <div class="brand">imobiliary <span>api</span></div>
-    <div class="ver">v0.1.0 · phase 1</div>
+    <div class="ver">v0.2.0 · phase 2</div>
     <h3>Guide</h3>
     <ul>
       <li><a href="#auth">Authentication</a></li>
       <li><a href="#second-factor">Second factor</a></li>
+      <li><a href="#office-data">Office data</a></li>
       <li><a href="#errors">Errors</a></li>
       <li><a href="#limits">Rate limits</a></li>
     </ul>
@@ -128,6 +129,7 @@
       <li><a href="#privacy">Privacy</a></li>
       <li><a href="#office">Office</a></li>
       <li><a href="#invitations">Invitations</a></li>
+      <li><a href="#people">People</a></li>
       <li><a href="#operations">Operations</a></li>
     </ul>
   </nav>
@@ -136,7 +138,7 @@
     <header class="top">
       <div class="eyebrow">Reference</div>
       <h1>Imobiliary API</h1>
-      <p class="lede">The service behind the rental management platform. Phase 1 covers identity and the office: accounts, sessions with a second factor, members, invitations, and the account holder's rights under the LGPD.</p>
+      <p class="lede">The service behind the rental management platform: identity and the office, the account holder's rights under the LGPD, and the office's register of people with their addresses.</p>
       <div class="facts">
         <span>base <b>http://127.0.0.1:8081</b></span>
         <span>format <b>application/json</b></span>
@@ -166,6 +168,17 @@
       <p class="note">An administrator who has not enrolled receives a session flagged <code>mfa_enrollment_required</code>. It reaches only the enrolment endpoints, the export and the deletion. Everything else answers <code>403 mfa_enrollment_required</code>.</p>
     </section>
 
+    <section class="block" id="office-data">
+      <h2>Office data</h2>
+      <p>People belong to the office the session works in, and every member may manage them. Each request runs in a transaction scoped to that office under forced row-level security, so another office's rows answer <code>404</code>, as a missing row does.</p>
+      <p>Email, phone, CPF, CNPJ and birth date are encrypted at rest. A CPF or CNPJ is still found exactly, through an index scoped to the office.</p>
+      <p class="note">Edits are optimistic. A read returns the version in <code>ETag</code>; <code>PUT</code> sends it back in <code>If-Match</code>. Without it the answer is <code>428</code>; with a version that is no longer current, <code>412</code>. Read again and redo the edit.</p>
+      <pre><span class="k">PUT</span> /v1/people/0193…
+If-Match: "3"
+
+<span class="k">412</span> { "error": { "code": "precondition_failed", "message": "…" } }</pre>
+    </section>
+
     <section class="block" id="errors">
       <h2>Errors</h2>
       <p>Every failure has one shape. Branch on <code>code</code>; <code>message</code> is prose and may change. <code>fields</code> lists every refused input at once.</p>
@@ -181,9 +194,12 @@
             <tr><td class="num">403</td><td><code>mfa_enrollment_required</code></td><td>Enrol a second factor first.</td></tr>
             <tr><td class="num">404</td><td><code>not_found</code></td><td>No such resource in this office.</td></tr>
             <tr><td class="num">409</td><td><code>conflict</code></td><td>The current state forbids it, such as a pending invitation for the same address.</td></tr>
+            <tr><td class="num">409</td><td><code>in_use</code></td><td>A delete refused because other records still link to it.</td></tr>
+            <tr><td class="num">412</td><td><code>precondition_failed</code></td><td>The record changed since it was read.</td></tr>
             <tr><td class="num">413</td><td><code>payload_too_large</code></td><td>Body over 1 MiB.</td></tr>
             <tr><td class="num">415</td><td><code>unsupported_media_type</code></td><td>Send <code>application/json</code>.</td></tr>
             <tr><td class="num">422</td><td><code>validation_failed</code></td><td>Read and refused; see <code>fields</code>.</td></tr>
+            <tr><td class="num">428</td><td><code>precondition_required</code></td><td>Send <code>If-Match</code> with the version being edited.</td></tr>
             <tr><td class="num">429</td><td><code>rate_limited</code></td><td>Wait <code>Retry-After</code> seconds.</td></tr>
             <tr><td class="num">500</td><td><code>internal_error</code></td><td>Logged with the request id; nothing leaks.</td></tr>
           </tbody>
@@ -321,7 +337,7 @@
           <dt>Body</dt><dd><code>password</code></dd>
           <dt>Erased</dt><dd>The account, memberships, sessions, second factor, recovery codes, pending resets. An office whose only member is this account goes with it.</dd>
           <dt>Kept</dt><dd>Access records keep the account id, and its address is kept sealed, for six months (Marco Civil art. 15; LGPD art. 16, I). Audit entries stay without the actor; each office gets <code>user.deleted</code>.</dd>
-          <dt>Answers</dt><dd><code>204</code> · <code>401</code> wrong password · <code>422</code> on <code>organizations</code>: the only administrator of an office with other members</dd>
+          <dt>Answers</dt><dd><code>204</code> · <code>401</code> wrong password · <code>422</code> on <code>organizations</code>: the only administrator of an office with other members · <code>422</code> on <code>organization_data</code>: the office closing with the account still holds people</dd>
         </dl>
       </article>
     </section>
@@ -391,6 +407,44 @@
         <div class="sig"><span class="m post">POST</span><span class="path">/v1/invitations/accept</span><span class="access">public · credentials</span></div>
         <p>Joins the office once. With no account for the address, <code>name</code>, <code>password</code> and <code>terms_version</code> create one. No session is returned.</p>
         <dl class="io"><dt>Body</dt><dd><code>token</code>, and for a new account <code>name</code>, <code>password</code>, <code>terms_version</code></dd><dt>Answers</dt><dd><code>204</code> · <code>401</code> · <code>422</code></dd></dl>
+      </article>
+    </section>
+
+    <section class="block" id="people">
+      <h2>People</h2>
+      <p>One entity for owners, tenants, guarantors and representatives: the role lives in the link that uses a person, never in the person. An <code>individual</code> carries a CPF; a <code>company</code> carries a CNPJ, alphanumeric ones included.</p>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/people</span><span class="access">session</span></div>
+        <p>Alphabetical, ignoring case and accents. A <code>q</code> that is a valid CPF or CNPJ finds that document exactly; any other <code>q</code> matches a fragment of the name, so <code>joao</code> finds João Silva. Rows carry no sealed field.</p>
+        <dl class="io"><dt>Query</dt><dd><code>q</code>, <code>kind</code>, <code>limit</code> (20, at most 100), <code>cursor</code></dd><dt>Answers</dt><dd><code>200</code> <code>{ people, next_cursor }</code> · <code>422</code> bad cursor or kind</dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/people</span><span class="access">session · writes</span></div>
+        <p>Registers a person with up to ten addresses, one primary. Naming a spouse writes the link on the spouse's record too; the spouse must be an individual registered as married or in a stable union and not linked to someone else. Representatives must be individuals.</p>
+        <dl class="io">
+          <dt>Body</dt><dd><code>kind</code>, <code>name</code>, <code>email</code>, <code>phone</code>; individuals <code>cpf</code>, <code>nationality</code>, <code>marital_status</code>, <code>property_regime</code>, <code>spouse_id</code>, <code>occupation</code>, <code>birth_date</code>, <code>gender</code>; companies <code>cnpj</code>, <code>trade_name</code>, <code>representative_ids</code>; <code>addresses</code></dd>
+          <dt>Answers</dt><dd><code>201</code> <code>Person</code> with <code>ETag</code> · <code>422</code>, including a CPF or CNPJ already in the office</dd>
+        </dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/people/{personID}</span><span class="access">session</span></div>
+        <p>The whole record with sealed fields opened. CPF and CNPJ come formatted; CEP as eight digits.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>Person</code> with <code>ETag</code> · <code>404</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m patch">PUT</span><span class="path">/v1/people/{personID}</span><span class="access">session · writes</span></div>
+        <p>Replaces the record, addresses and representatives included. The kind cannot change. Dropping or replacing the spouse clears the link on the former spouse's record.</p>
+        <dl class="io"><dt>Headers</dt><dd><code>If-Match: "&lt;version&gt;"</code></dd><dt>Answers</dt><dd><code>200</code> · <code>404</code> · <code>412</code> · <code>422</code> · <code>428</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m delete">DELETE</span><span class="path">/v1/people/{personID}</span><span class="access">session · writes</span></div>
+        <p>Permanent, with the person's addresses, audited without values. Refused while something links to the person, such as a company they represent. A spouse keeps their record and loses the link.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>204</code> · <code>404</code> · <code>409 in_use</code></dd></dl>
       </article>
     </section>
 
