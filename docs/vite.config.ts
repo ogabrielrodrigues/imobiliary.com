@@ -29,6 +29,23 @@ export default defineConfig({
       "@tanstack/react-table",
     ],
   },
+  build: {
+    /*
+      Fonts are never inlined.
+
+      Vite turns an asset under its inline limit into a data: URI, and one of
+      the font faces is small enough. The browser then refuses it: the CSP says
+      font-src 'self', and a data: URI is not 'self'. Only a production build
+      shows this, because the dev server serves every asset as a file.
+
+      Widening the policy to data: would be the other way out. Not inlining is
+      the better one: the policy stays as narrow as it can be, and a font
+      shipped as a file is cached on its own instead of riding inside the
+      stylesheet on every visit.
+    */
+    assetsInlineLimit: (filePath) =>
+      /\.(woff2?|ttf|otf|eot)$/i.test(filePath) ? false : undefined,
+  },
   plugins: [
     // Tailwind runs first so the generated stylesheet is in place before the
     // framework plugins process the modules that import it.

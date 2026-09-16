@@ -361,7 +361,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-15 — phase 0 done but for the production-start decision: imobiliary-api, packages/ui and web all green, pnpm security at 15 checks
+**Last updated:** 2026-09-15 — phase 0 complete: imobiliary-api, packages/ui and web green, both platforms start from a production build, pnpm security at 15 checks
 
 ### Done
 
@@ -1143,7 +1143,27 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       Geist) dropped.
     - `web` runs on **:3001**, has `.claude/launch.json` entry "web", and the
       root gains `web:*` and `ui:check`. `pnpm security` is 15 checks.
-    - **Not started:** the production start, below.
+    - **The production start is solved, for both platforms** (`f19f30d` and the
+      commit after it). `vite build` produces `dist/client` and a
+      `dist/server/server.js` that default-exports a `{ fetch }` handler: it
+      listens to nothing and serves no files, which is why running it directly
+      had produced nothing. `server.mjs` in each platform adapts it with
+      **srvx** (the new dependency, chosen by the user) and puts
+      `serveStatic({ dir: "./dist/client" })` in front, so an asset never
+      reaches the router. `PORT` and `HOST` configure it; it binds to loopback,
+      since a TLS-terminating proxy belongs in front either way. `pnpm start`
+      in both platforms now runs it.
+    - **Vite inlines small assets as data: URIs, and the CSP refuses them.**
+      One font face is under the limit, so a production page logged
+      "violates ... font-src 'self'" and fell back to Times. Only a production
+      build shows it: the dev server serves every asset as a file. Both
+      `vite.config.ts` files now return `false` from `assetsInlineLimit` for
+      font extensions, rather than widening the policy to `data:`.
+    - **`docs` in production answers 500 on every page, on purpose**: the
+      controller identity in `src/domain/legal.ts` is still a placeholder and
+      `assertLegalIdentityComplete` refuses to serve. Its static files and
+      favicon are served, so the start itself is proved; the guard is the
+      legal item, not a bug.
 
 ### Next step
 
@@ -1213,13 +1233,10 @@ a Resend key — the API refuses to start with neither.
 - `GET /v1/templates/{id}/versions` is paged and the platform asks for 100.
   The picker now says when older versions are not listed (item 25), but a
   template with more than 100 still cannot reach them.
-- **`docs` cannot be started from a production build.** `pnpm start` runs
-  `node .output/server/index.mjs`, a Nitro-era path that no longer exists —
-  `vite build` produces `dist/client` and `dist/server`. Running
-  `dist/server/server.js` directly with `PORT` set produces no output and
-  never listens, so it likely needs a host adapter that is not installed.
-  **Nothing has ever been deployed from this repository.** Resolve before
-  planning a launch; it is a deployment question, not a code bug to guess at.
+- **Nothing has ever been deployed from this repository**, though both
+  platforms now start from a production build with `pnpm start` (item 36).
+  What a deployment still needs: TLS in front, the controller identity filled
+  in, and the environment each process reads.
 - **No DPA with Resend yet.** They receive an email address and a first name
   when a security message goes out, which is a declared international
   transfer. Sign the processing contract, under the ANPD standard clauses,
