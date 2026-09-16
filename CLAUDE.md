@@ -361,7 +361,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-16: phase 1 complete (identity, office, account export and deletion, OpenAPI); phase 2 is next
+**Last updated:** 2026-09-16: phase 2 complete (people and addresses, API and web); phase 3 (properties) is next
 
 ### Done
 
@@ -1265,16 +1265,64 @@ _Update this section as work proceeds. It is what a fresh session reads first._
     - Verified in the browser: a member's export (eight sections, no token or
       hash), a wrong password kept the session, the only administrator was
       refused in Portuguese, and a member was deleted and could not sign in.
-    - **Still missing from the plan's phase 1:** `imobiliary-api/PRIVACIDADE.md`,
-      the article 37 record.
+    - `imobiliary-api/PRIVACIDADE.md`, the article 37 record, was written with
+      phase 2 (item 40).
+
+40. **Phase 2: people and addresses** (`f7ed833` API, `dcc0705` contract and
+    `PRIVACIDADE.md`, `9e16053` web).
+    - **The user decided (2026-09-16): closing an account never erases an
+      office's data.** Business tables reference `organizations` with
+      `RESTRICT`; deleting the account of an office's only member while it
+      holds people is refused with 422 on `organization_data`. Every later
+      business table must keep that `RESTRICT`.
+    - **Migration 0005**: `people`, `individuals`, `companies`,
+      `company_representatives`, `addresses`, `person_addresses`. Every table
+      has `organization_id`, a policy on `app_organization_id()` and **FORCE
+      ROW LEVEL SECURITY**, so the owner is bound too: the integration suite
+      runs as owner and a missing policy fails a test. Repositories filter by
+      nothing else. Composite FKs on `(organization_id, id)` keep links inside
+      one office. `app_organization_id()` wraps `current_setting` in `NULLIF`,
+      because `''::uuid` is an error, not a non-match.
+    - **`DB.InOrganization(ctx, org, fn(usecase.ScopedRepositories))`** is the
+      port business use cases use, reads included; the pgx-level helper is
+      `InOrganizationTx`. Copy this for properties, contracts and rents.
+    - Sealed against table, column and row: email, phone, CPF, CNPJ, birth
+      date. CPF and CNPJ also get a blind index `Index(org, "cpf:"+digits)`,
+      unique per office. Names stay clear for trigram search over
+      `immutable_unaccent(lower(name))`; LIKE wildcards are escaped. The list
+      is alphabetical with a keyset cursor (base64url JSON of folded name and
+      id).
+    - **PostgreSQL reports a RESTRICT violation as 23001, not 23503.**
+      `isForeignKeyViolation` accepts both; the first run returned 500s.
+    - Rules: kind never changes; a spouse is an individual registered as
+      married or in a stable union and not linked elsewhere, written on both
+      records (`SetSpouse` bumps the other's version); representatives are
+      individuals; a linked person is `409 in_use`. Edits need `If-Match`
+      with the `ETag` version: missing 428, stale 412. Audit entries name
+      changed fields only.
+    - **Web:** `domain/person.ts` (rules, masks, labels,
+      `translatePersonProblem` so no English API message reaches a screen),
+      `PeopleGateway`, `server/people.ts`, `components/people/person-form.tsx`
+      and `person-picker.tsx`, routes `/pessoas`, `/pessoas/nova`,
+      `/pessoas/$personId`. Failures gain `stale` and `in_use`.
+    - **TanStack Form types array helpers as `never` over readonly arrays**;
+      the form uses its own `PersonFormValues` with mutable lists. The API's
+      snake_case field errors map onto form paths with `formPath`.
+    - **Heredocs:** a `python - <<'EOF'` whose body holds certain quote mixes
+      failed in this bash with "unexpected EOF". Write the script to the
+      scratchpad with the Write tool and run it instead.
+    - Verified in the browser against the user's own servers (web :3001, API
+      :8081): everything listed in commit `9e16053`. Test records deleted.
+    - **Not done:** TanStack Query and Table are still not in `web` (the list
+      uses loaders and a cursor); no export of people for portability; the
+      sidebar still shows Imóveis and Contratos as "em breve".
 
 ### Next step
 
-Phase 2 of `PLANO.md`: people and addresses (sealed fields, blind index,
-search with `pg_trgm` and `unaccent`, representatives, spouse), with the list,
-form and detail screens. Write `imobiliary-api/PRIVACIDADE.md` alongside, since
-phase 2 is the first to store third parties' data, and decide the sole-member
-office deletion rule (item 39) before it.
+Phase 3 of `PLANO.md`: properties, with owners and their shares summing to
+100% (a deferred constraint trigger), each property's single address row, and
+the screens. Use `InOrganization`, FORCE RLS and `RESTRICT` to the office as
+in item 40, and extend `PRIVACIDADE.md`, the OpenAPI and its reference page.
 
 Not in the editor on purpose, for now: fonts, colours, highlight, tables,
 images, headers and footers. Tables are the costly one: the block model,
