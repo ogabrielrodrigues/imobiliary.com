@@ -94,6 +94,24 @@ export class EnrollmentRequiredError extends DomainError {
   }
 }
 
+/**
+ * An edit was based on a version that is no longer current: someone changed
+ * the record after it was read. The answer is to read it again, never to
+ * retry the same edit.
+ */
+export class StaleVersionError extends DomainError {
+  constructor(message = "the record changed since it was read") {
+    super(message);
+  }
+}
+
+/** A delete refused because other records still link to this one. */
+export class InUseError extends DomainError {
+  constructor(message = "the record is still linked to others") {
+    super(message);
+  }
+}
+
 /** Too many requests. */
 export class RateLimitError extends DomainError {
   /** Whole seconds to wait, taken from the API's Retry-After header. */

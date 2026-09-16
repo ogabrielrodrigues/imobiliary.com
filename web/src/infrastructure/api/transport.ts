@@ -12,9 +12,11 @@ import {
   AuthenticationError,
   ConflictError,
   EnrollmentRequiredError,
+  InUseError,
   NotFoundError,
   PermissionError,
   RateLimitError,
+  StaleVersionError,
   UnexpectedError,
   ValidationError,
   type FieldError,
@@ -73,9 +75,12 @@ export class Transport {
     ctx: CallContext,
     method: string,
     path: string,
-    init?: { body?: BodyInit; contentType?: string },
+    init?: { body?: BodyInit; contentType?: string; ifMatch?: string },
   ): Promise<Response> {
     const headers = new Headers({ accept: "application/json" });
+    if (init?.ifMatch !== undefined) {
+      headers.set("if-match", init.ifMatch);
+    }
 
     if (ctx.accessToken) {
       headers.set("authorization", `Bearer ${ctx.accessToken}`);
@@ -163,7 +168,13 @@ async function toDomainError(
       return new NotFoundError();
 
     case 409:
-      return new ConflictError();
+      // A delete refused by a link is its own answer: the screen explains
+      // what to undo first, which a generic conflict cannot.
+      return body?.error?.code === "in_use" ? new InUseError() : new ConflictError();
+
+    case 412:
+    case 428:
+      return new StaleVersionError();
 
     case 415:
       return new ValidationError([

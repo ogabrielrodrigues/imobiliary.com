@@ -19,6 +19,12 @@ import type {
   SignInOutcome,
   User,
 } from "../domain/user.ts";
+import type {
+  PeoplePage,
+  Person,
+  PersonInput,
+  PersonKind,
+} from "../domain/person.ts";
 
 /**
  * What a single call to the API needs beyond its arguments.
@@ -85,6 +91,24 @@ export interface PasswordGateway {
   /** Always succeeds, whether or not the address belongs to anyone. */
   forget(ctx: CallContext, email: string): Promise<void>;
   reset(ctx: CallContext, input: { token: string; password: string }): Promise<void>;
+}
+
+/** The office's register of people. */
+export interface PeopleGateway {
+  /**
+   * A page of the alphabetical list. A query that is a CPF or CNPJ finds that
+   * document exactly; anything else matches a fragment of the name.
+   */
+  list(
+    ctx: CallContext,
+    query: { q?: string; kind?: PersonKind; cursor?: string; limit?: number },
+  ): Promise<PeoplePage>;
+  get(ctx: CallContext, id: string): Promise<Person>;
+  create(ctx: CallContext, input: PersonInput): Promise<Person>;
+  /** Replaces the person as of `version`; a newer one is a StaleVersionError. */
+  update(ctx: CallContext, id: string, version: number, input: PersonInput): Promise<Person>;
+  /** A person something still links to is an InUseError. */
+  remove(ctx: CallContext, id: string): Promise<void>;
 }
 
 /** What the LGPD lets a person ask about their own account. */

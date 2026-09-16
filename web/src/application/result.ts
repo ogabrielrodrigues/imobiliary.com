@@ -15,9 +15,11 @@ import {
   AuthenticationError,
   ConflictError,
   EnrollmentRequiredError,
+  InUseError,
   NotFoundError,
   PermissionError,
   RateLimitError,
+  StaleVersionError,
   ValidationError,
   type FieldError,
 } from "../domain/errors.ts";
@@ -28,6 +30,8 @@ export type Failure =
   | { readonly kind: "forbidden" }
   | { readonly kind: "enrollment_required" }
   | { readonly kind: "conflict" }
+  | { readonly kind: "in_use" }
+  | { readonly kind: "stale" }
   | { readonly kind: "not_found" }
   | { readonly kind: "rate_limit"; readonly retryAfterSeconds: number }
   | { readonly kind: "unexpected" };
@@ -57,6 +61,12 @@ export function failureOf(error: unknown): Failure {
   }
   if (error instanceof PermissionError) {
     return { kind: "forbidden" };
+  }
+  if (error instanceof InUseError) {
+    return { kind: "in_use" };
+  }
+  if (error instanceof StaleVersionError) {
+    return { kind: "stale" };
   }
   if (error instanceof ConflictError) {
     return { kind: "conflict" };
@@ -144,6 +154,12 @@ export function summaryOf(
 
     case "conflict":
       return "Já existe uma conta com esse e-mail.";
+
+    case "in_use":
+      return "Não é possível excluir: outros cadastros ainda dependem deste.";
+
+    case "stale":
+      return "Alguém alterou este cadastro enquanto você editava. Recarregue a página para ver a versão atual.";
 
     case "not_found":
       return "Não encontramos o que você procura.";

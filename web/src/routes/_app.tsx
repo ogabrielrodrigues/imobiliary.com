@@ -47,7 +47,7 @@ export const Route = createFileRoute("/_app")({
 });
 
 interface NavItem {
-  readonly to: "/dashboard" | "/ajustes";
+  readonly to: "/dashboard" | "/pessoas" | "/ajustes";
   readonly label: string;
   readonly icon: typeof IconLayoutDashboard;
 }
@@ -62,11 +62,11 @@ interface NavItem {
  */
 const PRIMARY: readonly NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: IconLayoutDashboard },
+  { to: "/pessoas", label: "Pessoas", icon: IconUsers },
 ];
 
 const SOON: readonly { label: string; icon: typeof IconLayoutDashboard }[] = [
   { label: "Imóveis", icon: IconBuildingEstate },
-  { label: "Pessoas", icon: IconUsers },
   { label: "Contratos", icon: IconFileDescription },
 ];
 
@@ -140,7 +140,7 @@ function SidebarContent({
             onClick={onNavigate}
             className={cn(
               "flex items-center gap-2.5 rounded-md px-3 py-2 text-small font-medium",
-              pathname === item.to
+              pathname === item.to || pathname.startsWith(`${item.to}/`)
                 ? "bg-muted text-foreground"
                 : "text-muted-foreground hover:bg-row-hover hover:text-foreground",
             )}

@@ -19,6 +19,7 @@ import type {
   Member,
   OrganizationGateway,
   PasswordGateway,
+  PeopleGateway,
   PrivacyGateway,
   SecondFactorGateway,
 } from "../../application/ports.ts";
@@ -33,6 +34,17 @@ import type {
   SignInOutcome,
   User,
 } from "../../domain/user.ts";
+import type {
+  Address,
+  AddressKind,
+  Gender,
+  MaritalStatus,
+  PeoplePage,
+  Person,
+  PersonInput,
+  PersonKind,
+  PropertyRegime,
+} from "../../domain/person.ts";
 import { Transport } from "./transport.ts";
 
 // --- the shapes the API answers with ----------------------------------------
@@ -143,6 +155,7 @@ export function createGateways(transport: Transport): {
   secondFactor: SecondFactorGateway;
   organizations: OrganizationGateway;
   privacy: PrivacyGateway;
+  people: PeopleGateway;
 } {
   return {
     identity: new IdentityClient(transport),
@@ -150,6 +163,7 @@ export function createGateways(transport: Transport): {
     secondFactor: new SecondFactorClient(transport),
     organizations: new OrganizationClient(transport),
     privacy: new PrivacyClient(transport),
+    people: new PeopleClient(transport),
   };
 }
 
@@ -233,6 +247,167 @@ class IdentityClient implements IdentityGateway {
       mfaEnrollmentRequired: body.mfa_enrollment_required,
       recoveryCodesLeft: body.recovery_codes_left,
     };
+  }
+}
+
+interface AddressBody {
+  kind: AddressKind;
+  is_primary: boolean;
+  street: string;
+  number: string;
+  complement: string;
+  district: string;
+  city: string;
+  state: string;
+  zip_code: string;
+  observation: string;
+}
+
+interface PersonBody {
+  id: string;
+  kind: PersonKind;
+  name: string;
+  email: string;
+  phone: string;
+  cpf: string;
+  nationality: string;
+  marital_status: MaritalStatus | "";
+  property_regime: PropertyRegime | "";
+  spouse_id: string | null;
+  occupation: string;
+  birth_date: string | null;
+  gender: Gender | "";
+  cnpj: string;
+  trade_name: string;
+  representative_ids: string[];
+  addresses: AddressBody[];
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface PeoplePageBody {
+  people: { id: string; kind: PersonKind; name: string; trade_name: string }[];
+  next_cursor?: string;
+}
+
+function toAddress(a: AddressBody): Address {
+  return {
+    kind: a.kind,
+    isPrimary: a.is_primary,
+    street: a.street,
+    number: a.number,
+    complement: a.complement,
+    district: a.district,
+    city: a.city,
+    state: a.state,
+    zipCode: a.zip_code,
+    observation: a.observation,
+  };
+}
+
+function toPerson(b: PersonBody): Person {
+  return {
+    id: b.id,
+    kind: b.kind,
+    name: b.name,
+    email: b.email,
+    phone: b.phone,
+    cpf: b.cpf,
+    nationality: b.nationality,
+    maritalStatus: b.marital_status,
+    propertyRegime: b.property_regime,
+    spouseId: b.spouse_id ?? "",
+    occupation: b.occupation,
+    birthDate: b.birth_date ?? "",
+    gender: b.gender,
+    cnpj: b.cnpj,
+    tradeName: b.trade_name,
+    representativeIds: b.representative_ids,
+    addresses: b.addresses.map(toAddress),
+    version: b.version,
+    createdAt: new Date(b.created_at),
+    updatedAt: new Date(b.updated_at),
+  };
+}
+
+/** The request body. Fields of the other kind go empty, as the API requires. */
+function personPayload(p: PersonInput): string {
+  const individual = p.kind === "individual";
+  return JSON.stringify({
+    kind: p.kind,
+    name: p.name,
+    email: p.email,
+    phone: p.phone,
+    cpf: individual ? p.cpf : "",
+    nationality: individual ? p.nationality : "",
+    marital_status: individual ? p.maritalStatus : "",
+    property_regime: individual ? p.propertyRegime : "",
+    spouse_id: individual && p.spouseId !== "" ? p.spouseId : null,
+    occupation: individual ? p.occupation : "",
+    birth_date: individual && p.birthDate !== "" ? p.birthDate : null,
+    gender: individual ? p.gender : "",
+    cnpj: individual ? "" : p.cnpj,
+    trade_name: individual ? "" : p.tradeName,
+    representative_ids: individual ? [] : p.representativeIds,
+    addresses: p.addresses.map((a) => ({
+      kind: a.kind,
+      is_primary: a.isPrimary,
+      street: a.street,
+      number: a.number,
+      complement: a.complement,
+      district: a.district,
+      city: a.city,
+      state: a.state,
+      zip_code: a.zipCode,
+      observation: a.observation,
+    })),
+  });
+}
+
+class PeopleClient implements PeopleGateway {
+  constructor(private readonly transport: Transport) {}
+
+  async list(
+    ctx: CallContext,
+    query: { q?: string; kind?: PersonKind; cursor?: string; limit?: number },
+  ): Promise<PeoplePage> {
+    const params = new URLSearchParams();
+    if (query.q) params.set("q", query.q);
+    if (query.kind) params.set("kind", query.kind);
+    if (query.cursor) params.set("cursor", query.cursor);
+    if (query.limit !== undefined) params.set("limit", String(query.limit));
+    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const body = await this.transport.json<PeoplePageBody>(ctx, "GET", `/v1/people${suffix}`);
+    return {
+      people: body.people.map((p) => ({ id: p.id, kind: p.kind, name: p.name, tradeName: p.trade_name })),
+      nextCursor: body.next_cursor ?? null,
+    };
+  }
+
+  async get(ctx: CallContext, id: string): Promise<Person> {
+    return toPerson(await this.transport.json<PersonBody>(ctx, "GET", `/v1/people/${encodeURIComponent(id)}`));
+  }
+
+  async create(ctx: CallContext, input: PersonInput): Promise<Person> {
+    const response = await this.transport.send(ctx, "POST", "/v1/people", {
+      body: personPayload(input),
+      contentType: "application/json",
+    });
+    return toPerson((await response.json()) as PersonBody);
+  }
+
+  async update(ctx: CallContext, id: string, version: number, input: PersonInput): Promise<Person> {
+    const response = await this.transport.send(ctx, "PUT", `/v1/people/${encodeURIComponent(id)}`, {
+      body: personPayload(input),
+      contentType: "application/json",
+      ifMatch: `"${version}"`,
+    });
+    return toPerson((await response.json()) as PersonBody);
+  }
+
+  async remove(ctx: CallContext, id: string): Promise<void> {
+    await this.transport.send(ctx, "DELETE", `/v1/people/${encodeURIComponent(id)}`);
   }
 }
 
