@@ -81,6 +81,10 @@ func New(keys map[byte][]byte, indexKey []byte) (*Keyring, error) {
 
 // ParseKeys reads encryption keys written as "1:<base64>,2:<base64>", the form
 // they take in the environment.
+//
+// A single key may also be written as bare base64, which is read as version 1.
+// Base64 holds no colon, so the two forms cannot be confused, and a first
+// deployment should not have to know about versions it does not have yet.
 func ParseKeys(spec string) (map[byte][]byte, error) {
 	keys := make(map[byte][]byte)
 	for entry := range strings.SplitSeq(spec, ",") {
@@ -88,13 +92,16 @@ func ParseKeys(spec string) (map[byte][]byte, error) {
 		if entry == "" {
 			continue
 		}
-		rawVersion, rawKey, found := strings.Cut(entry, ":")
-		if !found {
-			return nil, errors.New("fieldcrypt: a key must be written as <version>:<base64>")
-		}
-		version, err := strconv.ParseUint(rawVersion, 10, 8)
-		if err != nil || version == 0 {
-			return nil, fmt.Errorf("fieldcrypt: key version %q must be between 1 and 255", rawVersion)
+		version := uint64(1)
+		rawVersion, rawKey, versioned := strings.Cut(entry, ":")
+		if versioned {
+			parsed, err := strconv.ParseUint(rawVersion, 10, 8)
+			if err != nil || parsed == 0 {
+				return nil, fmt.Errorf("fieldcrypt: key version %q must be between 1 and 255", rawVersion)
+			}
+			version = parsed
+		} else {
+			rawKey = entry
 		}
 		if _, dup := keys[byte(version)]; dup {
 			return nil, fmt.Errorf("fieldcrypt: key version %d appears twice", version)

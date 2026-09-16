@@ -154,8 +154,13 @@ func TestParseKeys(t *testing.T) {
 		t.Fatalf("ParseKeys = %d keys, %v", len(keys), err)
 	}
 
+	// One bare key is version 1.
+	bare, err := ParseKeys(a)
+	if err != nil || len(bare) != 1 || len(bare[1]) != KeySize {
+		t.Fatalf("ParseKeys of a bare key = %v, %v", bare, err)
+	}
+
 	for name, spec := range map[string]string{
-		"no version":      a,
 		"version zero":    "0:" + a,
 		"version too big": "256:" + a,
 		"duplicate":       "1:" + a + ",1:" + b,

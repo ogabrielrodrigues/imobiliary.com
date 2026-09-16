@@ -116,6 +116,9 @@ func TestAccessLogLine(t *testing.T) {
 	if err := json.Unmarshal(bytes.TrimSpace(f.logs.Bytes()), &line); err != nil {
 		t.Fatalf("log is not one JSON line: %v\n%s", err, f.logs.String())
 	}
+	if duration, ok := line["duration_ms"].(float64); !ok || duration < 0 {
+		t.Errorf("log duration_ms = %v", line["duration_ms"])
+	}
 	want := map[string]any{
 		"msg": "request", "route": "GET /healthz", "status": float64(200),
 		"client_ip": "203.0.113.7", "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",

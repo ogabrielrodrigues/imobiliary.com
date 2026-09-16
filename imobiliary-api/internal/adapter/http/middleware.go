@@ -173,7 +173,10 @@ func (o *observer) observe(next http.Handler) http.Handler {
 			slog.String("route", route),
 			slog.Int("status", recorder.status),
 			slog.Int64("bytes", recorder.bytes),
-			slog.Duration("duration", elapsed),
+			// Milliseconds as a float: a Duration attribute logs whole
+			// nanoseconds, and on Windows the clock granularity makes every
+			// fast handler read as exactly 0.
+			slog.Float64("duration_ms", float64(elapsed.Microseconds())/1000),
 			slog.String("client_ip", info.ClientIP),
 		}
 		if info.TraceID != "" {

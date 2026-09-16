@@ -134,7 +134,9 @@ func serve(logger *slog.Logger) error {
 	logger.Info("listening",
 		slog.String("addr", cfg.Addr),
 		slog.String("metrics_addr", cfg.MetricsAddr),
-		slog.Int("field_key_version", int(keyring.CurrentVersion())),
+		// Not "key" in the name: the redactor would hide a version number
+		// operators need in order to know which seal is active.
+		slog.Int("field_seal_version", int(keyring.CurrentVersion())),
 	)
 
 	var runErr error
