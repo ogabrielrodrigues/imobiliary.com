@@ -361,7 +361,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-15 — phase 0 complete: imobiliary-api, packages/ui and web green, both platforms start from a production build, pnpm security at 15 checks
+**Last updated:** 2026-09-16 — phase 1's API half done and proved end to end; the web half (screens) is next
 
 ### Done
 
@@ -1165,24 +1165,55 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       favicon are served, so the start itself is proved; the guard is the
       legal item, not a bug.
 
+37. **Phase 1, the API half** (`067b5fe` use cases, `8d95e5d` HTTP), all of it
+    behind `PLANO.md` §7 phase 1.
+    - **Migrations 0002 and 0003**: organisations, users, memberships, refresh
+      tokens, password resets, invitations, `user_totp`, recovery codes, MFA
+      challenges; then `audit_events` and `access_records`. RLS is deliberately
+      absent from the identity tables: signing in happens before an
+      organisation is known.
+    - **`audit_events` revokes UPDATE and DELETE from the application role**,
+      so the trail cannot be quietly corrected, and its foreign keys set null
+      rather than cascade: erasing a person must not erase the evidence.
+    - **Access records for the Marco Civil (art. 15)**: IP, source port and
+      instant, kept six months and swept hourly. Not partitioned, on purpose:
+      an office writes thousands of rows in six months.
+    - **Ed25519 access tokens**, so another service can verify without being
+      able to mint. The key's name is in the header; keys rotate. A test
+      re-signs a token as `none` and as HMAC with the public key, both refused.
+    - **TOTP is ours**, RFC 6238 over the standard library, reproducing the
+      RFC's vectors. **Confirming an enrolment records the step it accepted**,
+      so the next code must belong to a later step: in a test, ask for
+      `totp.Step(now)+1` rather than waiting thirty seconds.
+    - **The rules the user chose are enforced and tested**: an admin must hold
+      a second factor and may not disable it; an office never loses its last
+      admin; removing a member ends their sessions; one challenge is one
+      attempt; one invitation link joins once.
+    - **A token minted in the same second as a password change survives it**,
+      because a JWT issue time carries whole seconds. The integration test
+      sleeps past a second boundary on purpose, as docgen's does.
+    - **json/v2 matches field names exactly.** A test struct without tags reads
+      nothing and fails with empty values, which cost two rounds here.
+    - **A nil `[]string` reaches PostgreSQL as NULL**, not as an empty array;
+      the audit repository now always sends a list.
+    - `.env` needs **`IMOBILIARY_TOKEN_KEYS`** and either a Resend key or
+      `IMOBILIARY_MAIL_LOG=true`, or the service refuses to start.
+    - **Not done in phase 1 yet:** the web half (public screens, app shell,
+      settings, legal pages), the OpenAPI document, and account deletion and
+      export.
+
 ### Next step
 
-**Finish phase 0 of `PLANO.md`.** The user asked to stop after the API
-skeleton. In order:
+**Phase 1's web half.** The API is done and proved; nothing of it is visible
+yet. In order: the BFF session (copy `docs`' SessionManager, RefreshCoordinator
+and cookie store), `/entrar` with the second-factor step, `/criar-conta`,
+`/esqueci-senha`, `/redefinir-senha`, `/convite`, the app shell with the
+sidebar, `/ajustes` (Aparência, Acessibilidade, Segurança with TOTP and
+recovery codes, Organização with members and invitations), the legal pages, and
+the SEO entries for each new public route.
 
-**Phase 0 is done except for one decision.** `vite build` in `web` produces
-`dist/client` and `dist/server/server.js`, and that file default-exports a
-`{ fetch }` handler: it listens to nothing, which is exactly the open item
-`docs` has carried since it was written. Serving that handler through the
-`srvx` node adapter was tried here and works — the page, `/robots.txt` and the
-production CSP all answer — but **`dist/client` is not served by it**, so
-static assets 404 without either a static layer in the Node entry or a proxy
-in front. Both halves of that are a dependency decision and are with the user.
-
-Then phase 1 in `PLANO.md` §7: identity and organisation.
-
-Deferred by the user, unchanged: **deploy** and the **legal items** of the
-docs platform. See Open items.
+Then, still in phase 1: the OpenAPI document for the new API, and account
+deletion and export (LGPD arts. 18 and 16).
 
 Not in the editor on purpose, for now: fonts, colours, highlight, tables,
 images, headers and footers. Tables are the costly one: the block model,
