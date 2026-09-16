@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from "react";
 import { IconSearch, IconX } from "@tabler/icons-react";
 
-import type { PersonSummary } from "@/domain/person";
+import type { PersonKind, PersonSummary } from "@/domain/person";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +22,7 @@ export function PersonPicker({
   chosen,
   exclude,
   multiple,
+  kind,
   onChange,
 }: {
   readonly label: string;
@@ -31,6 +32,8 @@ export function PersonPicker({
   /** Ids never offered, such as the person being edited. */
   readonly exclude: readonly string[];
   readonly multiple: boolean;
+  /** Offer only this kind; both when absent. */
+  readonly kind?: PersonKind;
   readonly onChange: (people: readonly PersonSummary[]) => void;
 }) {
   const id = useId();
@@ -47,7 +50,7 @@ export function PersonPicker({
     let cancelled = false;
     const timer = setTimeout(async () => {
       setSearching(true);
-      const result = await listPeople({ data: { q, kind: "individual" } });
+      const result = await listPeople({ data: { q, kind } });
       if (cancelled) return;
       setSearching(false);
       setResults(result.ok ? result.value.people : []);
@@ -56,7 +59,7 @@ export function PersonPicker({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query]);
+  }, [query, kind]);
 
   const taken = new Set([...exclude, ...chosen.map((p) => p.id)]);
   const offered = results.filter((p) => !taken.has(p.id));
@@ -99,7 +102,7 @@ export function PersonPicker({
             id={`${id}-search`}
             type="search"
             className="pl-9"
-            placeholder="Buscar pelo nome ou CPF"
+            placeholder={kind === "individual" ? "Buscar pelo nome ou CPF" : "Buscar pelo nome, CPF ou CNPJ"}
             value={query}
             autoComplete="off"
             aria-invalid={error !== undefined}
@@ -117,7 +120,10 @@ export function PersonPicker({
           {searching && offered.length === 0 ? (
             <p className="text-caption text-faint">Buscando...</p>
           ) : offered.length === 0 ? (
-            <p className="text-caption text-faint">Nenhuma pessoa física encontrada com esse nome.</p>
+            <p className="text-caption text-faint">
+              {kind === "individual" ? "Nenhuma pessoa física encontrada." : "Nenhuma pessoa encontrada."} Cadastre-a em
+              Pessoas antes.
+            </p>
           ) : (
             <ul className="flex flex-col rounded-md border border-border">
               {offered.map((person) => (

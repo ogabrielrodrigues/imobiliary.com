@@ -5,6 +5,7 @@ import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { messageFor, summaryOf, type Failure, type Result } from "@/application/result";
 import { FormField } from "@/components/form-field";
 import { PersonPicker } from "@/components/people/person-picker";
+import { SelectField } from "@/components/select-field";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -291,6 +292,7 @@ export function PersonForm({
                       hint="Precisa estar cadastrado como casado(a) ou em união estável. O vínculo aparece nos dois cadastros."
                       error={serverError("spouse_id") ?? visibleError(field.state.meta, submitted)}
                       multiple={false}
+                      kind="individual"
                       exclude={personId === undefined ? [] : [personId]}
                       chosen={names.filter((p) => p.id === field.state.value)}
                       onChange={(people) => {
@@ -317,6 +319,7 @@ export function PersonForm({
                   hint="Pessoas físicas já cadastradas."
                   error={serverError("representative_ids") ?? visibleError(field.state.meta, submitted)}
                   multiple
+                  kind="individual"
                   exclude={personId === undefined ? [] : [personId]}
                   chosen={field.state.value
                     .map((id) => names.find((p) => p.id === id))
@@ -529,64 +532,6 @@ function PrimaryCheckbox({ checked, onChange }: { readonly checked: boolean; rea
       <Label htmlFor={id} className="font-normal text-muted-foreground">
         Principal
       </Label>
-    </div>
-  );
-}
-
-/**
- * A native select drawn like the text inputs. Native, because a phone then
- * shows its own picker, and 27 UFs are faster to choose there than in a
- * custom list.
- */
-function SelectField({
-  label,
-  hint,
-  error,
-  value,
-  options,
-  onChange,
-  onBlur,
-}: {
-  readonly label: string;
-  readonly hint?: string;
-  readonly error?: string | undefined;
-  readonly value: string;
-  readonly options: readonly (readonly [string, string])[];
-  readonly onChange: (value: string) => void;
-  readonly onBlur: () => void;
-}) {
-  const id = useId();
-  const message = error ?? hint;
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      <select
-        id={id}
-        value={value}
-        aria-invalid={error !== undefined}
-        {...(message === undefined ? {} : { "aria-describedby": `${id}-message` })}
-        onBlur={onBlur}
-        onChange={(event) => {
-          const next = event.currentTarget.value;
-          onChange(next);
-        }}
-        className={cn(
-          "h-9.5 w-full min-w-0 rounded-md border border-input-border bg-input px-3 text-sm text-foreground outline-none",
-          "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/20",
-          "aria-invalid:border-destructive/70",
-        )}
-      >
-        {options.map(([optionValue, optionLabel]) => (
-          <option key={optionValue} value={optionValue}>
-            {optionLabel}
-          </option>
-        ))}
-      </select>
-      {message !== undefined && (
-        <p id={`${id}-message`} className={error === undefined ? "text-xs text-faint" : "text-xs text-destructive"}>
-          {message}
-        </p>
-      )}
     </div>
   );
 }

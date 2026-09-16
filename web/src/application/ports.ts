@@ -25,6 +25,7 @@ import type {
   PersonInput,
   PersonKind,
 } from "../domain/person.ts";
+import type { PropertiesPage, Property, PropertyInput } from "../domain/property.ts";
 
 /**
  * What a single call to the API needs beyond its arguments.
@@ -108,6 +109,18 @@ export interface PeopleGateway {
   /** Replaces the person as of `version`; a newer one is a StaleVersionError. */
   update(ctx: CallContext, id: string, version: number, input: PersonInput): Promise<Person>;
   /** A person something still links to is an InUseError. */
+  remove(ctx: CallContext, id: string): Promise<void>;
+}
+
+/** The office's register of properties. */
+export interface PropertiesGateway {
+  list(
+    ctx: CallContext,
+    query: { q?: string; ownerId?: string; cursor?: string; limit?: number },
+  ): Promise<PropertiesPage>;
+  get(ctx: CallContext, id: string): Promise<Property>;
+  create(ctx: CallContext, input: PropertyInput): Promise<Property>;
+  update(ctx: CallContext, id: string, version: number, input: PropertyInput): Promise<Property>;
   remove(ctx: CallContext, id: string): Promise<void>;
 }
 

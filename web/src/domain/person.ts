@@ -248,6 +248,26 @@ export function maskPhone(value: string): string {
   return `(${area}) ${rest.slice(0, split)}-${rest.slice(split)}`;
 }
 
+/** The lines every address needs, a person's or a property's. */
+export interface AddressLines {
+  readonly street: string;
+  readonly city: string;
+  readonly state: string;
+  readonly zipCode: string;
+}
+
+/** Problems with an address's lines, each field named after `prefix`. */
+export function addressLineProblems(a: AddressLines, prefix: string): FieldError[] {
+  const problems: FieldError[] = [];
+  if (a.street.trim() === "") problems.push({ field: `${prefix}street`, message: "Informe o logradouro." });
+  if (a.city.trim() === "") problems.push({ field: `${prefix}city`, message: "Informe a cidade." });
+  if (!(STATES as readonly string[]).includes(a.state.toUpperCase())) {
+    problems.push({ field: `${prefix}state`, message: "Escolha a UF." });
+  }
+  if (digitsOf(a.zipCode).length !== 8) problems.push({ field: `${prefix}zip_code`, message: "O CEP tem 8 dígitos." });
+  return problems;
+}
+
 /**
  * Every problem the form can find on its own, named as the API names fields
  * so a server answer and a local one land on the same input.
@@ -297,11 +317,7 @@ export function validatePerson(p: PersonInput): FieldError[] {
     add("addresses", "Marque só um endereço como principal.");
   }
   p.addresses.forEach((a, i) => {
-    const field = (name: string) => `addresses[${i}].${name}`;
-    if (a.street.trim() === "") add(field("street"), "Informe o logradouro.");
-    if (a.city.trim() === "") add(field("city"), "Informe a cidade.");
-    if (!(STATES as readonly string[]).includes(a.state.toUpperCase())) add(field("state"), "Escolha a UF.");
-    if (digitsOf(a.zipCode).length !== 8) add(field("zip_code"), "O CEP tem 8 dígitos.");
+    problems.push(...addressLineProblems(a, `addresses[${i}].`));
   });
 
   return problems;

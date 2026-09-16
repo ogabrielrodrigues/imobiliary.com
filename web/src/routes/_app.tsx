@@ -47,7 +47,7 @@ export const Route = createFileRoute("/_app")({
 });
 
 interface NavItem {
-  readonly to: "/dashboard" | "/pessoas" | "/ajustes";
+  readonly to: "/dashboard" | "/imoveis" | "/pessoas" | "/ajustes";
   readonly label: string;
   readonly icon: typeof IconLayoutDashboard;
 }
@@ -62,11 +62,11 @@ interface NavItem {
  */
 const PRIMARY: readonly NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: IconLayoutDashboard },
+  { to: "/imoveis", label: "Imóveis", icon: IconBuildingEstate },
   { to: "/pessoas", label: "Pessoas", icon: IconUsers },
 ];
 
 const SOON: readonly { label: string; icon: typeof IconLayoutDashboard }[] = [
-  { label: "Imóveis", icon: IconBuildingEstate },
   { label: "Contratos", icon: IconFileDescription },
 ];
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
-import { IconArrowLeft, IconTrash } from "@tabler/icons-react";
+import { IconArrowLeft, IconBuildingEstate, IconTrash } from "@tabler/icons-react";
 
 import { summaryOf, type Failure } from "@/application/result";
 import { PersonForm } from "@/components/people/person-form";
@@ -16,12 +16,21 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { KIND_LABELS } from "@/domain/person";
+import { addressLine, addressPlace } from "@/domain/property";
 import { deletePerson, getPerson, updatePerson } from "@/server/people";
+import { listProperties } from "@/server/properties";
 
 export const Route = createFileRoute("/_app/pessoas/$personId")({
-  loader: ({ params }) => getPerson({ data: params.personId }),
+  // The person and what they own, in parallel: both are reads of one office.
+  loader: async ({ params }) => {
+    const [person, owned] = await Promise.all([
+      getPerson({ data: params.personId }),
+      listProperties({ data: { ownerId: params.personId } }),
+    ]);
+    return { person, owned };
+  },
   head: ({ loaderData }) => ({
-    meta: [{ title: `${loaderData?.ok ? loaderData.value.person.name : "Pessoa"} | Imobiliary` }],
+    meta: [{ title: `${loaderData?.person.ok ? loaderData.person.value.person.name : "Pessoa"} | Imobiliary` }],
   }),
   component: PersonPage,
 });
@@ -34,7 +43,7 @@ export const Route = createFileRoute("/_app/pessoas/$personId")({
  * edit must send.
  */
 function PersonPage() {
-  const result = Route.useLoaderData();
+  const { person: result, owned } = Route.useLoaderData();
   const router = useRouter();
   const [saved, setSaved] = useState(false);
 
@@ -71,6 +80,31 @@ function PersonPage() {
           <DeletePerson id={person.id} name={person.name} />
         </div>
       </header>
+
+      {owned.ok && owned.value.properties.length > 0 && (
+        <section aria-labelledby="owned-title" className="flex flex-col gap-2">
+          <h2 id="owned-title" className="text-sm font-semibold">
+            Imóveis
+          </h2>
+          <ul className="flex flex-col overflow-hidden rounded-lg border border-border bg-card">
+            {owned.value.properties.map((property) => (
+              <li key={property.id} className="border-b border-border last:border-b-0">
+                <Link
+                  to="/imoveis/$propertyId"
+                  params={{ propertyId: property.id }}
+                  className="flex items-center gap-3 px-4 py-2.5 hover:bg-row-hover focus-visible:bg-row-hover focus-visible:outline-none"
+                >
+                  <IconBuildingEstate aria-hidden="true" className="size-4 shrink-0 text-faint" />
+                  <span className="truncate text-small font-medium">{addressLine(property.address)}</span>
+                  <span className="ml-auto shrink-0 truncate text-caption text-muted-foreground">
+                    {addressPlace(property.address)}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {saved && (
         <p role="status" className="rounded-md border border-success/35 bg-success/5 px-4 py-3 text-small text-success-soft">
@@ -148,7 +182,7 @@ function DeletePerson({ id, name }: { readonly id: string; readonly name: string
               <p role="alert" className="text-small text-destructive-soft">
                 {summaryOf(failure, {
                   in_use:
-                    "Não é possível excluir: esta pessoa ainda está ligada a outro cadastro, como uma empresa que representa. Desfaça o vínculo antes.",
+                    "Não é possível excluir: esta pessoa ainda está ligada a outro cadastro, como um imóvel de que é proprietária ou uma empresa que representa. Desfaça o vínculo antes.",
                 })}
               </p>
             )}

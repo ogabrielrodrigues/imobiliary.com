@@ -21,6 +21,7 @@ import type {
   PasswordGateway,
   PeopleGateway,
   PrivacyGateway,
+  PropertiesGateway,
   SecondFactorGateway,
 } from "../../application/ports.ts";
 import type {
@@ -45,6 +46,15 @@ import type {
   PersonKind,
   PropertyRegime,
 } from "../../domain/person.ts";
+import {
+  parseShare,
+  shareForApi,
+  shareFromApi,
+  type PropertiesPage,
+  type Property,
+  type PropertyAddress,
+  type PropertyInput,
+} from "../../domain/property.ts";
 import { Transport } from "./transport.ts";
 
 // --- the shapes the API answers with ----------------------------------------
@@ -156,6 +166,7 @@ export function createGateways(transport: Transport): {
   organizations: OrganizationGateway;
   privacy: PrivacyGateway;
   people: PeopleGateway;
+  properties: PropertiesGateway;
 } {
   return {
     identity: new IdentityClient(transport),
@@ -164,6 +175,7 @@ export function createGateways(transport: Transport): {
     organizations: new OrganizationClient(transport),
     privacy: new PrivacyClient(transport),
     people: new PeopleClient(transport),
+    properties: new PropertiesClient(transport),
   };
 }
 
@@ -408,6 +420,138 @@ class PeopleClient implements PeopleGateway {
 
   async remove(ctx: CallContext, id: string): Promise<void> {
     await this.transport.send(ctx, "DELETE", `/v1/people/${encodeURIComponent(id)}`);
+  }
+}
+
+interface PropertyAddressBody {
+  street: string;
+  number: string;
+  complement: string;
+  district: string;
+  city: string;
+  state: string;
+  zip_code: string;
+  observation: string;
+}
+
+interface PropertyBody {
+  id: string;
+  address: PropertyAddressBody;
+  registry: string;
+  registry_office: string;
+  municipal_registration: string;
+  water_code: string;
+  energy_code: string;
+  owners: { person_id: string; share: string; name: string; kind: PersonKind }[];
+  version: number;
+}
+
+interface PropertiesPageBody {
+  properties: { id: string; address: PropertyAddressBody; registry: string; owner_names: string[] }[];
+  next_cursor?: string;
+}
+
+function toPropertyAddress(a: PropertyAddressBody): PropertyAddress {
+  return {
+    street: a.street,
+    number: a.number,
+    complement: a.complement,
+    district: a.district,
+    city: a.city,
+    state: a.state,
+    zipCode: a.zip_code,
+    observation: a.observation,
+  };
+}
+
+function toProperty(b: PropertyBody): Property {
+  return {
+    id: b.id,
+    address: toPropertyAddress(b.address),
+    registry: b.registry,
+    registryOffice: b.registry_office,
+    municipalRegistration: b.municipal_registration,
+    waterCode: b.water_code,
+    energyCode: b.energy_code,
+    owners: b.owners.map((o) => ({ personId: o.person_id, share: shareFromApi(o.share), name: o.name, kind: o.kind })),
+    version: b.version,
+  };
+}
+
+/** Shares leave as the API reads a rate, with a dot: "33,3333" becomes "33.3333". */
+function propertyPayload(p: PropertyInput): string {
+  const a = p.address;
+  return JSON.stringify({
+    address: {
+      street: a.street,
+      number: a.number,
+      complement: a.complement,
+      district: a.district,
+      city: a.city,
+      state: a.state,
+      zip_code: a.zipCode,
+      observation: a.observation,
+    },
+    registry: p.registry,
+    registry_office: p.registryOffice,
+    municipal_registration: p.municipalRegistration,
+    water_code: p.waterCode,
+    energy_code: p.energyCode,
+    owners: p.owners.map((o) => {
+      const share = parseShare(o.share);
+      return { person_id: o.personId, share: share === null ? o.share : shareForApi(share) };
+    }),
+  });
+}
+
+class PropertiesClient implements PropertiesGateway {
+  constructor(private readonly transport: Transport) {}
+
+  async list(
+    ctx: CallContext,
+    query: { q?: string; ownerId?: string; cursor?: string; limit?: number },
+  ): Promise<PropertiesPage> {
+    const params = new URLSearchParams();
+    if (query.q) params.set("q", query.q);
+    if (query.ownerId) params.set("owner_id", query.ownerId);
+    if (query.cursor) params.set("cursor", query.cursor);
+    if (query.limit !== undefined) params.set("limit", String(query.limit));
+    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const body = await this.transport.json<PropertiesPageBody>(ctx, "GET", `/v1/properties${suffix}`);
+    return {
+      properties: body.properties.map((p) => ({
+        id: p.id,
+        address: toPropertyAddress(p.address),
+        registry: p.registry,
+        ownerNames: p.owner_names,
+      })),
+      nextCursor: body.next_cursor ?? null,
+    };
+  }
+
+  async get(ctx: CallContext, id: string): Promise<Property> {
+    return toProperty(await this.transport.json<PropertyBody>(ctx, "GET", `/v1/properties/${encodeURIComponent(id)}`));
+  }
+
+  async create(ctx: CallContext, input: PropertyInput): Promise<Property> {
+    const response = await this.transport.send(ctx, "POST", "/v1/properties", {
+      body: propertyPayload(input),
+      contentType: "application/json",
+    });
+    return toProperty((await response.json()) as PropertyBody);
+  }
+
+  async update(ctx: CallContext, id: string, version: number, input: PropertyInput): Promise<Property> {
+    const response = await this.transport.send(ctx, "PUT", `/v1/properties/${encodeURIComponent(id)}`, {
+      body: propertyPayload(input),
+      contentType: "application/json",
+      ifMatch: `"${version}"`,
+    });
+    return toProperty((await response.json()) as PropertyBody);
+  }
+
+  async remove(ctx: CallContext, id: string): Promise<void> {
+    await this.transport.send(ctx, "DELETE", `/v1/properties/${encodeURIComponent(id)}`);
   }
 }
 
