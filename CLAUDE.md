@@ -366,7 +366,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-16: phase 3 complete (properties with owners' shares, API and web); phase 4 (contracts and instalments) is next
+**Last updated:** 2026-09-16: phase 4 complete (contracts, legal notices and the schedule of rents, API and web); phase 5 (amendments) is next
 
 ### Done
 
@@ -1389,17 +1389,66 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       passing test failed its cleanup on SQLSTATE 42501, most likely an
       autovacuum worker the test role cannot terminate.
 
+44. **Phase 4: contracts and instalments** (`f829849` API, `157b619` web).
+    - **Migration 0008**: `contracts`, `contract_parties`,
+      `contract_acknowledgments`, `rents`, all FORCE RLS and RESTRICT to the
+      office. `contracts_one_lease_per_property` is a gist exclusion over
+      `daterange(starts_on, COALESCE(terminated_on, expires_on), '[]')`, so a
+      termination frees the property from the next day. It answers 23P01,
+      turned into a 422 on `starts_on`.
+    - **Domain** (`domain/contract.go`): structural rules, `TermMonths`
+      (whole months, one more for a remainder), `Schedule` (instalment 1 on
+      the start, then `due_day` clamped to the month), `Notices` and
+      `MissingAcknowledgements` (422 on `acknowledgments` whose message is the
+      code). `adjustment_period` from the plan belongs to amendments (phase 5)
+      and is not raised yet.
+    - **Landlords default to the property's owners** when the request names
+      none. Guarantors and their spouses must be individuals.
+    - **Editing regenerates the schedule** and is refused once a rent is paid
+      (`rents`) or after a termination. Notices acknowledged before still
+      count; a notice no longer raised loses its row, the audit keeps it.
+    - **Termination** removes unpaid rents due after the day, in the same
+      transaction. A paid contract cannot be deleted (`409 in_use`).
+    - **PostgreSQL cannot infer the type of a parameter no clause uses.** The
+      list first added "today" for every status filter and `terminated`
+      answered 500; parameters are now added only by the clause that reads them.
+    - Routes: `GET/POST /v1/contracts`, `POST /v1/contracts/preview`,
+      `GET/PUT/DELETE /v1/contracts/{id}`, `POST /v1/contracts/{id}/termination`.
+      OpenAPI 0.4.0 (a `Money` and a `Date` schema now exist), reference page
+      republished at the same URL (version 5), `PRIVACIDADE.md` extended.
+      "Today" is computed in America/Sao_Paulo.
+    - **Web:** `domain/contract.ts` (labels, notice texts in Portuguese, money
+      and percent parsing, `termMonths` ported exactly from Go, validation,
+      `translateContractProblem`), `ContractsGateway`, `server/contracts.ts`,
+      `components/contracts/contract-form.tsx` (four steps: Imóvel, Partes,
+      Valores e prazo, Revisão), `status-badge.tsx`,
+      `components/properties/property-picker.tsx`, routes `/contratos`,
+      `/contratos/novo`, `/contratos/$contractId`,
+      `/contratos/$contractId/editar` (file `$contractId_.editar.tsx`).
+    - **Each step validates only its fields** with the domain validator
+      filtered by `stepOfField`; a refusal from the API on save moves to the
+      first step holding a refused field. The review calls the preview on
+      entering and shows a checkbox per notice.
+    - Sidebar: Contratos is live; Aluguéis is the "em breve" entry.
+    - **Harness:** server functions can be driven from the page with
+      `await import('/src/server/people.ts')`, since Vite serves the source.
+      That is how the test records were created and deleted.
+    - Verified in the browser: the full creation with surety and both notices,
+      day 31 clamped to 30/11 and 28/02, refusal until acknowledged, the edit
+      adding the spouse (one notice left, the old acknowledgement still
+      ticked), a repeated number sent back to step 1 and an overlap to step 3,
+      termination with a date before the start refused then accepted (3 rents
+      left), list filters and search, property deletion refused while the
+      contract existed, 375px without sideways scroll. Test data deleted.
+
 ### Next step
 
-Phase 4 of `PLANO.md` §3.6 and §7: contracts and instalments. The exclusion
-constraint (one contract per property per period), the structural rules
-(one guarantee kind, guarantor only with surety, deposit only with deposit),
-the legal notices with acknowledgement (`advance_rent`,
-`guarantor_spouse_consent`, `deposit_limit`, `adjustment_period`), the
-schedule (instalment 1 on `starts_on`, then `due_day`, day 31 clamped),
-termination and deletion rules, and the multi-step creation screen. Contracts
-must reference properties and people with RESTRICT, which makes the property
-deletion refusal real.
+Phase 5 of `PLANO.md` §3.7: amendments. The suggested value (previous rent
+times the index rate, never lower with a negative rate), `amended_on`, and in
+one transaction `contracts.current_rent` plus the pending rents due on or after
+that day. The `adjustment_period` notice (less than 12 months since the start
+or the last adjustment) belongs here. Contract editing already refuses after a
+payment, so amendments are how the rent changes from then on.
 
 Not in the editor on purpose, for now: fonts, colours, highlight, tables,
 images, headers and footers. Tables are the costly one: the block model,
