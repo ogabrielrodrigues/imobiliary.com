@@ -33,6 +33,9 @@ const (
 	ActionPersonCreated       AuditAction = "person.created"
 	ActionPersonUpdated       AuditAction = "person.updated"
 	ActionPersonDeleted       AuditAction = "person.deleted"
+	ActionPropertyCreated     AuditAction = "property.created"
+	ActionPropertyUpdated     AuditAction = "property.updated"
+	ActionPropertyDeleted     AuditAction = "property.deleted"
 )
 
 // AuditEvent is one entry in the trail.

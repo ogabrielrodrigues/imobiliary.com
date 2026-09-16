@@ -249,11 +249,52 @@ type PersonRepository interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 }
 
+// PropertyQuery filters and pages the list of properties.
+type PropertyQuery struct {
+	// AddressContains matches a fragment of the folded street, district or
+	// city, or of the registry or municipal registration.
+	AddressContains string
+	// OwnerID keeps only the properties that person owns a share of.
+	OwnerID *uuid.UUID
+	After   *PropertyCursor
+	Limit   int
+}
+
+// PropertyCursor is where a page of the list, ordered by address, ended.
+type PropertyCursor struct {
+	SortKey string
+	ID      uuid.UUID
+}
+
+// PropertyOwnerView is an owner as a screen shows them: the share, and who
+// the person is.
+type PropertyOwnerView struct {
+	PersonID uuid.UUID
+	Share    domain.Rate
+	Name     string
+	Kind     domain.PersonKind
+}
+
+// PropertyRepository stores properties, bound to an organisation-scoped
+// transaction like PersonRepository.
+type PropertyRepository interface {
+	Create(ctx context.Context, p *domain.Property) error
+	// Update replaces the property when its version still matches, reporting
+	// domain.ErrPreconditionFailed otherwise.
+	Update(ctx context.Context, p *domain.Property, version int) error
+	Get(ctx context.Context, id uuid.UUID) (*domain.Property, []PropertyOwnerView, error)
+	List(ctx context.Context, q PropertyQuery) ([]domain.PropertySummary, []PropertyCursor, error)
+	// Delete removes the property, its owners and its address, reporting
+	// domain.ErrInUse when something still links to it.
+	Delete(ctx context.Context, id uuid.UUID) error
+}
+
 // ScopedRepositories are the stores of one office's business data, bound to a
 // transaction scoped to it.
 type ScopedRepositories struct {
-	People PersonRepository
-	Audit  AuditRepository
+	People     PersonRepository
+	Properties PropertyRepository
+	Audit      AuditRepository
 }
 
 // OrganizationScope runs work inside one office: a transaction in which the

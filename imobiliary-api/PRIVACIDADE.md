@@ -4,7 +4,7 @@ Documento interno, mantido em cumprimento ao art. 37 da Lei n.º 13.709/2018
 (LGPD), para a `imobiliary-api`. Descreve o que o serviço faz de fato: foi
 escrito a partir do código e deve ser corrigido sempre que o código mudar.
 
-**Última revisão:** 2026-09-16 (fase 2: pessoas e endereços)
+**Última revisão:** 2026-09-16 (fase 3: imóveis)
 
 O que os titulares leem está em `web/src/routes/privacidade.tsx` e
 `web/src/routes/termos.tsx`. Este registro e esses textos precisam continuar
@@ -18,7 +18,7 @@ dizendo a mesma coisa.
 |---|---|
 | Conta de quem usa a plataforma (nome, e-mail, senha, sessões, segundo fator) | **Controladora** |
 | Registros de acesso (Marco Civil, art. 15) e trilha de auditoria | **Controladora** |
-| Pessoas cadastradas pelo escritório (proprietários, locatários, fiadores, representantes) e seus endereços | **Operadora**; o controlador é o escritório |
+| Pessoas e imóveis cadastrados pelo escritório (proprietários, locatários, fiadores, representantes, endereços, matrículas) | **Operadora**; o controlador é o escritório |
 
 Quem decide cadastrar o CPF de um locatário é o escritório. Um pedido de
 titular sobre esses dados é encaminhado a ele, e a plataforma trata os dados
@@ -64,6 +64,20 @@ A aplicação não pode alterar nem apagar a trilha: a migração revoga `UPDATE
 | Nome fantasia, representantes | `companies`, `company_representatives` | texto | idem |
 | Endereços | `addresses`, `person_addresses` | **texto puro** | idem |
 
+### Imóveis (dados do escritório)
+
+| Dado | Onde | Forma | Retenção |
+|---|---|---|---|
+| Endereço do imóvel | `addresses`, ligado a `properties` | texto puro, pesquisável | até o escritório excluir o imóvel |
+| Matrícula, cartório, inscrição do IPTU | `properties` | texto puro | idem |
+| Códigos de água e energia | `properties` | texto puro | idem |
+| Proprietários e suas partes | `property_owners` | identificador da pessoa e percentual | idem |
+
+Isoladamente não são dados pessoais, mas ligados aos proprietários revelam
+patrimônio de pessoas físicas, por isso seguem o mesmo isolamento por
+escritório e a mesma auditoria sem valores. A soma das partes em 100% é
+conferida também pelo banco, na confirmação da transação.
+
 A base legal desses dados é do escritório, não da Imobiliary. Na prática são
 execução de contrato de locação e procedimentos preliminares (art. 7º, V) e
 exercício regular de direitos (art. 7º, VI).
@@ -77,7 +91,7 @@ então a coluna não permite cruzar pessoas entre escritórios.
 
 ## Isolamento entre escritórios
 
-Toda consulta a pessoas e endereços acontece numa transação que fixa o
+Toda consulta a pessoas, endereços e imóveis acontece numa transação que fixa o
 escritório (`set_config('app.organization_id', ..., true)`), e as tabelas têm
 row-level security **forçada**, inclusive para o dono das tabelas. Uma consulta
 fora desse escopo não enxerga nenhuma linha. Os repositórios não filtram por
@@ -85,7 +99,8 @@ escritório de outra forma, e os testes de integração rodam como dono das
 tabelas; por isso uma política ausente derruba um teste
 (`TestOfficesCannotSeeEachOthersPeople`).
 
-Qualquer membro do escritório, administrador ou não, lê e altera as pessoas.
+Qualquer membro do escritório, administrador ou não, lê e altera as pessoas e os
+imóveis.
 
 ## Compartilhamento e transferência internacional
 
@@ -116,8 +131,8 @@ tratamento assinado** (ver lacunas).
   `RESTRICT` no banco, e a exclusão da conta é recusada com
   `organization_data`. Decisão do usuário em 2026-09-16: nada do que o
   escritório cadastrou desaparece como efeito colateral.
-- Uma pessoa ligada a outro registro (representante de empresa hoje; imóvel e
-  contrato nas próximas fases) não pode ser excluída enquanto o vínculo existir.
+- Uma pessoa ligada a outro registro (representante de empresa ou proprietário de imóvel hoje; contrato
+  nas próximas fases) não pode ser excluída enquanto o vínculo existir.
 
 ## Medidas de segurança (art. 46)
 

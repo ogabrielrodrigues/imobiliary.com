@@ -179,6 +179,10 @@ func serve(logger *slog.Logger) error {
 		Sealer: sealer,
 		Logger: logger,
 	})
+	properties := usecase.NewProperties(usecase.PropertiesConfig{
+		Scope:  db,
+		Logger: logger,
+	})
 	privacy := usecase.NewPrivacy(usecase.PrivacyConfig{
 		Identity:     identity,
 		Repositories: repos,
@@ -207,6 +211,7 @@ func serve(logger *slog.Logger) error {
 		Organizations:     organizations,
 		Privacy:           privacy,
 		People:            people,
+		Properties:        properties,
 		Auditor:           auditor,
 		Signer:            signer,
 		Logger:            logger,

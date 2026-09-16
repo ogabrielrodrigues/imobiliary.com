@@ -21,8 +21,9 @@ import (
 func (db *DB) InOrganization(ctx context.Context, organizationID uuid.UUID, fn func(usecase.ScopedRepositories) error) error {
 	return db.InOrganizationTx(ctx, organizationID, func(tx pgx.Tx) error {
 		return fn(usecase.ScopedRepositories{
-			People: &personRepository{q: tx, organizationID: organizationID},
-			Audit:  &auditRepository{tx},
+			People:     &personRepository{q: tx, organizationID: organizationID},
+			Properties: &propertyRepository{q: tx, organizationID: organizationID},
+			Audit:      &auditRepository{tx},
 		})
 	})
 }

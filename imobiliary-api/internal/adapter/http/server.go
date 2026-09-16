@@ -35,6 +35,7 @@ type Options struct {
 	Organizations *usecase.Organizations
 	Privacy       *usecase.Privacy
 	People        *usecase.People
+	Properties    *usecase.Properties
 	Auditor       *usecase.Auditor
 	// Signer parses the access tokens this service issued.
 	Signer  *token.Signer
@@ -57,6 +58,7 @@ type Server struct {
 	organizations *usecase.Organizations
 	privacy       *usecase.Privacy
 	people        *usecase.People
+	properties    *usecase.Properties
 	auditor       *usecase.Auditor
 	signer        *token.Signer
 	logger        *slog.Logger
@@ -78,6 +80,7 @@ func NewServer(opts Options) *Server {
 		organizations: opts.Organizations,
 		privacy:       opts.Privacy,
 		people:        opts.People,
+		properties:    opts.Properties,
 		auditor:       opts.Auditor,
 		signer:        opts.Signer,
 		logger:        opts.Logger,
@@ -150,6 +153,13 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /v1/people/{personID}", authenticated(http.HandlerFunc(s.handleGetPerson)))
 	mux.Handle("PUT /v1/people/{personID}", write(http.HandlerFunc(s.handleUpdatePerson)))
 	mux.Handle("DELETE /v1/people/{personID}", write(http.HandlerFunc(s.handleDeletePerson)))
+
+	// Properties, likewise.
+	mux.Handle("GET /v1/properties", authenticated(http.HandlerFunc(s.handleListProperties)))
+	mux.Handle("POST /v1/properties", write(http.HandlerFunc(s.handleCreateProperty)))
+	mux.Handle("GET /v1/properties/{propertyID}", authenticated(http.HandlerFunc(s.handleGetProperty)))
+	mux.Handle("PUT /v1/properties/{propertyID}", write(http.HandlerFunc(s.handleUpdateProperty)))
+	mux.Handle("DELETE /v1/properties/{propertyID}", write(http.HandlerFunc(s.handleDeleteProperty)))
 
 	// Probes, and the catch-all that answers JSON rather than net/http's text.
 	mux.HandleFunc("GET /healthz", s.handleLive)

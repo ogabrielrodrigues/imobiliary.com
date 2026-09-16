@@ -176,16 +176,21 @@ func NormalizePerson(p *Person) {
 	p.Occupation = collapseSpaces(p.Occupation)
 	p.TradeName = collapseSpaces(p.TradeName)
 	for i := range p.Addresses {
-		a := &p.Addresses[i]
-		a.Street = collapseSpaces(a.Street)
-		a.Number = collapseSpaces(a.Number)
-		a.Complement = collapseSpaces(a.Complement)
-		a.District = collapseSpaces(a.District)
-		a.City = collapseSpaces(a.City)
-		a.State = strings.ToUpper(strings.TrimSpace(a.State))
-		a.ZipCode = digitsOnly(a.ZipCode)
-		a.Observation = strings.TrimSpace(a.Observation)
+		NormalizeAddress(&p.Addresses[i])
 	}
+}
+
+// NormalizeAddress trims an address and reduces the UF to capitals and the CEP
+// to its digits. A person's addresses and a property's use the same rules.
+func NormalizeAddress(a *Address) {
+	a.Street = collapseSpaces(a.Street)
+	a.Number = collapseSpaces(a.Number)
+	a.Complement = collapseSpaces(a.Complement)
+	a.District = collapseSpaces(a.District)
+	a.City = collapseSpaces(a.City)
+	a.State = strings.ToUpper(strings.TrimSpace(a.State))
+	a.ZipCode = digitsOnly(a.ZipCode)
+	a.Observation = strings.TrimSpace(a.Observation)
 }
 
 // ValidatePerson checks a person as a whole, after NormalizePerson.
@@ -330,28 +335,34 @@ func validateAddresses(v *ValidationError, addresses []Address) {
 		if a.IsPrimary {
 			primaries++
 		}
-		if a.Street == "" {
-			v.Add(field("street"), "is required")
-		}
-		if a.City == "" {
-			v.Add(field("city"), "is required")
-		}
-		if !IsState(a.State) {
-			v.Add(field("state"), "is not a Brazilian state")
-		}
-		if len(a.ZipCode) != 8 {
-			v.Add(field("zip_code"), "must have 8 digits")
-		}
-		checkLength(v, field("street"), a.Street, MaxShortTextLength)
-		checkLength(v, field("number"), a.Number, 20)
-		checkLength(v, field("complement"), a.Complement, MaxShortTextLength)
-		checkLength(v, field("district"), a.District, MaxShortTextLength)
-		checkLength(v, field("city"), a.City, MaxShortTextLength)
-		checkLength(v, field("observation"), a.Observation, MaxObservationLength)
+		validateAddressLines(v, a, field)
 	}
 	if primaries > 1 {
 		v.Add("addresses", "must have at most one primary address")
 	}
+}
+
+// validateAddressLines checks the lines every address has, naming each field
+// through field so a list and a single address report the same way.
+func validateAddressLines(v *ValidationError, a Address, field func(string) string) {
+	if a.Street == "" {
+		v.Add(field("street"), "is required")
+	}
+	if a.City == "" {
+		v.Add(field("city"), "is required")
+	}
+	if !IsState(a.State) {
+		v.Add(field("state"), "is not a Brazilian state")
+	}
+	if len(a.ZipCode) != 8 {
+		v.Add(field("zip_code"), "must have 8 digits")
+	}
+	checkLength(v, field("street"), a.Street, MaxShortTextLength)
+	checkLength(v, field("number"), a.Number, 20)
+	checkLength(v, field("complement"), a.Complement, MaxShortTextLength)
+	checkLength(v, field("district"), a.District, MaxShortTextLength)
+	checkLength(v, field("city"), a.City, MaxShortTextLength)
+	checkLength(v, field("observation"), a.Observation, MaxObservationLength)
 }
 
 // states are the 26 states and the Federal District.

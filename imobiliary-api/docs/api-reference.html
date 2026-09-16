@@ -112,7 +112,7 @@
 <div class="shell">
   <nav class="rail" aria-label="Sections">
     <div class="brand">imobiliary <span>api</span></div>
-    <div class="ver">v0.2.0 · phase 2</div>
+    <div class="ver">v0.3.0 · phase 3</div>
     <h3>Guide</h3>
     <ul>
       <li><a href="#auth">Authentication</a></li>
@@ -130,6 +130,7 @@
       <li><a href="#office">Office</a></li>
       <li><a href="#invitations">Invitations</a></li>
       <li><a href="#people">People</a></li>
+      <li><a href="#properties">Properties</a></li>
       <li><a href="#operations">Operations</a></li>
     </ul>
   </nav>
@@ -138,7 +139,7 @@
     <header class="top">
       <div class="eyebrow">Reference</div>
       <h1>Imobiliary API</h1>
-      <p class="lede">The service behind the rental management platform: identity and the office, the account holder's rights under the LGPD, and the office's register of people with their addresses.</p>
+      <p class="lede">The service behind the rental management platform: identity and the office, the account holder's rights under the LGPD, and the office's register of people and properties.</p>
       <div class="facts">
         <span>base <b>http://127.0.0.1:8081</b></span>
         <span>format <b>application/json</b></span>
@@ -445,6 +446,44 @@ If-Match: "3"
         <div class="sig"><span class="m delete">DELETE</span><span class="path">/v1/people/{personID}</span><span class="access">session · writes</span></div>
         <p>Permanent, with the person's addresses, audited without values. Refused while something links to the person, such as a company they represent. A spouse keeps their record and loses the link.</p>
         <dl class="io"><dt>Answers</dt><dd><code>204</code> · <code>404</code> · <code>409 in_use</code></dd></dl>
+      </article>
+    </section>
+
+    <section class="block" id="properties">
+      <h2>Properties</h2>
+      <p>A property has one address of its own, its registration numbers and one or more owners. Shares are percentages with up to four decimal places and add up to exactly 100: a property split in three is <code>33.3333</code>, <code>33.3333</code> and <code>33.3334</code>. The database checks the sum again when the transaction commits.</p>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/properties</span><span class="access">session</span></div>
+        <p>Ordered by street and number, ignoring case and accents. <code>q</code> matches the street, district or city, the registry or the municipal registration; <code>owner_id</code> keeps what one person owns a share of.</p>
+        <dl class="io"><dt>Query</dt><dd><code>q</code>, <code>owner_id</code>, <code>limit</code>, <code>cursor</code></dd><dt>Answers</dt><dd><code>200</code> <code>{ properties, next_cursor }</code>, each with <code>owner_names</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/properties</span><span class="access">session · writes</span></div>
+        <p>Registers a property. Each owner must be a person of this office.</p>
+        <dl class="io">
+          <dt>Body</dt><dd><code>address</code> (street, number, complement, district, city, state, zip_code, observation), <code>registry</code>, <code>registry_office</code>, <code>municipal_registration</code>, <code>water_code</code>, <code>energy_code</code>, <code>owners</code> of <code>{ person_id, share }</code></dd>
+          <dt>Answers</dt><dd><code>201</code> <code>Property</code> with <code>ETag</code> · <code>422</code> on <code>owners</code>, <code>owners[i].share</code>, <code>owners[i].person_id</code> or <code>address.*</code></dd>
+        </dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/properties/{propertyID}</span><span class="access">session</span></div>
+        <p>The property with each owner's share, name and kind.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> with <code>ETag</code> · <code>404</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m patch">PUT</span><span class="path">/v1/properties/{propertyID}</span><span class="access">session · writes</span></div>
+        <p>Replaces the record and its owners. The address keeps its identity; only its lines change.</p>
+        <dl class="io"><dt>Headers</dt><dd><code>If-Match: "&lt;version&gt;"</code></dd><dt>Answers</dt><dd><code>200</code> · <code>404</code> · <code>412</code> · <code>422</code> · <code>428</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m delete">DELETE</span><span class="path">/v1/properties/{propertyID}</span><span class="access">session · writes</span></div>
+        <p>Permanent, with the owners' shares and the address. An owner cannot be deleted while they own a share of any property.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>204</code> · <code>404</code> · <code>409 in_use</code> once contracts exist</dd></dl>
       </article>
     </section>
 
