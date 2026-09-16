@@ -1,8 +1,15 @@
-import { IconAccessible, IconBuilding, IconPalette, IconShieldCheck } from "@tabler/icons-react";
+import {
+  IconAccessible,
+  IconBuilding,
+  IconDatabase,
+  IconPalette,
+  IconShieldCheck,
+} from "@tabler/icons-react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { AccessibilityPanel } from "@/components/settings/accessibility-panel";
 import { AppearancePanel } from "@/components/settings/appearance-panel";
+import { DataPanel } from "@/components/settings/data-panel";
 import { OrganizationPanel } from "@/components/settings/organization-panel";
 import { PasswordPanel } from "@/components/settings/password-panel";
 import { SecondFactorPanel } from "@/components/settings/second-factor-panel";
@@ -15,6 +22,7 @@ const TABS = [
   { value: "acessibilidade", label: "Acessibilidade", icon: IconAccessible },
   { value: "seguranca", label: "Segurança", icon: IconShieldCheck },
   { value: "escritorio", label: "Escritório", icon: IconBuilding },
+  { value: "dados", label: "Meus dados", icon: IconDatabase },
 ] as const;
 
 type Tab = (typeof TABS)[number]["value"];
@@ -63,7 +71,7 @@ function SettingsPage() {
         }}
         className="gap-4"
       >
-        {/* Four tabs outgrow a phone, so the list scrolls sideways rather than
+        {/* Five tabs outgrow a phone, so the list scrolls sideways rather than
             wrapping. overflow-y is pinned hidden because overflow-x alone
             turns it into auto and a 1px subpixel overflow would show a bar. */}
         <TabsList className="h-auto overflow-x-auto overflow-y-hidden">
@@ -100,6 +108,10 @@ function SettingsPage() {
               Não foi possível carregar o escritório agora. Recarregue a página.
             </p>
           )}
+        </TabsContent>
+
+        <TabsContent value="dados">
+          <DataPanel />
         </TabsContent>
       </Tabs>
     </div>

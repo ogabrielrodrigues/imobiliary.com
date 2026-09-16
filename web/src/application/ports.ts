@@ -87,6 +87,17 @@ export interface PasswordGateway {
   reset(ctx: CallContext, input: { token: string; password: string }): Promise<void>;
 }
 
+/** What the LGPD lets a person ask about their own account. */
+export interface PrivacyGateway {
+  /**
+   * The copy of everything held about the account, as the API's JSON text.
+   * Kept as text: it is handed to the person as a file, not read here.
+   */
+  exportData(ctx: CallContext): Promise<string>;
+  /** Erases the account. Refused while it is an office's only administrator. */
+  deleteAccount(ctx: CallContext, password: string): Promise<void>;
+}
+
 export interface SecondFactorGateway {
   /** Starts an enrolment: a secret, and the otpauth address behind the QR code. */
   start(ctx: CallContext): Promise<{ secret: string; uri: string }>;

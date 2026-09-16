@@ -91,8 +91,16 @@ function PrivacyPage() {
           automaticamente depois desse prazo.
         </P>
         <P>
+          Se você excluir sua conta, esses registros continuam ligados a ela até completar os seis
+          meses, e guardamos o e-mail da conta, cifrado, para que ainda identifiquem alguém. Os dois
+          são apagados ao fim do prazo. A base legal é o cumprimento de obrigação legal (arts. 7º, II
+          e 16, I da LGPD).
+        </P>
+        <P>
           Mantemos também uma trilha de auditoria do que foi alterado na plataforma: quem fez, o
           quê, quando e quais campos mudaram. Ela registra os nomes dos campos, nunca os valores.
+          Quando uma conta é excluída, as entradas dela continuam na trilha do escritório, sem
+          apontar para a conta.
         </P>
       </LegalSection>
 
@@ -122,6 +130,9 @@ function PrivacyPage() {
       <LegalSection title="8. Por quanto tempo">
         <LegalList>
           <li>Dados da conta: enquanto ela existir.</li>
+          <li>
+            E-mail de uma conta excluída, cifrado: seis meses, junto dos registros de acesso dela.
+          </li>
           <li>Registros de acesso: seis meses, como manda o Marco Civil.</li>
           <li>
             Contratos, aluguéis e as pessoas ligadas a eles: enquanto o escritório precisar deles
@@ -138,6 +149,13 @@ function PrivacyPage() {
           eliminação de dados desnecessários, portabilidade, informação sobre compartilhamento e
           revogação de consentimento. Escreva para {CONTROLLER.privacyEmail} e respondemos no prazo
           legal.
+        </P>
+        <P>
+          Dois deles ficam disponíveis direto em Ajustes, na aba Meus dados: baixar uma cópia dos dados
+          da sua conta, em JSON, e excluir a conta. A exclusão pede a sua senha e é imediata. Um
+          escritório que só tem você como membro é excluído junto. Se você for o único
+          administrador de um escritório com outros membros, precisa passar a administração a
+          alguém antes.
         </P>
         <P>
           A eliminação tem limite: quando a guarda é obrigação legal ou necessária para exercer

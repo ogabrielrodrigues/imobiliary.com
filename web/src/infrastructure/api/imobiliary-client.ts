@@ -19,6 +19,7 @@ import type {
   Member,
   OrganizationGateway,
   PasswordGateway,
+  PrivacyGateway,
   SecondFactorGateway,
 } from "../../application/ports.ts";
 import type {
@@ -141,12 +142,14 @@ export function createGateways(transport: Transport): {
   passwords: PasswordGateway;
   secondFactor: SecondFactorGateway;
   organizations: OrganizationGateway;
+  privacy: PrivacyGateway;
 } {
   return {
     identity: new IdentityClient(transport),
     passwords: new PasswordClient(transport),
     secondFactor: new SecondFactorClient(transport),
     organizations: new OrganizationClient(transport),
+    privacy: new PrivacyClient(transport),
   };
 }
 
@@ -230,6 +233,24 @@ class IdentityClient implements IdentityGateway {
       mfaEnrollmentRequired: body.mfa_enrollment_required,
       recoveryCodesLeft: body.recovery_codes_left,
     };
+  }
+}
+
+class PrivacyClient implements PrivacyGateway {
+  constructor(private readonly transport: Transport) {}
+
+  async exportData(ctx: CallContext): Promise<string> {
+    const response = await this.transport.send(ctx, "GET", "/v1/me/export");
+    return response.text();
+  }
+
+  async deleteAccount(ctx: CallContext, password: string): Promise<void> {
+    // A POST with a body rather than DELETE on /v1/me: the API chose it so a
+    // proxy cannot drop the password on the way.
+    await this.transport.send(ctx, "POST", "/v1/me/deletion", {
+      body: JSON.stringify({ password }),
+      contentType: "application/json",
+    });
   }
 }
 
