@@ -183,6 +183,15 @@ func serve(logger *slog.Logger) error {
 		Scope:  db,
 		Logger: logger,
 	})
+	saoPaulo, err := time.LoadLocation("America/Sao_Paulo")
+	if err != nil {
+		return fmt.Errorf("load America/Sao_Paulo: %w", err)
+	}
+	contracts := usecase.NewContracts(usecase.ContractsConfig{
+		Scope:    db,
+		Location: saoPaulo,
+		Logger:   logger,
+	})
 	privacy := usecase.NewPrivacy(usecase.PrivacyConfig{
 		Identity:     identity,
 		Repositories: repos,
@@ -212,6 +221,7 @@ func serve(logger *slog.Logger) error {
 		Privacy:           privacy,
 		People:            people,
 		Properties:        properties,
+		Contracts:         contracts,
 		Auditor:           auditor,
 		Signer:            signer,
 		Logger:            logger,

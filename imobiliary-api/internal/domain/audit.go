@@ -36,6 +36,11 @@ const (
 	ActionPropertyCreated     AuditAction = "property.created"
 	ActionPropertyUpdated     AuditAction = "property.updated"
 	ActionPropertyDeleted     AuditAction = "property.deleted"
+	ActionContractCreated     AuditAction = "contract.created"
+	ActionContractUpdated     AuditAction = "contract.updated"
+	ActionContractTerminated  AuditAction = "contract.terminated"
+	ActionContractDeleted     AuditAction = "contract.deleted"
+	ActionNoticeAcknowledged  AuditAction = "contract.notice_acknowledged"
 )
 
 // AuditEvent is one entry in the trail.

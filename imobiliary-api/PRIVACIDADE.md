@@ -82,6 +82,22 @@ A base legal desses dados é do escritório, não da Imobiliary. Na prática sã
 execução de contrato de locação e procedimentos preliminares (art. 7º, V) e
 exercício regular de direitos (art. 7º, VI).
 
+### Contratos e aluguéis (dados do escritório)
+
+| Dado | Onde | Forma | Retenção |
+|---|---|---|---|
+| Termos do contrato: número, valores, taxas, datas, índice, garantia | `contracts` | texto puro e inteiros | até o escritório excluir o contrato |
+| Partes e seus papéis (locador, locatário, fiador, cônjuge do fiador) | `contract_parties` | identificador da pessoa e papel | idem |
+| Ciência dos avisos legais: código, quem deu e quando | `contract_acknowledgments` e `audit_events` | texto puro | idem na tabela; a auditoria permanece |
+| Parcelas: vencimento, valor, pagamento | `rents` | inteiros e datas | idem |
+
+Revelam a situação financeira e as garantias de pessoas físicas. Contrato com
+aluguel pago não pode ser excluído, só rescindido: o registro do pagamento é
+prova e as pretensões de aluguel prescrevem em três anos (CC art. 206, § 3º, I).
+Quem deu ciência de um aviso fica registrado mesmo que a conta seja fechada
+depois; nesse caso a coluna perde o vínculo com o usuário e a auditoria mantém
+o evento sem valores.
+
 **Finalidade do gênero:** apenas a concordância gramatical no texto do contrato
 ("o locatário", "a locatária"). O campo é opcional e não é usado para mais nada.
 

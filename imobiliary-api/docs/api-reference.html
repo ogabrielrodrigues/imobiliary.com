@@ -112,7 +112,7 @@
 <div class="shell">
   <nav class="rail" aria-label="Sections">
     <div class="brand">imobiliary <span>api</span></div>
-    <div class="ver">v0.3.1 · phase 3</div>
+    <div class="ver">v0.4.0 · phase 4</div>
     <h3>Guide</h3>
     <ul>
       <li><a href="#auth">Authentication</a></li>
@@ -131,6 +131,7 @@
       <li><a href="#invitations">Invitations</a></li>
       <li><a href="#people">People</a></li>
       <li><a href="#properties">Properties</a></li>
+      <li><a href="#contracts">Contracts</a></li>
       <li><a href="#operations">Operations</a></li>
     </ul>
   </nav>
@@ -483,7 +484,58 @@ If-Match: "3"
       <article class="op-card">
         <div class="sig"><span class="m delete">DELETE</span><span class="path">/v1/properties/{propertyID}</span><span class="access">session · writes</span></div>
         <p>Permanent, with the owners' shares and the address. An owner cannot be deleted while they own a share of any property.</p>
-        <dl class="io"><dt>Answers</dt><dd><code>204</code> · <code>404</code> · <code>409 in_use</code> once contracts exist</dd></dl>
+        <dl class="io"><dt>Answers</dt><dd><code>204</code> · <code>404</code> · <code>409 in_use</code> while a contract names it</dd></dl>
+      </article>
+    </section>
+
+    <section class="block" id="contracts">
+      <h2>Contracts</h2>
+      <p>A lease of one property, with its parties and a schedule of rents: one instalment per month of the term, the first due on <code>starts_on</code> and each later one on <code>due_day</code>, or the month's last day when that is shorter. Money is a string with two decimals, such as <code>"1500.00"</code>; rates are percentages as strings. A property holds one contract per period, enforced by the database.</p>
+      <p class="note">Some terms are legal but carry a risk the office must acknowledge: <code>advance_rent</code> (the first rent due on the start while there is a guarantee, Lei 8.245/91 art. 20), <code>guarantor_spouse_consent</code> (a married guarantor without the spouse as a party, CC art. 1.647, III) and <code>deposit_limit</code> (a deposit above three rents, art. 38). Until each raised code is listed in <code>acknowledgments</code>, creation answers <code>422</code> with a field <code>acknowledgments</code> whose message is the code. Acknowledgements are stored with who gave them and when, and audited.</p>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/contracts</span><span class="access">session</span></div>
+        <p>Newest start first. <code>q</code> matches the registry, the street or a party's name; <code>status</code> is computed against today in America/Sao_Paulo.</p>
+        <dl class="io"><dt>Query</dt><dd><code>q</code>, <code>property_id</code>, <code>person_id</code>, <code>status</code> (upcoming, active, expired, terminated), <code>limit</code>, <code>cursor</code></dd><dt>Answers</dt><dd><code>200</code> <code>{ contracts, next_cursor }</code>, each with the terms, <code>address</code> and <code>tenant_names</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/contracts/preview</span><span class="access">session · writes</span></div>
+        <p>Runs the rules of a creation and stores nothing. Overlaps and repeated registries are only found on creation.</p>
+        <dl class="io"><dt>Body</dt><dd>as <code>POST /v1/contracts</code></dd><dt>Answers</dt><dd><code>200</code> <code>{ parties, schedule, notices, total }</code> · <code>422</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/contracts</span><span class="access">session · writes</span></div>
+        <p>Registers a contract and its schedule. With no landlord among the parties, the property's owners become the landlords. Guarantors come only with <code>surety</code>, which needs one; a tenant is never a guarantor.</p>
+        <dl class="io">
+          <dt>Body</dt><dd><code>property_id</code>, <code>registry</code>, <code>guarantee_kind</code> (none, deposit, surety, surety_insurance, fund_assignment), <code>deposit_amount</code>, <code>rent</code>, <code>admin_fee</code>, <code>late_penalty_rate</code>, <code>late_interest_rate</code>, <code>due_day</code>, <code>adjustment_index</code> (igpm, ipca, inpc, ivar, igpdi), <code>signed_on</code>, <code>starts_on</code>, <code>expires_on</code>, <code>parties</code> of <code>{ person_id, role }</code>, <code>acknowledgments</code></dd>
+          <dt>Answers</dt><dd><code>201</code> <code>Contract</code> with <code>ETag</code> · <code>422</code>, on <code>starts_on</code> for an overlap and on <code>registry</code> when repeated</dd>
+        </dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/contracts/{contractID}</span><span class="access">session</span></div>
+        <p>The terms, the property's address, parties with name and kind, acknowledgements and rents, each rent with a <code>status</code> of paid, overdue or pending.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> with <code>ETag</code> · <code>404</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m patch">PUT</span><span class="path">/v1/contracts/{contractID}</span><span class="access">session · writes</span></div>
+        <p>Replaces the terms and generates the schedule again. Refused once a rent is paid or the contract is terminated.</p>
+        <dl class="io"><dt>Headers</dt><dd><code>If-Match: "&lt;version&gt;"</code></dd><dt>Answers</dt><dd><code>200</code> · <code>404</code> · <code>412</code> · <code>422</code> · <code>428</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/contracts/{contractID}/termination</span><span class="access">session · writes</span></div>
+        <p>Ends the contract on a day within its term and removes the unpaid rents due after it. The property is free from the next day.</p>
+        <dl class="io"><dt>Headers</dt><dd><code>If-Match: "&lt;version&gt;"</code></dd><dt>Body</dt><dd><code>{ terminated_on }</code></dd><dt>Answers</dt><dd><code>200</code> · <code>404</code> · <code>412</code> · <code>422</code> · <code>428</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m delete">DELETE</span><span class="path">/v1/contracts/{contractID}</span><span class="access">session · writes</span></div>
+        <p>Permanent, with parties, acknowledgements and rents. A contract with a paid rent is terminated instead.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>204</code> · <code>404</code> · <code>409 in_use</code></dd></dl>
       </article>
     </section>
 

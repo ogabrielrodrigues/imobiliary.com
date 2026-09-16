@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Imobiliary API
-  version: "0.3.1"
+  version: "0.4.0"
   summary: Rental property management for brokers, small agencies and owners.
   description: |
     The API behind the Imobiliary platform. It covers identity and the office
@@ -124,6 +124,10 @@ tags:
     description: The office's register of individuals and companies.
   - name: Properties
     description: The office's properties, with their owners and shares.
+  - name: Contracts
+    description: |
+      Leases of the office's properties, with their parties, the legal notices
+      acknowledged and the schedule of rents.
   - name: Operations
     description: Probes for the orchestrator.
 
@@ -1122,6 +1126,227 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /v1/contracts:
+    get:
+      tags: [Contracts]
+      summary: Search the office's contracts
+      description: |
+        Newest start first, paged with `next_cursor`. `q` matches a fragment of
+        the registry, the property's street or a party's name, ignoring case
+        and accents. `status` is computed against today in America/Sao_Paulo.
+      operationId: listContracts
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: property_id, in: query, schema: { $ref: "#/components/schemas/ID" } }
+        - { name: person_id, in: query, description: Contracts naming this person in any role., schema: { $ref: "#/components/schemas/ID" } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/ContractStatus" } }
+        - name: limit
+          in: query
+          description: Default 20, at most 100.
+          schema: { type: integer, minimum: 1 }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: A page.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [contracts]
+                properties:
+                  contracts:
+                    type: array
+                    items: { $ref: "#/components/schemas/ContractSummary" }
+                  next_cursor: { type: string, description: Absent on the last page. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    post:
+      tags: [Contracts]
+      summary: Register a contract
+      description: |
+        Creates the contract and its schedule: one instalment per month of the
+        term, the first due on `starts_on` and each later one on `due_day`
+        (the month's last day when shorter). With no landlord among the
+        parties, the property's owners become the landlords.
+
+        A property holds one contract per period; an overlap is refused on
+        `starts_on`. Each notice the terms raise (see `ContractPreview`) must
+        be listed in `acknowledgments`, or the request is refused with a field
+        `acknowledgments` whose message is the notice's code. Every
+        acknowledgement is recorded with who gave it and when, and audited.
+      operationId: createContract
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContractInput" }
+      responses:
+        "201":
+          description: Registered.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contract" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/contracts/preview:
+    post:
+      tags: [Contracts]
+      summary: Check terms before registering them
+      description: |
+        Runs the rules of a creation and stores nothing. Answers the parties
+        as they would be saved, the schedule and the notices that need
+        acknowledgement. Overlaps and repeated registries are only found on
+        creation.
+      operationId: previewContract
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContractInput" }
+      responses:
+        "200":
+          description: The preview.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractPreview" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/contracts/{contractID}:
+    parameters:
+      - name: contractID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+    get:
+      tags: [Contracts]
+      summary: Read a contract
+      operationId: getContract
+      responses:
+        "200":
+          description: The contract with its parties, acknowledgements and rents.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contract" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    put:
+      tags: [Contracts]
+      summary: Replace a contract
+      description: |
+        The whole set of terms as of the version in `If-Match`; the schedule
+        is generated again. Refused on `rents` once a rent is paid and on
+        `terminated_on` after a termination. Notices acknowledged before still
+        count.
+      operationId: updateContract
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          description: The `ETag` of the read the edit is based on.
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContractInput" }
+      responses:
+        "200":
+          description: Replaced.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contract" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "428": { $ref: "#/components/responses/PreconditionRequired" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      tags: [Contracts]
+      summary: Delete a contract
+      description: |
+        Permanent, with its parties, acknowledgements and rents, audited
+        without values. A contract with a paid rent is refused with
+        `409 in_use`: terminate it instead.
+      operationId: deleteContract
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/contracts/{contractID}/termination:
+    parameters:
+      - name: contractID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+    post:
+      tags: [Contracts]
+      summary: Terminate a contract
+      description: |
+        Ends the contract on `terminated_on`, which must fall within its term,
+        freeing the property from the next day. Unpaid rents due after that
+        day are removed in the same transaction. A contract is terminated once.
+      operationId: terminateContract
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          description: The `ETag` of the read the termination is based on.
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [terminated_on]
+              properties:
+                terminated_on: { $ref: "#/components/schemas/Date" }
+      responses:
+        "200":
+          description: Terminated.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contract" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "428": { $ref: "#/components/responses/PreconditionRequired" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
   # --- operations -------------------------------------------------------------
 
   /healthz:
@@ -1618,6 +1843,176 @@ components:
         registry: { type: string }
         owner_names: { type: array, items: { type: string } }
         created_at: { $ref: "#/components/schemas/Instant" }
+
+    Date:
+      type: string
+      format: date
+      description: A calendar day, with no time zone.
+      examples: ["2026-10-01"]
+
+    Money:
+      type: string
+      description: Reais with two decimal places, never a number.
+      pattern: '^[0-9]+\.[0-9]{2}$'
+      examples: ["1500.00"]
+
+    ContractStatus:
+      type: string
+      enum: [upcoming, active, expired, terminated]
+
+    NoticeCode:
+      type: string
+      description: |
+        `advance_rent`: the first rent is due on the start while there is a
+        guarantee (Lei 8.245/91, arts. 20, 42 and 43, III).
+        `guarantor_spouse_consent`: a married guarantor, outside total
+        separation of property, without the spouse as a party (CC art. 1.647,
+        III; Súmula 332 do STJ). `deposit_limit`: a deposit above three rents
+        (Lei 8.245/91, art. 38, § 2º).
+      enum: [advance_rent, guarantor_spouse_consent, deposit_limit]
+
+    ContractParty:
+      type: object
+      required: [person_id, role]
+      properties:
+        person_id: { $ref: "#/components/schemas/ID" }
+        role: { type: string, enum: [landlord, tenant, guarantor, guarantor_spouse] }
+
+    ContractInput:
+      type: object
+      required: [property_id, registry, rent, signed_on, starts_on, expires_on, parties]
+      properties:
+        property_id: { $ref: "#/components/schemas/ID" }
+        registry: { type: string, minLength: 1, maxLength: 60, description: "The office's own number for the contract, unique in the office." }
+        guarantee_kind:
+          type: string
+          enum: [none, deposit, surety, surety_insurance, fund_assignment]
+          description: One per contract (art. 37, sole paragraph). Default `none`.
+        deposit_amount: { $ref: "#/components/schemas/Money", description: Required with `deposit` and refused otherwise. }
+        rent: { $ref: "#/components/schemas/Money" }
+        admin_fee: { type: string, description: "Percentage, default 10.", examples: ["10"] }
+        late_penalty_rate: { type: string, description: "Percentage, default 10.", examples: ["10"] }
+        late_interest_rate: { type: string, description: "Percentage a month, default 1.", examples: ["1"] }
+        due_day: { type: integer, minimum: 1, maximum: 31, description: Defaults to the day of `signed_on`. }
+        adjustment_index: { type: string, enum: [igpm, ipca, inpc, ivar, igpdi] }
+        signed_on: { $ref: "#/components/schemas/Date" }
+        starts_on: { $ref: "#/components/schemas/Date" }
+        expires_on: { $ref: "#/components/schemas/Date", description: "After `starts_on`, at most 50 years later." }
+        parties:
+          type: array
+          maxItems: 20
+          description: |
+            At least one tenant, and a landlord unless the property's owners
+            should be. Guarantors only with `surety`, which needs one; a tenant
+            is never a guarantor. Guarantors and their spouses are individuals.
+          items: { $ref: "#/components/schemas/ContractParty" }
+        acknowledgments:
+          type: array
+          items: { $ref: "#/components/schemas/NoticeCode" }
+
+    ContractTerms:
+      type: object
+      required: [property_id, registry, guarantee_kind, deposit_amount, rent, current_rent, admin_fee, late_penalty_rate, late_interest_rate, due_day, adjustment_index, signed_on, starts_on, expires_on, terminated_on, status]
+      properties:
+        property_id: { $ref: "#/components/schemas/ID" }
+        registry: { type: string }
+        guarantee_kind: { type: string }
+        deposit_amount: { $ref: "#/components/schemas/Money" }
+        rent: { $ref: "#/components/schemas/Money" }
+        current_rent: { $ref: "#/components/schemas/Money", description: The rent after adjustments. }
+        admin_fee: { type: string }
+        late_penalty_rate: { type: string }
+        late_interest_rate: { type: string }
+        due_day: { type: integer }
+        adjustment_index: { type: string }
+        signed_on: { $ref: "#/components/schemas/Date" }
+        starts_on: { $ref: "#/components/schemas/Date" }
+        expires_on: { $ref: "#/components/schemas/Date" }
+        terminated_on: { oneOf: [{ $ref: "#/components/schemas/Date" }, { type: "null" }] }
+        status: { $ref: "#/components/schemas/ContractStatus" }
+
+    Contract:
+      allOf:
+        - $ref: "#/components/schemas/ContractTerms"
+        - type: object
+          required: [id, property, parties, acknowledgments, rents, version, created_at, updated_at]
+          properties:
+            id: { $ref: "#/components/schemas/ID" }
+            property:
+              type: object
+              required: [id, address]
+              properties:
+                id: { $ref: "#/components/schemas/ID" }
+                address: { $ref: "#/components/schemas/PropertyAddress" }
+            parties:
+              type: array
+              items:
+                allOf:
+                  - $ref: "#/components/schemas/ContractParty"
+                  - type: object
+                    required: [name, kind]
+                    properties:
+                      name: { type: string }
+                      kind: { $ref: "#/components/schemas/PersonKind" }
+            acknowledgments:
+              type: array
+              items:
+                type: object
+                required: [code, acknowledged_at]
+                properties:
+                  code: { $ref: "#/components/schemas/NoticeCode" }
+                  acknowledged_at: { $ref: "#/components/schemas/Instant" }
+            rents:
+              type: array
+              items:
+                type: object
+                required: [id, sequence, due_on, amount, late_fee, amount_paid, paid_on, status]
+                properties:
+                  id: { $ref: "#/components/schemas/ID" }
+                  sequence: { type: integer, minimum: 1 }
+                  due_on: { $ref: "#/components/schemas/Date" }
+                  amount: { $ref: "#/components/schemas/Money" }
+                  late_fee: { $ref: "#/components/schemas/Money" }
+                  amount_paid: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+                  paid_on: { oneOf: [{ $ref: "#/components/schemas/Date" }, { type: "null" }] }
+                  status:
+                    type: string
+                    enum: [paid, overdue, pending]
+                    description: Computed against today; never stored.
+            version: { type: integer, minimum: 1 }
+            created_at: { $ref: "#/components/schemas/Instant" }
+            updated_at: { $ref: "#/components/schemas/Instant" }
+
+    ContractSummary:
+      allOf:
+        - $ref: "#/components/schemas/ContractTerms"
+        - type: object
+          required: [id, address, tenant_names]
+          properties:
+            id: { $ref: "#/components/schemas/ID" }
+            address: { $ref: "#/components/schemas/PropertyAddress" }
+            tenant_names: { type: array, items: { type: string } }
+
+    ContractPreview:
+      type: object
+      required: [parties, schedule, notices, total]
+      properties:
+        parties:
+          type: array
+          items: { $ref: "#/components/schemas/ContractParty" }
+        schedule:
+          type: array
+          items:
+            type: object
+            required: [sequence, due_on, amount]
+            properties:
+              sequence: { type: integer, minimum: 1 }
+              due_on: { $ref: "#/components/schemas/Date" }
+              amount: { $ref: "#/components/schemas/Money" }
+        notices:
+          type: array
+          items: { $ref: "#/components/schemas/NoticeCode" }
+        total: { $ref: "#/components/schemas/Money", description: The sum of the schedule. }
 
     Error:
       type: object

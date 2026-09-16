@@ -36,6 +36,7 @@ type Options struct {
 	Privacy       *usecase.Privacy
 	People        *usecase.People
 	Properties    *usecase.Properties
+	Contracts     *usecase.Contracts
 	Auditor       *usecase.Auditor
 	// Signer parses the access tokens this service issued.
 	Signer  *token.Signer
@@ -59,6 +60,7 @@ type Server struct {
 	privacy       *usecase.Privacy
 	people        *usecase.People
 	properties    *usecase.Properties
+	contracts     *usecase.Contracts
 	auditor       *usecase.Auditor
 	signer        *token.Signer
 	logger        *slog.Logger
@@ -81,6 +83,7 @@ func NewServer(opts Options) *Server {
 		privacy:       opts.Privacy,
 		people:        opts.People,
 		properties:    opts.Properties,
+		contracts:     opts.Contracts,
 		auditor:       opts.Auditor,
 		signer:        opts.Signer,
 		logger:        opts.Logger,
@@ -160,6 +163,16 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /v1/properties/{propertyID}", authenticated(http.HandlerFunc(s.handleGetProperty)))
 	mux.Handle("PUT /v1/properties/{propertyID}", write(http.HandlerFunc(s.handleUpdateProperty)))
 	mux.Handle("DELETE /v1/properties/{propertyID}", write(http.HandlerFunc(s.handleDeleteProperty)))
+
+	// Contracts. The preview writes nothing and is still charged as a write:
+	// it runs the same reads and rules as a creation.
+	mux.Handle("GET /v1/contracts", authenticated(http.HandlerFunc(s.handleListContracts)))
+	mux.Handle("POST /v1/contracts", write(http.HandlerFunc(s.handleCreateContract)))
+	mux.Handle("POST /v1/contracts/preview", write(http.HandlerFunc(s.handlePreviewContract)))
+	mux.Handle("GET /v1/contracts/{contractID}", authenticated(http.HandlerFunc(s.handleGetContract)))
+	mux.Handle("PUT /v1/contracts/{contractID}", write(http.HandlerFunc(s.handleUpdateContract)))
+	mux.Handle("POST /v1/contracts/{contractID}/termination", write(http.HandlerFunc(s.handleTerminateContract)))
+	mux.Handle("DELETE /v1/contracts/{contractID}", write(http.HandlerFunc(s.handleDeleteContract)))
 
 	// Probes, and the catch-all that answers JSON rather than net/http's text.
 	mux.HandleFunc("GET /healthz", s.handleLive)

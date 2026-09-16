@@ -23,6 +23,7 @@ func (db *DB) InOrganization(ctx context.Context, organizationID uuid.UUID, fn f
 		return fn(usecase.ScopedRepositories{
 			People:     &personRepository{q: tx, organizationID: organizationID},
 			Properties: &propertyRepository{q: tx, organizationID: organizationID},
+			Contracts:  &contractRepository{q: tx, organizationID: organizationID},
 			Audit:      &auditRepository{tx},
 		})
 	})
@@ -363,7 +364,7 @@ func (r *personRepository) Links(ctx context.Context, ids []uuid.UUID) (map[uuid
 		params[i] = pgUUID(id)
 	}
 	rows, err := r.q.Query(ctx,
-		`SELECT p.id, p.kind, p.name, i.marital_status, i.spouse_id
+		`SELECT p.id, p.kind, p.name, i.marital_status, i.property_regime, i.spouse_id
 		   FROM people p LEFT JOIN individuals i ON i.person_id = p.id
 		  WHERE p.id = ANY($1)`, params)
 	if err != nil {
@@ -376,12 +377,14 @@ func (r *personRepository) Links(ctx context.Context, ids []uuid.UUID) (map[uuid
 			id, sp  pgtype.UUID
 			kind    string
 			marital pgtype.Text
+			regime  pgtype.Text
 		)
-		if err := rows.Scan(&id, &kind, &l.Name, &marital, &sp); err != nil {
+		if err := rows.Scan(&id, &kind, &l.Name, &marital, &regime, &sp); err != nil {
 			return nil, fmt.Errorf("postgres: person links: %w", err)
 		}
 		l.ID, l.Kind = toUUID(id), domain.PersonKind(kind)
 		l.MaritalStatus, l.SpouseID = domain.MaritalStatus(marital.String), toNullUUID(sp)
+		l.PropertyRegime = domain.PropertyRegime(regime.String)
 		out[l.ID] = l
 	}
 	return out, rows.Err()

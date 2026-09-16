@@ -86,7 +86,7 @@ func TestEveryResponseCarriesARequestIDAndSafeHeaders(t *testing.T) {
 
 func TestUnknownRoutesAreJSONAndCollapsedInMetrics(t *testing.T) {
 	f := newFixture(t, false)
-	for _, path := range []string{"/v1/contracts/0191e0c4-1111-7000-8000-000000000001", "/wp-admin", "/.env"} {
+	for _, path := range []string{"/v1/leases/0191e0c4-1111-7000-8000-000000000001", "/wp-admin", "/.env"} {
 		rec := f.do(httptest.NewRequest(http.MethodGet, path, nil))
 		if rec.Code != http.StatusNotFound || !strings.HasPrefix(rec.Header().Get("Content-Type"), "application/json") {
 			t.Fatalf("%s = %d %s", path, rec.Code, rec.Header().Get("Content-Type"))

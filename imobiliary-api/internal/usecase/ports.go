@@ -217,14 +217,15 @@ type PersonCursor struct {
 	ID      uuid.UUID
 }
 
-// PersonLink is what the rules about spouses and representatives need to know
-// of another person.
+// PersonLink is what the rules about spouses, representatives and a
+// contract's notices need to know of another person.
 type PersonLink struct {
-	ID            uuid.UUID
-	Kind          domain.PersonKind
-	Name          string
-	MaritalStatus domain.MaritalStatus
-	SpouseID      *uuid.UUID
+	ID             uuid.UUID
+	Kind           domain.PersonKind
+	Name           string
+	MaritalStatus  domain.MaritalStatus
+	PropertyRegime domain.PropertyRegime
+	SpouseID       *uuid.UUID
 }
 
 // PersonRepository stores people. It is only ever bound to an
@@ -289,11 +290,79 @@ type PropertyRepository interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 }
 
+// ContractQuery filters and pages the list of contracts, newest start first.
+type ContractQuery struct {
+	// Search matches a fragment of the registry, a party's name or the
+	// property's street.
+	Search     string
+	PropertyID *uuid.UUID
+	PersonID   *uuid.UUID
+	// Status, when set, keeps the contracts in that state on Today.
+	Status domain.ContractStatus
+	Today  domain.Date
+	After  *ContractCursor
+	Limit  int
+}
+
+// ContractCursor is where a page of the list ended.
+type ContractCursor struct {
+	StartsOn domain.Date
+	ID       uuid.UUID
+}
+
+// ContractSummary is a row of the list.
+type ContractSummary struct {
+	Contract    domain.Contract
+	Address     domain.Address
+	TenantNames []string
+}
+
+// ContractPartyView is a party with who the person is.
+type ContractPartyView struct {
+	PersonID uuid.UUID
+	Role     domain.PartyRole
+	Name     string
+	Kind     domain.PersonKind
+}
+
+// RentRecord is one stored instalment.
+type RentRecord struct {
+	ID         uuid.UUID
+	Sequence   int
+	DueOn      domain.Date
+	Amount     domain.Money
+	LateFee    domain.Money
+	AmountPaid *domain.Money
+	PaidOn     *domain.Date
+}
+
+// ContractRepository stores contracts, bound to an organisation-scoped
+// transaction like the others.
+type ContractRepository interface {
+	// Create stores the contract, its parties, acknowledgements and
+	// instalments. An overlapping lease of the property is a validation error
+	// on starts_on; a registry in use, on registry.
+	Create(ctx context.Context, c *domain.Contract, schedule []domain.Instalment) error
+	// Replace rewrites the contract as of version, its parties and
+	// acknowledgements, and every instalment, reporting
+	// domain.ErrPreconditionFailed when the version moved.
+	Replace(ctx context.Context, c *domain.Contract, version int, schedule []domain.Instalment) error
+	Get(ctx context.Context, id uuid.UUID) (*domain.Contract, []ContractPartyView, []RentRecord, error)
+	List(ctx context.Context, q ContractQuery) ([]ContractSummary, error)
+	// HasPayments reports whether any instalment was paid.
+	HasPayments(ctx context.Context, id uuid.UUID) (bool, error)
+	// Terminate records the termination day and removes the unpaid
+	// instalments due after it, as of version.
+	Terminate(ctx context.Context, id uuid.UUID, on domain.Date, version int, at time.Time) error
+	Delete(ctx context.Context, id uuid.UUID) error
+}
+
 // ScopedRepositories are the stores of one office's business data, bound to a
 // transaction scoped to it.
 type ScopedRepositories struct {
 	People     PersonRepository
 	Properties PropertyRepository
+	Contracts  ContractRepository
 	Audit      AuditRepository
 }
 
