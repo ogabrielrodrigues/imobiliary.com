@@ -15,6 +15,7 @@
     "@base-ui/react": "^1.8.0",
     "@imobiliary/ui": "workspace:*",
     "@tabler/icons-react": "^3.46.0",
+    "@tanstack/react-form": "1.33.5",
     "@tanstack/react-router": "^1.170.33",
     "@tanstack/react-start": "^1.168.50",
     "class-variance-authority": "^0.7.1",

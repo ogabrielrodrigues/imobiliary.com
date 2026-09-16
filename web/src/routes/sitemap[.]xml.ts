@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { absoluteUrl } from "@/lib/seo";
+import { LICENCES, PRIVACY_POLICY, TERMS_OF_USE } from "@/domain/legal";
 
 /**
  * The pages worth indexing, and nothing else.
@@ -15,6 +16,10 @@ import { absoluteUrl } from "@/lib/seo";
  */
 const PAGES: readonly { path: string; priority: string; lastModified?: string }[] = [
   { path: "/", priority: "1.0" },
+  { path: "/criar-conta", priority: "0.8" },
+  { path: "/privacidade", priority: "0.3", lastModified: PRIVACY_POLICY.effectiveFrom },
+  { path: "/termos", priority: "0.3", lastModified: TERMS_OF_USE.effectiveFrom },
+  { path: "/licencas", priority: "0.2", lastModified: LICENCES.effectiveFrom },
 ];
 
 export const Route = createFileRoute("/sitemap.xml")({

@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { Brand } from "@/components/brand";
+import { LegalFooter } from "@/components/legal-page";
 import { Button } from "@/components/ui/button";
 import { MAIN_CONTENT_ID } from "@/components/route-announcer";
 import { pageSeo } from "@/lib/seo";
@@ -30,7 +31,7 @@ function LandingPage() {
     <div className="flex min-h-dvh flex-col bg-background text-foreground">
       <header className="flex items-center justify-between border-b border-border px-4 py-4 md:px-8">
         <Brand />
-        <Button nativeButton={false} render={<Link to="/" />} variant="secondary" size="sm">
+        <Button nativeButton={false} render={<Link to="/entrar" />} variant="secondary" size="sm">
           Entrar
         </Button>
       </header>
@@ -45,19 +46,17 @@ function LandingPage() {
             e registre os pagamentos sem planilha paralela.
           </p>
           <div className="flex flex-wrap gap-3">
-            <Button nativeButton={false} render={<Link to="/" />}>
+            <Button nativeButton={false} render={<Link to="/criar-conta" />}>
               Criar conta
             </Button>
-            <Button variant="secondary" nativeButton={false} render={<Link to="/" />}>
+            <Button variant="secondary" nativeButton={false} render={<Link to="/entrar" />}>
               Entrar
             </Button>
           </div>
         </div>
       </main>
 
-      <footer className="border-t border-border px-4 py-6 text-small text-faint md:px-8">
-        Imobiliary
-      </footer>
+      <LegalFooter />
     </div>
   );
 }
