@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func key(t *testing.T) string {
@@ -22,6 +23,11 @@ func setValid(t *testing.T) {
 	t.Setenv("IMOBILIARY_DATABASE_URL", "postgres://imobiliary_app@localhost/imobiliary")
 	t.Setenv("IMOBILIARY_FIELD_KEYS", "1:"+key(t))
 	t.Setenv("IMOBILIARY_INDEX_KEY", key(t))
+	t.Setenv("IMOBILIARY_TOKEN_KEYS", key(t))
+	// Mail fails closed: a deployment with neither a provider key nor this
+	// declaration refuses to start, because the fallback writes reset links
+	// and invitations to the log.
+	t.Setenv("IMOBILIARY_MAIL_LOG", "true")
 }
 
 func TestLoadServerDefaults(t *testing.T) {
@@ -36,8 +42,11 @@ func TestLoadServerDefaults(t *testing.T) {
 	if cfg.TrustProxyHeaders {
 		t.Error("proxy headers are trusted by default")
 	}
-	if len(cfg.FieldKeys) != 1 || len(cfg.IndexKey) != 32 {
+	if len(cfg.FieldKeys) != 1 || len(cfg.IndexKey) != 32 || len(cfg.TokenKeys) != 1 {
 		t.Error("keys were not loaded")
+	}
+	if cfg.AccessTokenTTL != 15*time.Minute || cfg.RefreshTokenTTL != 30*24*time.Hour {
+		t.Errorf("token lifetimes are %s and %s", cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 	}
 }
 
@@ -47,6 +56,9 @@ func TestLoadServerFailsClosed(t *testing.T) {
 		"no field keys":    func(t *testing.T) { t.Setenv("IMOBILIARY_FIELD_KEYS", "") },
 		"short field key":  func(t *testing.T) { t.Setenv("IMOBILIARY_FIELD_KEYS", "1:c2hvcnQ=") },
 		"no index key":     func(t *testing.T) { t.Setenv("IMOBILIARY_INDEX_KEY", "") },
+		"no token key":     func(t *testing.T) { t.Setenv("IMOBILIARY_TOKEN_KEYS", "") },
+		"short token key":  func(t *testing.T) { t.Setenv("IMOBILIARY_TOKEN_KEYS", "1:c2hvcnQ=") },
+		"no mail at all":   func(t *testing.T) { t.Setenv("IMOBILIARY_MAIL_LOG", "false") },
 		"shared listener":  func(t *testing.T) { t.Setenv("IMOBILIARY_METRICS_ADDR", "127.0.0.1:8081") },
 		"zero shutdown":    func(t *testing.T) { t.Setenv("IMOBILIARY_SHUTDOWN_TIMEOUT", "0s") },
 		"bad request size": func(t *testing.T) { t.Setenv("IMOBILIARY_MAX_REQUEST_BYTES", "lots") },

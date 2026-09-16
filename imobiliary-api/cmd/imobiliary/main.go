@@ -25,12 +25,22 @@ import (
 	_ "time/tzdata"
 
 	adapterhttp "imobiliary/internal/adapter/http"
+	"imobiliary/internal/adapter/mail"
 	"imobiliary/internal/adapter/postgres"
+	"imobiliary/internal/adapter/sealing"
 	"imobiliary/internal/platform/config"
 	"imobiliary/internal/platform/fieldcrypt"
 	"imobiliary/internal/platform/logging"
 	"imobiliary/internal/platform/metrics"
+	"imobiliary/internal/platform/password"
+	"imobiliary/internal/platform/ratelimit"
+	"imobiliary/internal/platform/token"
+	"imobiliary/internal/usecase"
 )
+
+// purgeInterval is how often expired credentials and the access records past
+// their six months are swept.
+const purgeInterval = time.Hour
 
 // Timeouts applied to the HTTP servers. net/http applies none by default, so a
 // single slow client could otherwise hold a connection open indefinitely.
@@ -110,14 +120,88 @@ func serve(logger *slog.Logger) error {
 		return err
 	}
 
+	signer, err := token.NewSigner(cfg.TokenKeys, cfg.TokenKeyID, cfg.AccessTokenTTL)
+	if err != nil {
+		return err
+	}
+
+	// Without a provider key the service logs mail instead of sending it, so a
+	// development run prints the reset link and the invitation in the terminal
+	// and nothing can reach a real person by accident. config.LoadServer
+	// already refused to start with neither, so exactly one applies.
+	var mailer usecase.Mailer = mail.NewResend(cfg.ResendAPIKey, cfg.MailFrom)
+	if cfg.ResendAPIKey == "" {
+		logger.Warn("IMOBILIARY_MAIL_LOG is on: mail, including reset links and invitations, is written to this log")
+		mailer = mail.NewLogger(logger)
+	}
+
+	repos := db.Repositories()
+	hasher := password.NewHasher()
+	auditor := usecase.NewAuditor(repos.Audit, time.Now, logger)
+
+	identity := usecase.NewIdentity(usecase.IdentityConfig{
+		Repositories: repos,
+		Transactor:   db,
+		Hasher:       hasher,
+		Tokens:       signer,
+		Mailer:       mailer,
+		RefreshTTL:   cfg.RefreshTokenTTL,
+		ChallengeTTL: cfg.ChallengeTTL,
+		Logger:       logger,
+	})
+	mfa := usecase.NewMFA(usecase.MFAConfig{
+		Identity:     identity,
+		Repositories: repos,
+		Sealer:       sealing.New(keyring),
+		Logger:       logger,
+	})
+	passwords := usecase.NewPasswords(usecase.PasswordsConfig{
+		Identity:     identity,
+		Repositories: repos,
+		Hasher:       hasher,
+		Mailer:       mailer,
+		AppURL:       cfg.AppURL,
+		ResetTTL:     cfg.ResetTTL,
+		Logger:       logger,
+	})
+	organizations := usecase.NewOrganizations(usecase.OrganizationsConfig{
+		Identity:      identity,
+		Repositories:  repos,
+		Hasher:        hasher,
+		Mailer:        mailer,
+		AppURL:        cfg.AppURL,
+		InvitationTTL: cfg.InvitationTTL,
+		Logger:        logger,
+	})
+
+	limiters := adapterhttp.Limiters{
+		Global:      newLimiter(cfg.RateLimits.GlobalPerIP),
+		Credentials: newLimiter(cfg.RateLimits.CredentialsPerIP),
+		Write:       newLimiter(cfg.RateLimits.WritePerUser),
+	}
+	defer func() {
+		limiters.Global.Close()
+		limiters.Credentials.Close()
+		limiters.Write.Close()
+	}()
+
 	registry := metrics.NewRegistry()
 	api := adapterhttp.NewServer(adapterhttp.Options{
+		Identity:          identity,
+		MFA:               mfa,
+		Passwords:         passwords,
+		Organizations:     organizations,
+		Auditor:           auditor,
+		Signer:            signer,
 		Logger:            logger,
 		Metrics:           registry,
 		Ready:             db.Ping,
+		Limiters:          limiters,
 		TrustProxyHeaders: cfg.TrustProxyHeaders,
 		MaxRequestBytes:   cfg.MaxRequestBytes,
 	})
+
+	go purgeExpired(ctx, identity, logger)
 
 	metricsMux := http.NewServeMux()
 	metricsMux.Handle("GET /metrics", registry.Handler())
@@ -163,6 +247,30 @@ func serve(logger *slog.Logger) error {
 		}
 	}
 	return runErr
+}
+
+func newLimiter(rule config.Rule) *ratelimit.Limiter {
+	return ratelimit.New(rule.Rate, rule.Burst)
+}
+
+// purgeExpired sweeps what nobody can use any more: refresh tokens and reset
+// links past their expiry, and the access records past the six months the
+// Marco Civil asks for. Keeping them longer would be keeping personal data
+// with no purpose left.
+func purgeExpired(ctx context.Context, identity *usecase.Identity, logger *slog.Logger) {
+	ticker := time.NewTicker(purgeInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := identity.PurgeExpired(ctx); err != nil {
+				logger.Warn("purging expired records failed", slog.Any("error", err))
+			}
+		}
+	}
 }
 
 func newHTTPServer(addr string, handler http.Handler, logger *slog.Logger) *http.Server {

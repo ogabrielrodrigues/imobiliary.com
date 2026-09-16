@@ -99,9 +99,13 @@ func (db *DB) InOrganization(ctx context.Context, organizationID uuid.UUID, fn f
 	return nil
 }
 
-// QueryRowForTest runs a query outside any organisation scope. It exists for
-// the integration tests, which live in another package to avoid an import
-// cycle with pgtest, and must not be used by repositories.
+// QueryRowForTest and QueryForTest run a query outside any organisation scope.
+// They exist for the integration tests, which live in another package to avoid
+// an import cycle with pgtest, and must not be used by repositories.
 func (db *DB) QueryRowForTest(ctx context.Context, sql string, args ...any) pgx.Row {
 	return db.pool.QueryRow(ctx, sql, args...)
+}
+
+func (db *DB) QueryForTest(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	return db.pool.Query(ctx, sql, args...)
 }

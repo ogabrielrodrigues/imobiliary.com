@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"log/slog"
+	"math"
 	"net"
 	"net/http"
 	"net/netip"
@@ -13,6 +14,8 @@ import (
 	"uuid"
 
 	"imobiliary/internal/platform/metrics"
+	"imobiliary/internal/platform/ratelimit"
+	"imobiliary/internal/usecase"
 )
 
 // middleware wraps a handler with behaviour applied around every request.
@@ -54,6 +57,12 @@ func infoFrom(ctx context.Context) *requestInfo {
 }
 
 // identify attaches the request ID, trace context and client address.
+//
+// It also puts the same facts in the form the use cases read, because every
+// audit entry and every access record carries them and none of them makes a
+// decision with them. The source port comes from the connection: an address
+// behind carrier-grade NAT identifies thousands of subscribers, and the Marco
+// Civil's records are worth little without it.
 func identify(trustProxy bool) middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -63,9 +72,48 @@ func identify(trustProxy bool) middleware {
 			}
 			info.TraceID, info.ParentSpanID, _ = parseTraceparent(r.Header.Get("traceparent"))
 			w.Header().Set("X-Request-ID", info.ID)
-			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestInfoKey, info)))
+
+			ctx := context.WithValue(r.Context(), requestInfoKey, info)
+			ctx = usecase.WithRequestInfo(ctx, usecase.RequestInfo{
+				RequestID: info.ID,
+				IP:        parseAddr(info.ClientIP),
+				Port:      clientPort(r, trustProxy),
+			})
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// parseAddr turns the address into the form the records store, or nil when it
+// is not an address at all.
+func parseAddr(ip string) *netip.Addr {
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
+		return nil
+	}
+	addr = addr.Unmap()
+	return &addr
+}
+
+// clientPort is the source port of the connection, or of the proxy's
+// X-Forwarded-Port when one is trusted.
+func clientPort(r *http.Request, trustProxy bool) int {
+	if trustProxy {
+		if forwarded := r.Header.Get("X-Forwarded-Port"); forwarded != "" {
+			if port, err := strconv.Atoi(strings.TrimSpace(forwarded)); err == nil && port > 0 && port < 65536 {
+				return port
+			}
+		}
+	}
+	_, rawPort, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return 0
+	}
+	port, err := strconv.Atoi(rawPort)
+	if err != nil {
+		return 0
+	}
+	return port
 }
 
 // secureHeaders applies to every API response. Nothing this API returns may
@@ -262,4 +310,170 @@ func rawClientIP(r *http.Request, trustProxy bool) string {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+// --- authentication and authorisation ---------------------------------------
+
+const callerContextKey contextKey = iota + 1
+
+// callerFrom returns the authenticated caller. It panics when called on a
+// route that is not behind requireAuth, which is a wiring mistake rather than
+// a runtime condition worth handling.
+func callerFrom(ctx context.Context) *usecase.Caller {
+	caller, ok := ctx.Value(callerContextKey).(*usecase.Caller)
+	if !ok {
+		panic("http: handler requires authentication but is not behind requireAuth")
+	}
+	return caller
+}
+
+// requireAuth rejects a request without a valid access token and puts the
+// caller, with the membership read from the database, in the context.
+func (s *Server) requireAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, ok := bearerToken(r)
+		if !ok {
+			// RFC 6750: a 401 advertises the scheme the client should use.
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			writeFailure(w, s.logger, http.StatusUnauthorized, codeUnauthorized, "authentication required")
+			return
+		}
+		access, err := s.signer.ParseAccess(raw)
+		if err != nil {
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			writeError(w, s.logger, err)
+			return
+		}
+		caller, err := s.identity.Authenticate(r.Context(), access)
+		if err != nil {
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			writeError(w, s.logger, err)
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), callerContextKey, caller)))
+	})
+}
+
+// requireAdmin refuses what only an administrator may do.
+//
+// The use cases check this again themselves. Twice is deliberate: the
+// middleware keeps a route from being exposed by mistake, and the use case
+// keeps the rule true no matter who calls it.
+func (s *Server) requireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !callerFrom(r.Context()).IsAdmin() {
+			writeFailure(w, s.logger, http.StatusForbidden, codeForbidden, "only an administrator may do this")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// requireEnrolled holds an administrator without a second factor to the
+// enrolment endpoints.
+//
+// The session is real, so nothing has to be re-typed once the factor is on;
+// what it may reach is what changes. The code says which state it is in, so a
+// client can send the person straight to the setup screen instead of guessing
+// from a bare 403.
+func (s *Server) requireEnrolled(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if callerFrom(r.Context()).MFAEnrollmentRequired {
+			writeFailure(w, s.logger, http.StatusForbidden, codeMFAEnrollment,
+				"enable the second factor to continue")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// bearerToken extracts the credential from an Authorization header.
+func bearerToken(r *http.Request) (string, bool) {
+	header := r.Header.Get("Authorization")
+	if header == "" {
+		return "", false
+	}
+	scheme, credential, found := strings.Cut(header, " ")
+	if !found || !strings.EqualFold(scheme, "Bearer") {
+		return "", false
+	}
+	credential = strings.TrimSpace(credential)
+	return credential, credential != ""
+}
+
+// --- rate limits ------------------------------------------------------------
+
+// limitGlobal charges every request to the client's address.
+func (s *Server) limitGlobal(next http.Handler) http.Handler {
+	return s.limitByIP(s.opts.Limiters.Global, next)
+}
+
+// limitCredentials charges the endpoints where a secret can be guessed.
+func (s *Server) limitCredentials(next http.Handler) http.Handler {
+	return s.limitByIP(s.opts.Limiters.Credentials, next)
+}
+
+func (s *Server) limitByIP(limiter *ratelimit.Limiter, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if limiter == nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if allowed, retryAfter := limiter.Allow(rateKey(infoFrom(r.Context()).ClientIP)); !allowed {
+			s.rejectRateLimited(w, retryAfter)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// limitWrites bounds the authenticated operations that change something,
+// keyed by account: a client coming from many addresses is still one account.
+func (s *Server) limitWrites(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		limiter := s.opts.Limiters.Write
+		if limiter == nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if allowed, retryAfter := limiter.Allow(callerFrom(r.Context()).User.ID.String()); !allowed {
+			s.rejectRateLimited(w, retryAfter)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) rejectRateLimited(w http.ResponseWriter, retryAfter time.Duration) {
+	// Retry-After is expressed in whole seconds, rounded up so a client that
+	// obeys it never returns while still short of a token.
+	seconds := int(math.Ceil(retryAfter.Seconds()))
+	if seconds < 1 {
+		seconds = 1
+	}
+	w.Header().Set("Retry-After", strconv.Itoa(seconds))
+	writeFailure(w, s.logger, http.StatusTooManyRequests, codeRateLimited, "too many requests")
+}
+
+// rateKey is the identity a request is charged to.
+//
+// An IPv4 address is one key. An IPv6 address is not: a single customer is
+// routinely handed a whole /64, so keying each address separately would let
+// one client rotate its source address on every request and never meet a
+// limit, the credential limit included. Copied from docgen, where that was
+// found and fixed.
+func rateKey(ip string) string {
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
+		return ip
+	}
+	addr = addr.Unmap()
+	if addr.Is4() {
+		return addr.String()
+	}
+	prefix, err := addr.Prefix(64)
+	if err != nil {
+		return ip
+	}
+	return prefix.String()
 }

@@ -18,6 +18,7 @@ import (
 
 	"imobiliary/internal/platform/fieldcrypt"
 	"imobiliary/internal/platform/logging"
+	"imobiliary/internal/platform/token"
 )
 
 // Server is the configuration of the API process.
@@ -43,9 +44,50 @@ type Server struct {
 	// any client choose the address it is logged and rate-limited under.
 	TrustProxyHeaders bool
 
+	// TokenKeys sign the access tokens, by name; TokenKeyID names the one
+	// that signs new ones. The rest stay to verify what they signed.
+	TokenKeys  map[string][]byte
+	TokenKeyID string
+
+	AccessTokenTTL  time.Duration
+	RefreshTokenTTL time.Duration
+	ChallengeTTL    time.Duration
+	ResetTTL        time.Duration
+	InvitationTTL   time.Duration
+
+	// AppURL is where the platform is served. The reset and invitation links
+	// are built from it, and it is the only URL this API needs to know.
+	AppURL string
+
+	// ResendAPIKey and MailFrom configure delivery. Without a key the service
+	// refuses to start unless MailLog is declared, because the fallback writes
+	// reset links and invitations to the log.
+	ResendAPIKey string
+	MailLog      bool
+	MailFrom     string
+
+	RateLimits      RateLimits
 	LogLevel        slog.Level
 	MaxRequestBytes int64
 	ShutdownTimeout time.Duration
+}
+
+// Rule is one rate-limit setting: a sustained rate in requests per second and
+// the burst a client may spend at once.
+type Rule struct {
+	Rate  float64
+	Burst int
+}
+
+// RateLimits groups the layered limits.
+type RateLimits struct {
+	// GlobalPerIP applies to every request.
+	GlobalPerIP Rule
+	// CredentialsPerIP guards the endpoints where a secret is guessed:
+	// sign-in, the second factor, recovery and invitations.
+	CredentialsPerIP Rule
+	// WritePerUser bounds the authenticated operations that change something.
+	WritePerUser Rule
 }
 
 // Migrator is the configuration of the migrate command.
@@ -62,6 +104,15 @@ func LoadServer() (*Server, error) {
 		DatabaseURL:       os.Getenv("IMOBILIARY_DATABASE_URL"),
 		TrustProxyHeaders: envBool("IMOBILIARY_TRUST_PROXY_HEADERS", false),
 		LogLevel:          logging.ParseLevel(os.Getenv("IMOBILIARY_LOG_LEVEL")),
+		AppURL:            env("IMOBILIARY_APP_URL", "http://localhost:3001"),
+		ResendAPIKey:      os.Getenv("IMOBILIARY_RESEND_API_KEY"),
+		MailLog:           envBool("IMOBILIARY_MAIL_LOG", false),
+		MailFrom:          env("IMOBILIARY_MAIL_FROM", "Imobiliary <nao-responda@localhost>"),
+		RateLimits: RateLimits{
+			GlobalPerIP:      Rule{Rate: 10, Burst: 60},
+			CredentialsPerIP: Rule{Rate: 0.2, Burst: 10},
+			WritePerUser:     Rule{Rate: 2, Burst: 20},
+		},
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -81,6 +132,36 @@ func LoadServer() (*Server, error) {
 	if cfg.IndexKey, err = fieldcrypt.DecodeKey(os.Getenv("IMOBILIARY_INDEX_KEY")); err != nil {
 		return nil, fmt.Errorf("config: IMOBILIARY_INDEX_KEY: %w", err)
 	}
+	if cfg.TokenKeys, cfg.TokenKeyID, err = token.ParseKeys(os.Getenv("IMOBILIARY_TOKEN_KEYS")); err != nil {
+		return nil, fmt.Errorf("config: IMOBILIARY_TOKEN_KEYS: %w", err)
+	}
+	if cfg.AccessTokenTTL, err = envDuration("IMOBILIARY_ACCESS_TTL", 15*time.Minute); err != nil {
+		return nil, err
+	}
+	if cfg.RefreshTokenTTL, err = envDuration("IMOBILIARY_REFRESH_TTL", 30*24*time.Hour); err != nil {
+		return nil, err
+	}
+	if cfg.ChallengeTTL, err = envDuration("IMOBILIARY_MFA_CHALLENGE_TTL", 5*time.Minute); err != nil {
+		return nil, err
+	}
+	if cfg.ResetTTL, err = envDuration("IMOBILIARY_PASSWORD_RESET_TTL", 30*time.Minute); err != nil {
+		return nil, err
+	}
+	if cfg.InvitationTTL, err = envDuration("IMOBILIARY_INVITATION_TTL", 7*24*time.Hour); err != nil {
+		return nil, err
+	}
+
+	// Fail closed, the way the keys do. Without this the service would fall
+	// back to logging mail, and a deployment missing its provider key would
+	// write a working password-reset link to its log for any account anyone
+	// asked about.
+	if cfg.ResendAPIKey == "" && !cfg.MailLog {
+		return nil, errors.New(
+			"config: IMOBILIARY_RESEND_API_KEY must be set, or IMOBILIARY_MAIL_LOG=true " +
+				"declared explicitly for development (it writes reset links and invitations to the log)",
+		)
+	}
+
 	if cfg.MaxRequestBytes, err = envInt64("IMOBILIARY_MAX_REQUEST_BYTES", 1<<20); err != nil {
 		return nil, err
 	}

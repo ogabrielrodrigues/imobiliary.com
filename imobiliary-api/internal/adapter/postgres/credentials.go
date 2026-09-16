@@ -396,7 +396,7 @@ func (r *auditRepository) Record(ctx context.Context, e *domain.AuditEvent) erro
 			entity_id, fields, request_id, ip, occurred_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		pgUUID(e.ID), pgNullUUID(e.OrganizationID), pgNullUUID(e.ActorID), string(e.Action),
-		e.EntityType, pgNullUUID(e.EntityID), e.Fields, e.RequestID, nullAddr(e.IP), e.OccurredAt)
+		e.EntityType, pgNullUUID(e.EntityID), fieldNames(e.Fields), e.RequestID, nullAddr(e.IP), e.OccurredAt)
 	if err != nil {
 		return fmt.Errorf("postgres: record audit event: %w", err)
 	}
@@ -420,6 +420,15 @@ func (r *auditRepository) PurgeAccessRecords(ctx context.Context, before time.Ti
 		return 0, fmt.Errorf("postgres: purge access records: %w", err)
 	}
 	return tag.RowsAffected(), nil
+}
+
+// fieldNames never sends nil: the column is NOT NULL with an empty default,
+// and a nil slice would arrive as NULL rather than as no fields.
+func fieldNames(fields []string) []string {
+	if fields == nil {
+		return []string{}
+	}
+	return fields
 }
 
 func nullAddr(addr *netip.Addr) any {
