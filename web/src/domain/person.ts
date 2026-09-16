@@ -293,7 +293,8 @@ export function validatePerson(p: PersonInput): FieldError[] {
   }
 
   if (p.kind === "individual") {
-    if (p.cpf.trim() !== "" && !isValidCPF(p.cpf)) add("cpf", "CPF inválido. Confira os números.");
+    if (p.cpf.trim() === "") add("cpf", "Informe o CPF.");
+    else if (!isValidCPF(p.cpf)) add("cpf", "CPF inválido. Confira os números.");
     if (p.propertyRegime !== "" && !hasPartner(p.maritalStatus)) {
       add("property_regime", "O regime de bens vale só para casamento ou união estável.");
     }
@@ -339,6 +340,7 @@ export function translatePersonProblem(problem: FieldError): FieldError {
       "Essa pessoa não está cadastrada como casada ou em união estável.",
     "is already linked to another person": "Essa pessoa já está ligada a outro cônjuge.",
     "cannot change": "O tipo de cadastro não pode mudar.",
+    "is required": field === "cpf" ? "Informe o CPF." : "Preencha este campo.",
   };
   return { field, message: known[message] ?? "Valor não aceito. Confira este campo." };
 }

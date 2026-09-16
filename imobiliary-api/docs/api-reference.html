@@ -112,7 +112,7 @@
 <div class="shell">
   <nav class="rail" aria-label="Sections">
     <div class="brand">imobiliary <span>api</span></div>
-    <div class="ver">v0.3.0 · phase 3</div>
+    <div class="ver">v0.3.1 · phase 3</div>
     <h3>Guide</h3>
     <ul>
       <li><a href="#auth">Authentication</a></li>
@@ -425,7 +425,7 @@ If-Match: "3"
         <div class="sig"><span class="m post">POST</span><span class="path">/v1/people</span><span class="access">session · writes</span></div>
         <p>Registers a person with up to ten addresses, one primary. Naming a spouse writes the link on the spouse's record too; the spouse must be an individual registered as married or in a stable union and not linked to someone else. Representatives must be individuals.</p>
         <dl class="io">
-          <dt>Body</dt><dd><code>kind</code>, <code>name</code>, <code>email</code>, <code>phone</code>; individuals <code>cpf</code>, <code>nationality</code>, <code>marital_status</code>, <code>property_regime</code>, <code>spouse_id</code>, <code>occupation</code>, <code>birth_date</code>, <code>gender</code>; companies <code>cnpj</code>, <code>trade_name</code>, <code>representative_ids</code>; <code>addresses</code></dd>
+          <dt>Body</dt><dd><code>kind</code>, <code>name</code>, <code>email</code>, <code>phone</code>; individuals <code>cpf</code> (required), <code>nationality</code>, <code>marital_status</code>, <code>property_regime</code>, <code>spouse_id</code>, <code>occupation</code>, <code>birth_date</code>, <code>gender</code>; companies <code>cnpj</code>, <code>trade_name</code>, <code>representative_ids</code>; <code>addresses</code></dd>
           <dt>Answers</dt><dd><code>201</code> <code>Person</code> with <code>ETag</code> · <code>422</code>, including a CPF or CNPJ already in the office</dd>
         </dl>
       </article>

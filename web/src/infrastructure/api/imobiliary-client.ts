@@ -47,6 +47,7 @@ import type {
   PropertyRegime,
 } from "../../domain/person.ts";
 import {
+  ownersToSave,
   parseShare,
   shareForApi,
   shareFromApi,
@@ -497,7 +498,7 @@ function propertyPayload(p: PropertyInput): string {
     municipal_registration: p.municipalRegistration,
     water_code: p.waterCode,
     energy_code: p.energyCode,
-    owners: p.owners.map((o) => {
+    owners: ownersToSave(p.owners).map((o) => {
       const share = parseShare(o.share);
       return { person_id: o.personId, share: share === null ? o.share : shareForApi(share) };
     }),

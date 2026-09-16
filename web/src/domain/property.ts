@@ -120,6 +120,14 @@ export function splitEvenly(n: number): string[] {
   return Array.from({ length: n }, (_, i) => formatShare(i === n - 1 ? FULL_SHARE - each * (n - 1) : each));
 }
 
+/**
+ * The owners as they are sent: a single owner holds 100% whatever the hidden
+ * field says, so a share typed while there were two owners cannot linger.
+ */
+export function ownersToSave(owners: readonly OwnerInput[]): OwnerInput[] {
+  return owners.length === 1 ? owners.map((owner) => ({ ...owner, share: "100" })) : [...owners];
+}
+
 /** The sum of the shares that parse, in millionths. */
 export function totalShares(owners: readonly OwnerInput[]): number {
   return owners.reduce((sum, owner) => sum + (parseShare(owner.share) ?? 0), 0);
@@ -145,6 +153,8 @@ export function validateProperty(p: PropertyInput): FieldError[] {
     return problems;
   }
   if (p.owners.length > MAX_OWNERS) add("owners", `Informe no máximo ${MAX_OWNERS} proprietários.`);
+  // A single owner holds the whole property; there is no share to check.
+  if (p.owners.length === 1) return problems;
 
   let allParse = true;
   p.owners.forEach((owner, i) => {

@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Imobiliary API
-  version: "0.3.0"
+  version: "0.3.1"
   summary: Rental property management for brokers, small agencies and owners.
   description: |
     The API behind the Imobiliary platform. It covers identity and the office
@@ -1497,7 +1497,7 @@ components:
           description: Full name of an individual, legal name of a company.
         email: { type: string }
         phone: { type: string, description: "10 to 13 digits, formatting allowed." }
-        cpf: { type: string, description: "Individuals. Formatted or not." }
+        cpf: { type: string, description: "Required for individuals, formatted or not, and unique in the office." }
         nationality: { type: string, maxLength: 120 }
         marital_status:
           type: string

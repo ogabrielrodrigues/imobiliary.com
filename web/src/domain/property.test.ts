@@ -8,6 +8,7 @@ import {
   formatShare,
   parseShare,
   shareForApi,
+  ownersToSave,
   shareFromApi,
   splitEvenly,
   totalShares,
@@ -63,10 +64,26 @@ describe("validateProperty", () => {
   it("names the address lines and a share that is not a number", () => {
     const fields = validateProperty({
       ...emptyProperty(),
-      owners: [{ personId: "a", share: "metade" }],
+      owners: [
+        { personId: "a", share: "metade" },
+        { personId: "b", share: "50" },
+      ],
     }).map((p) => p.field);
     assert.deepEqual(fields, ["address.street", "address.city", "address.state", "address.zip_code", "owners[0].share"]);
     assert.deepEqual(validateProperty(emptyProperty()).at(-1), { field: "owners", message: "Informe ao menos um proprietário." });
+  });
+});
+
+describe("a single owner", () => {
+  it("is not asked for a share, and is saved with 100", () => {
+    const one = { ...emptyProperty(), owners: [{ personId: "a", share: "" }] };
+    assert.deepEqual(validateProperty(one).filter((p) => p.field.startsWith("owners")), []);
+    assert.deepEqual(ownersToSave(one.owners), [{ personId: "a", share: "100" }]);
+    const two = [
+      { personId: "a", share: "60" },
+      { personId: "b", share: "40" },
+    ];
+    assert.deepEqual(ownersToSave(two), two);
   });
 });
 

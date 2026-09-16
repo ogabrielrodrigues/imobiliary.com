@@ -246,10 +246,13 @@ func validateIndividual(v *ValidationError, p *Person) {
 	if len(p.RepresentativeIDs) > 0 {
 		v.Add("representative_ids", "belong to a company")
 	}
-	if p.CPF != "" {
-		if _, ok := NormalizeCPF(p.CPF); !ok {
-			v.Add("cpf", "is not a valid CPF")
-		}
+	// The CPF identifies an individual, and the national identity card uses
+	// the same number, so every individual carries one.
+	switch _, ok := NormalizeCPF(p.CPF); {
+	case p.CPF == "":
+		v.Add("cpf", "is required")
+	case !ok:
+		v.Add("cpf", "is not a valid CPF")
 	}
 	checkLength(v, "nationality", p.Nationality, MaxShortTextLength)
 	checkLength(v, "occupation", p.Occupation, MaxShortTextLength)

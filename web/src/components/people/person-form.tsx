@@ -211,7 +211,7 @@ export function PersonForm({
         })}
         {kind === "individual" ? (
           <>
-            {text("cpf", "cpf", "CPF", { mask: maskCPF, inputMode: "numeric", placeholder: "000.000.000-00", hint: "Opcional, mas necessário para o contrato." })}
+            {text("cpf", "cpf", "CPF", { mask: maskCPF, inputMode: "numeric", placeholder: "000.000.000-00" })}
             {text("birthDate", "birth_date", "Data de nascimento", { type: "date" })}
             {text("nationality", "nationality", "Nacionalidade", { placeholder: "brasileira" })}
             {text("occupation", "occupation", "Profissão", { placeholder: "Engenheira civil" })}

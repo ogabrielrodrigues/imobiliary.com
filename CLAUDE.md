@@ -1372,6 +1372,23 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       and the icon looked low; measured with canvas font metrics at 13.5px and
       12.8px, 0.1px after the fix.
 
+43. **CPF required, and a single owner has no share field** (user's requests,
+    2026-09-16).
+    - **Every individual carries a CPF.** The user ruled it is not optional: it
+      identifies the person. The Go domain answers `cpf: is required`,
+      migration 0007 makes `individuals.cpf` and `cpf_index` NOT NULL (it
+      fails on purpose if an individual without one exists), the web form
+      says "Informe o CPF." and lost its "Opcional" hint. CNPJ stays optional
+      for companies. Integration tests build individuals with `individual(name)`,
+      which draws a valid, distinct CPF from `nextCPF()`.
+    - **The share field shows only with two owners or more.** A single owner
+      holds 100%: `validateProperty` skips shares for one owner,
+      `ownersToSave` sends "100" whatever the hidden field held, and removing
+      down to one owner sets the remaining share to 100.
+    - `pgtest` retries `DROP DATABASE ... WITH (FORCE)` for five seconds: once a
+      passing test failed its cleanup on SQLSTATE 42501, most likely an
+      autovacuum worker the test role cannot terminate.
+
 ### Next step
 
 Phase 4 of `PLANO.md` §3.6 and §7: contracts and instalments. The exclusion

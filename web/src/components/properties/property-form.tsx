@@ -211,10 +211,13 @@ export function PropertyForm({
             ) : (
               <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
                 {list.state.value.map((owner, index) => (
-                  <li key={owner.personId} className="flex flex-wrap items-end gap-3 px-3 py-2.5">
+                  <li key={owner.personId} className="flex min-h-12 flex-wrap items-end gap-3 px-3 py-2.5">
                     <span className="min-w-0 flex-1 self-center truncate text-small font-medium">
                       {names.find((p) => p.id === owner.personId)?.name ?? "Pessoa"}
                     </span>
+                    {/* A share is asked for only once there is something to
+                        split: a single owner holds 100%. */}
+                    {list.state.value.length > 1 && (
                     <form.Field name={`owners[${index}].share`}>
                       {(field) => (
                         <div className="w-32">
@@ -236,12 +239,20 @@ export function PropertyForm({
                         </div>
                       )}
                     </form.Field>
+                    )}
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon-sm"
                       aria-label={`Remover ${names.find((p) => p.id === owner.personId)?.name ?? "proprietário"}`}
-                      onClick={() => list.removeValue(index)}
+                      onClick={() => {
+                        setFailure(null);
+                        // Whoever is left alone takes the whole property.
+                        if (list.state.value.length === 2) {
+                          form.setFieldValue(`owners[${index === 0 ? 1 : 0}].share`, "100");
+                        }
+                        void list.removeValue(index);
+                      }}
                     >
                       <IconTrash aria-hidden="true" />
                     </Button>

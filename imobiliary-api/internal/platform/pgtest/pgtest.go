@@ -132,9 +132,19 @@ func createDatabase(t testing.TB, admin, template string) string {
 			return
 		}
 		defer conn.Close(context.Background())
-		if _, err := conn.Exec(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", name)); err != nil {
-			t.Errorf("pgtest: drop %s: %v", name, err)
+		// FORCE terminates the test's own connections, but not a process
+		// another role runs in that database, such as an autovacuum worker
+		// that started after the test's writes. That process ends by itself
+		// within moments, so the drop is tried again for a few seconds
+		// before it counts as a failure; once it failed a passing test.
+		var dropErr error
+		for attempt := 0; attempt < 20; attempt++ {
+			if _, dropErr = conn.Exec(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", name)); dropErr == nil {
+				return
+			}
+			time.Sleep(250 * time.Millisecond)
 		}
+		t.Errorf("pgtest: drop %s: %v", name, dropErr)
 	})
 	return withDatabase(t, admin, name)
 }

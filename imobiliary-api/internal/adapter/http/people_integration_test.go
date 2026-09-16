@@ -4,10 +4,12 @@ package http_test
 
 import (
 	json "encoding/json/v2"
+	"fmt"
 	"io"
 	"net/http"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"uuid"
 
@@ -70,6 +72,37 @@ func (a *api) withHeader(method, path, accessToken, header, value string, body a
 		a.t.Fatal(err)
 	}
 	return response{status: resp.StatusCode, body: payload, header: resp.Header}
+}
+
+// cpfSequence hands out CPFs that are valid and different from each other,
+// since every individual needs one and a CPF is unique within an office.
+var cpfSequence atomic.Int64
+
+func nextCPF() string {
+	base := fmt.Sprintf("%09d", 100000000+cpfSequence.Add(1))
+	digit := func(digits string, weight int) byte {
+		sum := 0
+		for _, d := range digits {
+			sum += int(d-'0') * weight
+			weight--
+		}
+		rest := sum * 10 % 11
+		if rest == 10 {
+			rest = 0
+		}
+		return byte('0' + rest)
+	}
+	first := digit(base, 10)
+	return base + string(first) + string(digit(base+string(first), 11))
+}
+
+// individual is the least an individual needs: a name and a CPF.
+func individual(name string, fields ...any) map[string]any {
+	body := map[string]any{"kind": "individual", "name": name, "cpf": nextCPF()}
+	for i := 0; i+1 < len(fields); i += 2 {
+		body[fields[i].(string)] = fields[i+1]
+	}
+	return body
 }
 
 func maria() map[string]any {
@@ -232,7 +265,7 @@ func TestSearchingAndPagingPeople(t *testing.T) {
 	a := newAPI(t)
 	admin := a.officeAdmin("ana@example.com", "Central")
 	for _, name := range []string{"João Silva", "Beatriz Lima", "Ana Souza"} {
-		a.createPerson(admin, map[string]any{"kind": "individual", "name": name})
+		a.createPerson(admin, individual(name))
 	}
 	a.createPerson(admin, maria())
 	a.createPerson(admin, map[string]any{"kind": "company", "name": "Prado Imóveis Ltda", "cnpj": "12.ABC.345/01DE-35"})
@@ -294,8 +327,8 @@ func TestSpouseLinksStaySymmetrical(t *testing.T) {
 	a := newAPI(t)
 	admin := a.officeAdmin("ana@example.com", "Central")
 
-	pedro := a.createPerson(admin, map[string]any{"kind": "individual", "name": "Pedro Souza", "marital_status": "married"})
-	single := a.createPerson(admin, map[string]any{"kind": "individual", "name": "Rita Alves", "marital_status": "single"})
+	pedro := a.createPerson(admin, individual("Pedro Souza", "marital_status", "married"))
+	single := a.createPerson(admin, individual("Rita Alves", "marital_status", "single"))
 
 	// A spouse must be registered as married or in a stable union.
 	refused := maria()
@@ -316,7 +349,7 @@ func TestSpouseLinksStaySymmetrical(t *testing.T) {
 	}
 
 	// Taken: nobody else may name Pedro now.
-	third := map[string]any{"kind": "individual", "name": "Clara", "marital_status": "married", "spouse_id": pedro.ID}
+	third := individual("Clara", "marital_status", "married", "spouse_id", pedro.ID)
 	a.expect(http.StatusUnprocessableEntity, http.MethodPost, "/v1/people", admin.access, third)
 
 	// Divorcing on one side clears the other.

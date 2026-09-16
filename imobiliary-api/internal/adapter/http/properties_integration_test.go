@@ -60,7 +60,7 @@ func TestPropertyLifecycleWithOwners(t *testing.T) {
 	a := newAPI(t)
 	admin := a.officeAdmin("ana@example.com", "Central")
 	maria := a.createPerson(admin, maria())
-	pedro := a.createPerson(admin, map[string]any{"kind": "individual", "name": "Pedro Souza"})
+	pedro := a.createPerson(admin, individual("Pedro Souza"))
 
 	created := a.expect(http.StatusCreated, http.MethodPost, "/v1/properties", admin.access,
 		propertyRequest("Rua das Flores", share(maria.ID, "50"), share(pedro.ID, "50")))
@@ -74,7 +74,7 @@ func TestPropertyLifecycleWithOwners(t *testing.T) {
 	}
 
 	// A third each, the last taking the remainder, replaces the halves.
-	clara := a.createPerson(admin, map[string]any{"kind": "individual", "name": "Clara Dias"})
+	clara := a.createPerson(admin, individual("Clara Dias"))
 	edit := propertyRequest("Rua das Flores", share(maria.ID, "33.3333"), share(pedro.ID, "33.3333"), share(clara.ID, "33.3334"))
 	a.expect(http.StatusPreconditionRequired, http.MethodPut, "/v1/properties/"+p.ID, admin.access, edit)
 	updated := a.withHeader(http.MethodPut, "/v1/properties/"+p.ID, admin.access, "If-Match", `"1"`, edit)
@@ -179,7 +179,7 @@ func TestSearchingProperties(t *testing.T) {
 	a := newAPI(t)
 	admin := a.officeAdmin("ana@example.com", "Central")
 	maria := a.createPerson(admin, maria())
-	pedro := a.createPerson(admin, map[string]any{"kind": "individual", "name": "Pedro Souza"})
+	pedro := a.createPerson(admin, individual("Pedro Souza"))
 	a.createProperty(admin, propertyRequest("Rua das Flores", share(maria.ID, "100")))
 	a.createProperty(admin, propertyRequest("Avenida Brasil", share(pedro.ID, "100")))
 	other := propertyRequest("Travessa São João", share(maria.ID, "60"), share(pedro.ID, "40"))

@@ -22,8 +22,8 @@ function NewPersonPage() {
         </Link>
         <h1 className="text-title-lg font-semibold tracking-[-0.015em]">Nova pessoa</h1>
         <p className="max-w-xl font-reading text-muted-foreground">
-          Só o nome é obrigatório agora. CPF, estado civil e endereço entram no contrato, então vale
-          completar antes de usá-lo em um.
+          Para pessoa física, nome e CPF são obrigatórios. Estado civil e endereço entram no
+          contrato, então vale completar antes de usá-lo em um.
         </p>
       </header>
 

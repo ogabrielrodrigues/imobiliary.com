@@ -50,6 +50,7 @@ func TestValidatePersonRefuses(t *testing.T) {
 		field  string
 	}{
 		{"no name", func(p *Person) { p.Name = "" }, "name"},
+		{"no CPF", func(p *Person) { p.CPF = "" }, "cpf"},
 		{"bad kind", func(p *Person) { p.Kind = "robot" }, "kind"},
 		{"bad CPF", func(p *Person) { p.CPF = "111.111.111-11" }, "cpf"},
 		{"bad email", func(p *Person) { p.Email = "not-an-address" }, "email"},

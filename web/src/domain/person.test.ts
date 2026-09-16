@@ -46,8 +46,9 @@ describe("documents", () => {
 });
 
 describe("validatePerson", () => {
-  it("asks only for the name of an empty individual", () => {
-    assert.deepEqual(fields(emptyPerson()), ["name"]);
+  it("asks for the name and the CPF of an empty individual", () => {
+    assert.deepEqual(fields(emptyPerson()), ["name", "cpf"]);
+    assert.equal(validatePerson(emptyPerson()).at(-1)?.message, "Informe o CPF.");
     assert.equal(validatePerson({ ...emptyPerson("company") })[0]?.message, "Informe a razão social.");
   });
 
