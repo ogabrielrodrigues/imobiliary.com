@@ -121,6 +121,7 @@ function SignInPage() {
               submitted={submitted}
               label="E-mail"
               type="email"
+              placeholder="nome@exemplo.com"
               autoComplete="email"
               autoFocus
             />
@@ -225,6 +226,7 @@ function SecondFactorStep({ challenge }: { readonly challenge: string }) {
               field={field}
               submitted={submitted}
               label="Código"
+              placeholder="000000"
               inputMode="text"
               autoComplete="one-time-code"
               autoFocus

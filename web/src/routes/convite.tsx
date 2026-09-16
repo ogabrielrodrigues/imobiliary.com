@@ -202,7 +202,7 @@ function NewAccount({
       >
         <form.Field name="name">
           {(field) => (
-            <BoundFormField field={field} submitted={submitted} label="Seu nome" autoComplete="name" autoFocus />
+            <BoundFormField field={field} submitted={submitted} label="Seu nome" placeholder="Nome e sobrenome" autoComplete="name" autoFocus />
           )}
         </form.Field>
 

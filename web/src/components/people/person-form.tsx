@@ -121,7 +121,14 @@ export function PersonForm({
     name: Exclude<keyof PersonInput, "kind" | "addresses" | "representativeIds" | "maritalStatus" | "propertyRegime" | "gender">,
     apiField: string,
     label: string,
-    options: { mask?: (v: string) => string; hint?: string; type?: string; autoComplete?: string; inputMode?: "numeric" | "email" | "tel" | "text" } = {},
+    options: {
+      mask?: (v: string) => string;
+      hint?: string;
+      placeholder?: string;
+      type?: string;
+      autoComplete?: string;
+      inputMode?: "numeric" | "email" | "tel" | "text";
+    } = {},
   ) => (
     <form.Field name={name}>
       {(field) => (
@@ -130,6 +137,7 @@ export function PersonForm({
           label={label}
           type={options.type ?? "text"}
           {...(options.hint === undefined ? {} : { hint: options.hint })}
+          {...(options.placeholder === undefined ? {} : { placeholder: options.placeholder })}
           {...(options.autoComplete === undefined ? { autoComplete: "off" } : { autoComplete: options.autoComplete })}
           {...(options.inputMode === undefined ? {} : { inputMode: options.inputMode })}
           value={typeof field.state.value === "string" ? field.state.value : ""}
@@ -198,13 +206,14 @@ export function PersonForm({
       <Section title="Identificação">
         {text("name", "name", kind === "company" ? "Razão social" : "Nome completo", {
           autoComplete: kind === "company" ? "organization" : "name",
+          placeholder: kind === "company" ? "Exemplo Imóveis Ltda" : "Nome e sobrenome, sem abreviar",
         })}
         {kind === "individual" ? (
           <>
-            {text("cpf", "cpf", "CPF", { mask: maskCPF, inputMode: "numeric", hint: "Opcional, mas necessário para o contrato." })}
+            {text("cpf", "cpf", "CPF", { mask: maskCPF, inputMode: "numeric", placeholder: "000.000.000-00", hint: "Opcional, mas necessário para o contrato." })}
             {text("birthDate", "birth_date", "Data de nascimento", { type: "date" })}
-            {text("nationality", "nationality", "Nacionalidade", { hint: "Por exemplo, brasileira." })}
-            {text("occupation", "occupation", "Profissão")}
+            {text("nationality", "nationality", "Nacionalidade", { placeholder: "brasileira" })}
+            {text("occupation", "occupation", "Profissão", { placeholder: "Engenheira civil" })}
             <form.Field name="gender">
               {(field) => (
                 <SelectField
@@ -224,15 +233,15 @@ export function PersonForm({
           </>
         ) : (
           <>
-            {text("tradeName", "trade_name", "Nome fantasia")}
-            {text("cnpj", "cnpj", "CNPJ", { mask: maskCNPJ, hint: "Aceita o CNPJ alfanumérico." })}
+            {text("tradeName", "trade_name", "Nome fantasia", { placeholder: "Exemplo Imóveis" })}
+            {text("cnpj", "cnpj", "CNPJ", { mask: maskCNPJ, placeholder: "00.000.000/0000-00", hint: "Aceita o CNPJ alfanumérico." })}
           </>
         )}
       </Section>
 
       <Section title="Contato">
-        {text("email", "email", "E-mail", { type: "email", inputMode: "email" })}
-        {text("phone", "phone", "Telefone", { mask: maskPhone, inputMode: "tel", hint: "Com DDD." })}
+        {text("email", "email", "E-mail", { type: "email", inputMode: "email", placeholder: "nome@exemplo.com" })}
+        {text("phone", "phone", "Telefone", { mask: maskPhone, inputMode: "tel", placeholder: "(00) 00000-0000", hint: "Com DDD." })}
       </Section>
 
       {kind === "individual" && (
@@ -392,6 +401,7 @@ export function PersonForm({
                         <FormField
                           name={`addresses.${index}.zip_code`}
                           label="CEP"
+                          placeholder="00000-000"
                           inputMode="numeric"
                           autoComplete="postal-code"
                           value={field.state.value}
@@ -419,11 +429,11 @@ export function PersonForm({
                       )}
                     </form.Field>
                   </div>
-                  <AddressText form={form} index={index} name="street" apiName="street" label="Logradouro" span="md:col-span-4" submitted={submitted} serverError={serverError} autoComplete="address-line1" />
-                  <AddressText form={form} index={index} name="number" apiName="number" label="Número" span="md:col-span-2" submitted={submitted} serverError={serverError} />
-                  <AddressText form={form} index={index} name="complement" apiName="complement" label="Complemento" span="md:col-span-2" submitted={submitted} serverError={serverError} autoComplete="address-line2" />
-                  <AddressText form={form} index={index} name="district" apiName="district" label="Bairro" span="md:col-span-2" submitted={submitted} serverError={serverError} />
-                  <AddressText form={form} index={index} name="city" apiName="city" label="Cidade" span="md:col-span-2" submitted={submitted} serverError={serverError} autoComplete="address-level2" />
+                  <AddressText form={form} index={index} name="street" apiName="street" label="Logradouro" placeholder="Rua, avenida, travessa" span="md:col-span-4" submitted={submitted} serverError={serverError} autoComplete="address-line1" />
+                  <AddressText form={form} index={index} name="number" apiName="number" label="Número" placeholder="120 ou s/n" span="md:col-span-2" submitted={submitted} serverError={serverError} />
+                  <AddressText form={form} index={index} name="complement" apiName="complement" label="Complemento" placeholder="Apto 12, bloco B" span="md:col-span-2" submitted={submitted} serverError={serverError} autoComplete="address-line2" />
+                  <AddressText form={form} index={index} name="district" apiName="district" label="Bairro" placeholder="Centro" span="md:col-span-2" submitted={submitted} serverError={serverError} />
+                  <AddressText form={form} index={index} name="city" apiName="city" label="Cidade" placeholder="Bebedouro" span="md:col-span-2" submitted={submitted} serverError={serverError} autoComplete="address-level2" />
                 </div>
               </div>
             ))}
@@ -472,6 +482,7 @@ function AddressText({
   submitted,
   serverError,
   autoComplete,
+  placeholder,
 }: {
   // The form's full type is long and generic; this helper only binds fields.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -484,6 +495,7 @@ function AddressText({
   readonly submitted: boolean;
   readonly serverError: (field: string) => string | undefined;
   readonly autoComplete?: string;
+  readonly placeholder?: string;
 }) {
   const Field = form.Field;
   return (
@@ -494,6 +506,7 @@ function AddressText({
             name={`addresses.${index}.${apiName}`}
             label={label}
             autoComplete={autoComplete ?? "off"}
+            {...(placeholder === undefined ? {} : { placeholder })}
             value={field.state.value}
             error={serverError(`addresses[${index}].${apiName}`) ?? visibleError(field.state.meta, submitted)}
             onBlur={field.handleBlur}

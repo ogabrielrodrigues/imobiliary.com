@@ -142,6 +142,7 @@ export function OrganizationPanel({
                 name="email"
                 label="E-mail"
                 type="email"
+                placeholder="nome@exemplo.com"
                 value={email}
                 onChange={(event) => {
                   const next = event.currentTarget.value;

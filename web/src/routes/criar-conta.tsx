@@ -122,6 +122,7 @@ function RegisterPage() {
               field={field}
               submitted={submitted}
               label="Seu nome"
+              placeholder="Nome e sobrenome"
               autoComplete="name"
               autoFocus
             />
@@ -130,7 +131,7 @@ function RegisterPage() {
 
         <form.Field name="email">
           {(field) => (
-            <BoundFormField field={field} submitted={submitted} label="E-mail" type="email" autoComplete="email" />
+            <BoundFormField field={field} submitted={submitted} label="E-mail" type="email" placeholder="nome@exemplo.com" autoComplete="email" />
           )}
         </form.Field>
 
@@ -140,6 +141,7 @@ function RegisterPage() {
               field={field}
               submitted={submitted}
               label="Nome do escritório"
+              placeholder="Imobiliária Exemplo"
               autoComplete="organization"
               hint="Aparece no topo da plataforma e nos convites que você enviar."
             />

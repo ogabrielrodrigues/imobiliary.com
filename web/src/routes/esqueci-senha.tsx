@@ -111,6 +111,7 @@ function ForgotPasswordPage() {
               submitted={submitted}
               label="E-mail"
               type="email"
+              placeholder="nome@exemplo.com"
               autoComplete="email"
               autoFocus
             />

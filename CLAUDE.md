@@ -269,6 +269,11 @@ Platform copy (every text a user reads) avoids AI writing tics: no em dash, no
 habitual triplets, nothing the system does not actually do. The user asked for
 this explicitly.
 
+Inputs carry a placeholder whenever it helps (user's request, 2026-09-16):
+the expected shape (`000.000.000-00`, `(00) 00000-0000`, `nome@exemplo.com`)
+or a short cue. It complements the label, never replaces it; password fields
+and native date pickers go without.
+
 ---
 
 ## Design system

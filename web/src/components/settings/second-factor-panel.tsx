@@ -129,6 +129,7 @@ export function SecondFactorPanel({
           <FormField
             name="code"
             label="Código do aplicativo"
+            placeholder="000000"
             value={code}
             inputMode="numeric"
             autoComplete="one-time-code"
