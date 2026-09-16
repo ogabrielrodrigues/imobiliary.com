@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useRouter } from "@tanstack/react-router";
 import { IconShieldCheck, IconShieldOff } from "@tabler/icons-react";
 
 import { summaryOf, type Failure } from "@/application/result";
@@ -27,6 +28,7 @@ export function SecondFactorPanel({
   readonly user: CurrentUser;
   readonly recoveryCodesLeft: number;
 }) {
+  const router = useRouter();
   const [enrollment, setEnrollment] = useState<{ secret: string; uri: string } | null>(null);
   const [codes, setCodes] = useState<readonly string[] | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
@@ -61,6 +63,11 @@ export function SecondFactorPanel({
     setCodes(result.value);
     setEnrollment(null);
     setCode("");
+    // The server function rotated the session, so the cookie now says the
+    // second factor is on. The guard's context still holds the old answer
+    // until the route is asked again; without this the panel kept offering
+    // "Ativar" after the codes were saved.
+    await router.invalidate();
   }
 
   return (

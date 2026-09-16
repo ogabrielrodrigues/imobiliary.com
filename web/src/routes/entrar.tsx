@@ -44,6 +44,17 @@ function SignInPage() {
   const [failure, setFailure] = useState<Failure | null>(null);
   const [challenge, setChallenge] = useState<string | null>(null);
 
+  /*
+    Whether the form has been submitted, for the rule that shows every error.
+
+    `submissionAttempts` is not enough on its own: when validation blocks the
+    submission, the form never counts the attempt, so an error on a field
+    nobody has left stays hidden and the button appears to do nothing. That is
+    exactly what the terms checkbox did. Tracking the attempt here makes the
+    form answer the first click, every time.
+  */
+  const [attempted, setAttempted] = useState(false);
+
   const form = useForm({
     defaultValues: { email: "", password: "" },
     validationLogic: blurThenChange,
@@ -72,6 +83,8 @@ function SignInPage() {
     },
   });
 
+  const submitted = attempted || form.state.submissionAttempts > 0;
+
   if (challenge !== null) {
     return <SecondFactorStep challenge={challenge} />;
   }
@@ -97,6 +110,7 @@ function SignInPage() {
         className="flex flex-col gap-5"
         onSubmit={(event) => {
           event.preventDefault();
+          setAttempted(true);
           void form.handleSubmit();
         }}
       >
@@ -104,7 +118,7 @@ function SignInPage() {
           {(field) => (
             <BoundFormField
               field={field}
-              submitted={form.state.submissionAttempts > 0}
+              submitted={submitted}
               label="E-mail"
               type="email"
               autoComplete="email"
@@ -117,7 +131,7 @@ function SignInPage() {
           {(field) => (
             <BoundFormField
               field={field}
-              submitted={form.state.submissionAttempts > 0}
+              submitted={submitted}
               label="Senha"
               type="password"
               autoComplete="current-password"
@@ -153,6 +167,17 @@ function SecondFactorStep({ challenge }: { readonly challenge: string }) {
   const router = useRouter();
   const [failure, setFailure] = useState<Failure | null>(null);
 
+  /*
+    Whether the form has been submitted, for the rule that shows every error.
+
+    `submissionAttempts` is not enough on its own: when validation blocks the
+    submission, the form never counts the attempt, so an error on a field
+    nobody has left stays hidden and the button appears to do nothing. That is
+    exactly what the terms checkbox did. Tracking the attempt here makes the
+    form answer the first click, every time.
+  */
+  const [attempted, setAttempted] = useState(false);
+
   const form = useForm({
     defaultValues: { code: "" },
     validationLogic: blurThenChange,
@@ -169,6 +194,8 @@ function SecondFactorStep({ challenge }: { readonly challenge: string }) {
       await router.navigate({ to: "/dashboard" });
     },
   });
+
+  const submitted = attempted || form.state.submissionAttempts > 0;
 
   return (
     <AuthLayout
@@ -188,6 +215,7 @@ function SecondFactorStep({ challenge }: { readonly challenge: string }) {
         className="flex flex-col gap-5"
         onSubmit={(event) => {
           event.preventDefault();
+          setAttempted(true);
           void form.handleSubmit();
         }}
       >
@@ -195,7 +223,7 @@ function SecondFactorStep({ challenge }: { readonly challenge: string }) {
           {(field) => (
             <BoundFormField
               field={field}
-              submitted={form.state.submissionAttempts > 0}
+              submitted={submitted}
               label="Código"
               inputMode="text"
               autoComplete="one-time-code"

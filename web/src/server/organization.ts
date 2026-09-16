@@ -130,12 +130,18 @@ export const removeMember = createServerFn({ method: "POST" })
  *
  * Unauthenticated on purpose: whoever opens the link is not signed in yet, and
  * the secret in their inbox is the credential.
+ *
+ * No Origin check, unlike every other POST here. The screen's loader calls this
+ * while the server renders the page, and a page request carries no Origin
+ * header, so the check refused every invitation and the screen said it was
+ * invalid. The check exists to stop a cross-site request acting on the session
+ * cookie; this reads, changes nothing, and uses no session. It is a POST only
+ * so the secret travels in a body rather than in a logged address.
  */
 export const lookupInvitation = createServerFn({ method: "POST" })
   .validator((token: string) => token)
   .handler(async ({ data }): Promise<Result<PendingInvitation>> =>
     attempt(async () => {
-      assertSameOrigin();
       if (data.trim() === "") throw fieldError("request", "O convite está incompleto.");
       return api().organizations.lookupInvitation(callContext(), data);
     }),

@@ -40,6 +40,17 @@ function RegisterPage() {
   const router = useRouter();
   const [failure, setFailure] = useState<Failure | null>(null);
 
+  /*
+    Whether the form has been submitted, for the rule that shows every error.
+
+    `submissionAttempts` is not enough on its own: when validation blocks the
+    submission, the form never counts the attempt, so an error on a field
+    nobody has left stays hidden and the button appears to do nothing. That is
+    exactly what the terms checkbox did. Tracking the attempt here makes the
+    form answer the first click, every time.
+  */
+  const [attempted, setAttempted] = useState(false);
+
   const form = useForm({
     defaultValues: {
       name: "",
@@ -83,7 +94,7 @@ function RegisterPage() {
     },
   });
 
-  const submitted = form.state.submissionAttempts > 0;
+  const submitted = attempted || form.state.submissionAttempts > 0;
 
   return (
     <AuthLayout
@@ -101,6 +112,7 @@ function RegisterPage() {
         className="flex flex-col gap-5"
         onSubmit={(event) => {
           event.preventDefault();
+          setAttempted(true);
           void form.handleSubmit();
         }}
       >
