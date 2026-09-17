@@ -450,7 +450,8 @@ type MonthFigures struct {
 	// Open is what is due in the month and not paid.
 	Open      domain.Money
 	OpenCount int
-	// OfficeFee is the administration fee on the rents received in the month.
+	// OfficeFee is the administration fee on the rents received in the month,
+	// taken on the rent with its charges and not on the late fee.
 	OfficeFee domain.Money
 }
 

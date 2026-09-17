@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Imobiliary API
-  version: "0.6.0"
+  version: "0.6.1"
   summary: Rental property management for brokers, small agencies and owners.
   description: |
     The API behind the Imobiliary platform. It covers identity and the office
@@ -1717,7 +1717,8 @@ paths:
         As of today in America/Sao_Paulo. `month`: every instalment due this
         month (rent and charges), what came in this month whatever the due
         day, what is due this month and unpaid, and the administration fee on
-        the rents received this month. `overdue`: every unpaid instalment past
+        the rents received this month, taken on the rent with its charges and
+        not on the late fee. `overdue`: every unpaid instalment past
         due. `portfolio`: properties, those with a running contract, running
         contracts and the sum of their current rents. `expiring`: running
         contracts ending within sixty days. `adjustments`: running contracts

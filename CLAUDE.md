@@ -1501,7 +1501,8 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       by due day; `rents` gained `UNIQUE (organization_id, id)` for the FK.
     - **Late fee** (`domain.ComputeLateFee`): the penalty rate on the rent with
       its charges, plus the monthly interest rate prorated over a **thirty-day
-      month** per day after the due day, each part half away from zero to the
+      month** (the commercial month, confirmed by the user on 2026-09-16) per
+      day after the due day, each part half away from zero to the
       centavo; nothing on or before the due day. The office can type over it.
     - **Payment in full only**: `late_fee` and `amount_paid` default to the
       computation; `paid_on` not after today (São Paulo). `UPDATE ... WHERE
@@ -1511,8 +1512,10 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       terms replaced** (`rents`), since regenerating the schedule would drop
       them. All audited (`rent.*`).
     - **`GET /v1/dashboard`** as of today: month expected/received/open and
-      the administration fee (`round(rent_amount × admin_fee)`, on rents
-      received this month, rent only), overdue totals, portfolio (properties,
+      the administration fee (`round((rent_amount + charges) × admin_fee)`
+      on rents received this month; **the user ruled on 2026-09-16 that the
+      fee is charged on the rent with its charges, never on the late fee**),
+      overdue totals, portfolio (properties,
       leased, running contracts, rent roll), contracts ending within 60 days,
       adjustments due within 30 days (index set, twelve months from start or
       last amendment), up to 20 rents due today and overdue.

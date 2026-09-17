@@ -200,9 +200,12 @@ func TestDashboard(t *testing.T) {
 	}
 	a.expect(http.StatusOK, http.MethodGet, "/v1/rents?status=overdue&contract_id="+c.ID, f.admin.access, nil).decode(t, &page)
 	overdue := len(page.Rents)
-	// Paid today, on time or not, it counts as received this month.
+	// Paid today, on time or not, it counts as received this month. The
+	// administration fee takes the charge too, and never the late fee.
+	a.expect(http.StatusCreated, http.MethodPost, "/v1/rents/"+page.Rents[1].ID+"/charges", f.admin.access,
+		map[string]any{"kind": "condominium", "amount": "400.00"})
 	a.expect(http.StatusOK, http.MethodPost, "/v1/rents/"+page.Rents[1].ID+"/payment", f.admin.access,
-		map[string]any{"paid_on": today.String(), "late_fee": "0.00"})
+		map[string]any{"paid_on": today.String(), "late_fee": "35.00"})
 
 	var d struct {
 		Today string `json:"today"`
@@ -230,7 +233,7 @@ func TestDashboard(t *testing.T) {
 		OverdueRents []rentBody `json:"overdue_rents"`
 	}
 	a.expect(http.StatusOK, http.MethodGet, "/v1/dashboard", f.admin.access, nil).decode(t, &d)
-	if d.Today != today.String() || d.Month.Received != "1600.00" || d.Month.ReceivedCount != 1 || d.Month.OfficeFee != "160.00" {
+	if d.Today != today.String() || d.Month.Received != "2035.00" || d.Month.ReceivedCount != 1 || d.Month.OfficeFee != "200.00" {
 		t.Errorf("month %+v", d.Month)
 	}
 	if d.Overdue.Count != overdue-1 || len(d.OverdueRents) != overdue-1 {

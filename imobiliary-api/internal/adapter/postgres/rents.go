@@ -250,7 +250,11 @@ func (d *dashboardRepository) Month(ctx context.Context, from, to domain.Date) (
 		            + COALESCE((SELECT sum(rc.amount) FROM rent_charges rc WHERE rc.rent_id = r.id), 0) AS amount
 		       FROM rents r WHERE r.due_on BETWEEN $1 AND $2
 		 ), paid AS (
-		     SELECT r.amount_paid, round(r.rent_amount::numeric * c.admin_fee / 1000000)::bigint AS fee
+		     -- The administration fee is charged on the whole rent: the rent and
+		     -- its charges, never the late fee (user's rule, 2026-09-16).
+		     SELECT r.amount_paid,
+		            round((r.rent_amount + COALESCE((SELECT sum(rc.amount) FROM rent_charges rc WHERE rc.rent_id = r.id), 0))::numeric
+		                  * c.admin_fee / 1000000)::bigint AS fee
 		       FROM rents r JOIN contracts c ON c.id = r.contract_id
 		      WHERE r.paid_on BETWEEN $1 AND $2
 		 )
