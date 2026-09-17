@@ -19,7 +19,6 @@ import { PRIVACY_POLICY, TERMS_OF_USE } from "@/domain/legal";
 const PAGES: readonly { path: string; priority: string; lastModified?: string }[] =
   [
     { path: "/", priority: "1.0" },
-    { path: "/criar-conta", priority: "0.8" },
     {
       path: "/privacidade",
       priority: "0.3",

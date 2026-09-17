@@ -1,8 +1,14 @@
 /**
- * Authentication, exposed to the browser as server functions.
+ * Signing in, exposed to the browser as server functions.
  *
- * These are the only way the interface reaches the API. Tokens never cross this
- * line: what goes back to the page is an account, never a credential.
+ * These are the only way the interface reaches either API. Tokens never cross
+ * this line: what goes back to the page is an account, never a credential.
+ *
+ * Identity belongs to the Imobiliary platform. A person signs in here with
+ * their Imobiliary account, and the session this holds is that platform's; the
+ * document service is called with a short token minted from it. Creating an
+ * account, changing a password and enrolling a second factor happen on the
+ * platform, which `platformLinks` points at.
  *
  * Expected failures come back as a `Result` rather than as a thrown error — see
  * `application/result.ts` for why.
@@ -10,76 +16,96 @@
 
 import { createServerFn } from "@tanstack/react-start";
 
-import type { FileContent } from "../application/ports.ts";
+import type { Caller, FileContent } from "../application/ports.ts";
 import { attempt, type Result } from "../application/result.ts";
 import { fieldError } from "../domain/errors.ts";
-import type { User } from "../domain/user.ts";
+import type { Membership, Organization, Role, User } from "../domain/user.ts";
 import {
-  normalizeEmail,
   validateLogin,
-  validateNewPassword,
-  validatePasswordChange,
-  validateRegistration,
+  validateSecondFactorCode,
   type LoginInput,
-  type PasswordChangeInput,
-  type RegistrationInput,
 } from "../domain/user.ts";
-import { createCookieSessionStore } from "../infrastructure/session/cookie-session-store.ts";
-import { assertSameOrigin, callContext, docgen, sessions } from "./runtime.ts";
+import { getConfig } from "../infrastructure/config.ts";
+import { assertSameOrigin, callContext, docgen, identity, sessions } from "./runtime.ts";
 
-/** What a person types to confirm they mean it. */
-export const ACCOUNT_DELETION_CONFIRMATION = "EXCLUIR";
+/** What the interface knows about the person signed in. */
+export interface CurrentUser {
+  readonly user: User;
+  readonly organization: Organization;
+  readonly role: Role;
+}
 
 /**
- * Creates an account.
+ * What a sign-in attempt earns.
  *
- * It does not sign the user in — the API deliberately separates the two, and
- * the interface sends them to the sign-in screen next.
- *
- * The answer is the same whether or not the address was already taken: the API
- * returns nothing that could tell the two apart, and neither does this.
+ * Either the session is open, or the second factor is still missing and the
+ * screen asks for a code. The challenge crosses this line because the browser
+ * has to send it back with the code, and it is useless without one.
  */
-export const register = createServerFn({ method: "POST" })
-  .validator((input: RegistrationInput) => input)
-  .handler(async ({ data }): Promise<Result<null>> =>
-    attempt(async () => {
-      assertSameOrigin();
+export type SignInResult =
+  | { readonly kind: "signed_in"; readonly user: CurrentUser }
+  | {
+      readonly kind: "second_factor";
+      readonly challenge: string;
+      readonly organizations: readonly Membership[];
+    };
 
-      // Validating here spares a round trip. The API validates independently
-      // and remains the authority; this never relaxes a rule.
-      const invalid = validateRegistration(data);
-      if (invalid) throw invalid;
-
-      await docgen().auth.register(callContext(), {
-        ...data,
-        email: data.email.trim(),
-        name: data.name.trim(),
-      });
-      return null;
-    }),
-  );
-
-/** Exchanges credentials for a session and seals it into the cookie. */
+/** Exchanges Imobiliary credentials for a session and seals it into the cookie. */
 export const login = createServerFn({ method: "POST" })
   .validator((input: LoginInput) => input)
-  .handler(async ({ data }): Promise<Result<User>> =>
+  .handler(async ({ data }): Promise<Result<SignInResult>> =>
     attempt(async () => {
       assertSameOrigin();
 
       const invalid = validateLogin(data);
       if (invalid) throw invalid;
 
-      const session = await docgen().auth.login(callContext(), {
-        ...data,
+      const outcome = await identity().signIn(callContext(), {
         email: data.email.trim(),
+        password: data.password,
       });
-      await sessions().signIn(session);
 
-      return session.user;
+      if (outcome.kind === "second_factor") {
+        return {
+          kind: "second_factor" as const,
+          challenge: outcome.challenge,
+          organizations: outcome.organizations,
+        };
+      }
+
+      await sessions().signIn(outcome.session);
+      return { kind: "signed_in" as const, user: currentUserOf(outcome.session) };
     }),
   );
 
-/** Ends the session here and at the API. */
+export interface SecondFactorInput {
+  readonly challenge: string;
+  readonly code: string;
+}
+
+/** Finishes a sign-in with a code from the app, or a recovery code. */
+export const completeSecondFactor = createServerFn({ method: "POST" })
+  .validator((input: SecondFactorInput) => input)
+  .handler(async ({ data }): Promise<Result<CurrentUser>> =>
+    attempt(async () => {
+      assertSameOrigin();
+
+      const invalid = validateSecondFactorCode(data.code);
+      if (invalid) throw invalid;
+      if (data.challenge === "") {
+        throw fieldError("code", "A sessão expirou. Entre novamente.");
+      }
+
+      const session = await identity().completeSecondFactor(callContext(), {
+        challenge: data.challenge,
+        code: data.code.trim(),
+      });
+      await sessions().signIn(session);
+      return currentUserOf(session);
+    }),
+  );
+
+/** Ends the session here and at the platform. */
 export const logout = createServerFn({ method: "POST" }).handler(
   async (): Promise<Result<null>> =>
     attempt(async () => {
@@ -92,148 +118,90 @@ export const logout = createServerFn({ method: "POST" }).handler(
 /**
  * The signed-in account, or null.
  *
- * Reading the cookie is enough: the account it carries was put there by the API
- * at sign-in, and asking the API again on every page load would spend a request
- * to learn something already known.
+ * Reading the cookie is enough: the account it carries was put there by the
+ * platform at sign-in, and asking again on every page load would spend a
+ * request to learn something already known.
  *
  * This one returns a bare value rather than a Result — a visitor who is not
  * signed in is an ordinary answer, not a failure.
  */
 export const currentUser = createServerFn({ method: "GET" }).handler(
-  async (): Promise<User | null> => {
+  async (): Promise<CurrentUser | null> => {
     const session = await sessions().current();
-    return session?.user ?? null;
+    return session === null ? null : currentUserOf(session);
   },
 );
 
 /**
- * Everything held about the account, as a file.
+ * Who the document service says the token speaks for.
  *
- * It answers with bytes rather than a record:
- * the export is meant to be kept, and handing it over as a download is what
- * makes portability something a person can actually act on.
+ * It is the one call that proves the whole chain works: the session refreshes,
+ * the platform mints a token, and the document service accepts it and answers
+ * with the office it belongs to.
  */
-export const exportAccount = createServerFn({ method: "POST" }).handler(
+export const currentCaller = createServerFn({ method: "GET" }).handler(
+  async (): Promise<Result<Caller>> =>
+    attempt(async () =>
+      sessions().authorize(callContext(), (ctx) => docgen().office.current(ctx)),
+    ),
+);
+
+/**
+ * Everything the office holds in the document service, as a file.
+ *
+ * It answers with bytes rather than a record: the export is meant to be kept,
+ * and handing it over as a download is what makes portability something a
+ * person can actually act on. A person's own data, and their account, are
+ * exported and erased on the Imobiliary platform.
+ */
+export const exportOffice = createServerFn({ method: "POST" }).handler(
   async (): Promise<Result<FileContent>> =>
     attempt(async () => {
-      // POST and origin-checked like a mutation: it returns everything held
-      // about the account, and a GET is reachable by any top-level navigation
-      // from another site.
+      // POST and origin-checked like a mutation: it returns everything the
+      // office holds, and a GET is reachable by any top-level navigation from
+      // another site.
       assertSameOrigin();
       return sessions().authorize(callContext(), (ctx) =>
-        docgen().auth.exportAccount(ctx),
+        docgen().office.exportOffice(ctx),
       );
     }),
 );
 
-/**
- * Erases the account and everything belonging to it.
- *
- * The session cookie is cleared afterwards whatever happens at the API: once
- * the account is gone the cookie names nobody, and leaving it in place would
- * send the browser back to a dashboard that can only fail.
- */
-export const deleteAccount = createServerFn({ method: "POST" })
-  .validator((confirmation: string) => confirmation)
-  .handler(
-    async ({ data }): Promise<Result<null>> =>
-      attempt(async () => {
-        assertSameOrigin();
-
-        // Typed by hand on the screen. It is not a security control — the
-        // session already authorised this — but a deliberate pause in front of
-        // the one action here that cannot be undone.
-        if (data !== ACCOUNT_DELETION_CONFIRMATION) {
-          throw fieldError(
-            "confirmation",
-            `Digite ${ACCOUNT_DELETION_CONFIRMATION} para confirmar.`,
-          );
-        }
-
-        await sessions().authorize(callContext(), (ctx) =>
-          docgen().auth.deleteAccount(ctx),
-        );
-		// The cookie is cleared directly rather than through signOut, which would
-		// first ask the API to end a session belonging to an account that no
-		// longer exists — a failure that would be reported as if the deletion had
-		// gone wrong when it had just succeeded.
-		await createCookieSessionStore().clear();
-        return null;
-      }),
-  );
+/** Where the platform's own screens live, for the links this platform shows. */
+export interface PlatformLinks {
+  readonly signUp: string;
+  readonly passwordReset: string;
+  readonly security: string;
+  readonly account: string;
+}
 
 /**
- * Replaces the password of the signed-in account.
+ * The platform's addresses, read on the server.
  *
- * The API answers with a whole new session, and it has to: changing a password
- * ends every session of the account, this one included, so without the
- * replacement the browser would be signed out by its own successful request.
- * Writing it to the cookie is what makes the change feel like nothing happened
- * here while ending it everywhere else.
+ * The screens need them, and the deployment configures them, so they are
+ * answered rather than written into the pages: a link to localhost must not
+ * ship in production, and a link to production must not appear here.
  */
-export const changePassword = createServerFn({ method: "POST" })
-  .validator((input: PasswordChangeInput) => input)
-  .handler(
-    async ({ data }): Promise<Result<null>> =>
-      attempt(async () => {
-        assertSameOrigin();
+export const platformLinks = createServerFn({ method: "GET" }).handler(
+  async (): Promise<PlatformLinks> => {
+    const base = getConfig().platformUrl;
+    return {
+      signUp: `${base}/criar-conta`,
+      passwordReset: `${base}/esqueci-senha`,
+      security: `${base}/ajustes?aba=seguranca`,
+      account: `${base}/ajustes?aba=dados`,
+    };
+  },
+);
 
-        const invalid = validatePasswordChange(data);
-        if (invalid) throw invalid;
-
-        const session = await sessions().authorize(callContext(), (ctx) =>
-          docgen().auth.changePassword(ctx, data),
-        );
-        await sessions().signIn(session);
-        return null;
-      }),
-  );
-
-/**
- * Asks for a reset link.
- *
- * Answers the same whether or not the address belongs to anyone — the API is
- * built that way, and repeating the guarantee here means the interface cannot
- * accidentally undo it by reporting a failure the API deliberately swallowed.
- */
-export const requestPasswordReset = createServerFn({ method: "POST" })
-  .validator((email: string) => email)
-  .handler(
-    async ({ data }): Promise<Result<null>> =>
-      attempt(async () => {
-        assertSameOrigin();
-
-        if (normalizeEmail(data) === "") {
-          throw fieldError("email", "Informe seu e-mail.");
-        }
-
-        await docgen().auth.requestPasswordReset(callContext(), data);
-        return null;
-      }),
-  );
-
-/**
- * Sets a new password from a reset link.
- *
- * No session is opened afterwards. A reset assumes the account may already be
- * in someone else's hands, so it leaves nobody signed in — including whoever
- * followed the link — and the screen sends them to sign in with what they just
- * chose.
- */
-export const resetPassword = createServerFn({ method: "POST" })
-  .validator((input: { token: string; password: string }) => input)
-  .handler(
-    async ({ data }): Promise<Result<null>> =>
-      attempt(async () => {
-        assertSameOrigin();
-
-        if (data.token === "") {
-          throw fieldError("password", "Link inválido ou incompleto.");
-        }
-        const invalid = validateNewPassword(data.password);
-        if (invalid) throw invalid;
-
-        await docgen().auth.resetPassword(callContext(), data.token, data.password);
-        return null;
-      }),
-  );
+function currentUserOf(session: {
+  user: User;
+  organization: Organization;
+  role: Role;
+}): CurrentUser {
+  return {
+    user: session.user,
+    organization: session.organization,
+    role: session.role,
+  };
+}

@@ -11,7 +11,7 @@
 import { useSession } from "@tanstack/react-start/server";
 
 import type { SessionStore } from "../../application/ports.ts";
-import type { Session } from "../../domain/user.ts";
+import type { Role, Session } from "../../domain/user.ts";
 import { getConfig } from "../config.ts";
 
 const COOKIE_NAME = "imobiliary_docs_session";
@@ -19,8 +19,8 @@ const COOKIE_NAME = "imobiliary_docs_session";
 /**
  * How long the cookie, and the seal inside it, stay valid: 30 days.
  *
- * It matches the API default for DOCGEN_REFRESH_TTL, which is the longest
- * the session inside could be of any use anyway. Without it the cookie had
+ * It matches the Imobiliary API default for IMOBILIARY_REFRESH_TTL, which is
+ * the longest the session inside could be of any use anyway. Without it the cookie had
  * no expiry and its seal never lapsed, so a stolen copy stayed decryptable
  * forever and browsers that restore sessions kept it indefinitely. Change
  * both together.
@@ -45,6 +45,11 @@ interface StoredSession {
     name: string;
     createdAt: string;
   };
+  organization?: {
+    id: string;
+    name: string;
+  };
+  role?: Role;
 }
 
 function sessionConfig() {
@@ -89,6 +94,11 @@ export function createCookieSessionStore(): SessionStore {
           name: session.user.name,
           createdAt: session.user.createdAt.toISOString(),
         },
+        organization: {
+          id: session.organization.id,
+          name: session.organization.name,
+        },
+        role: session.role,
       });
     },
 
@@ -108,15 +118,24 @@ export function createCookieSessionStore(): SessionStore {
  * would produce requests that fail in confusing ways later.
  */
 function revive(data: StoredSession): Session | null {
-  const { accessToken, accessExpiresAt, refreshToken, refreshExpiresAt, user } =
-    data;
+  const {
+    accessToken,
+    accessExpiresAt,
+    refreshToken,
+    refreshExpiresAt,
+    user,
+    organization,
+    role,
+  } = data;
 
   if (
     accessToken === undefined ||
     accessExpiresAt === undefined ||
     refreshToken === undefined ||
     refreshExpiresAt === undefined ||
-    user === undefined
+    user === undefined ||
+    organization === undefined ||
+    role === undefined
   ) {
     return null;
   }
@@ -132,5 +151,7 @@ function revive(data: StoredSession): Session | null {
       name: user.name,
       createdAt: new Date(user.createdAt),
     },
+    organization: { id: organization.id, name: organization.name },
+    role,
   };
 }

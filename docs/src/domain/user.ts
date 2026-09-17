@@ -1,17 +1,17 @@
 import { ValidationError, type FieldError } from "./errors.ts";
 
 /**
- * Account limits, kept in step with the API's own.
+ * Who a signed-in person is, and the rules this platform checks before asking
+ * the Imobiliary platform anything.
  *
- * Validating here is a courtesy to the user — it turns a round trip into
- * instant feedback. It is never a security control: the API validates
- * independently and is the only authority. Never relax a rule here to make a
- * form easier; relax it in the API or not at all.
+ * Accounts, passwords and second factors belong to the Imobiliary platform:
+ * this one signs a person in against it and holds the session, so there is no
+ * sign-up, no password rule and no recovery here. What is left is the sign-in
+ * form's own emptiness checks, which only spare a round trip.
  */
-export const MIN_PASSWORD_LENGTH = 12;
-export const MAX_PASSWORD_LENGTH = 256;
-export const MAX_NAME_LENGTH = 120;
 export const MAX_EMAIL_LENGTH = 254;
+
+export type Role = "admin" | "member";
 
 export interface User {
   readonly id: string;
@@ -20,13 +20,33 @@ export interface User {
   readonly createdAt: Date;
 }
 
-/** The credential pair a session is made of. */
+/** The office a session works in. Templates and documents belong to it. */
+export interface Organization {
+  readonly id: string;
+  readonly name: string;
+}
+
+/** One office an account belongs to, with the role it holds there. */
+export interface Membership {
+  readonly organization: Organization;
+  readonly role: Role;
+}
+
+/**
+ * A signed-in session, as the cookie holds it.
+ *
+ * The tokens are the Imobiliary platform's. A call to the document service
+ * carries a short token minted from this session instead, so what is stored
+ * here is never sent to the document service.
+ */
 export interface Session {
   readonly accessToken: string;
   readonly accessExpiresAt: Date;
   readonly refreshToken: string;
   readonly refreshExpiresAt: Date;
   readonly user: User;
+  readonly organization: Organization;
+  readonly role: Role;
 }
 
 /**
@@ -66,86 +86,10 @@ function emailProblems(input: string): FieldError[] {
   return [];
 }
 
-/** Checks an address on its own, for the form that asks for a reset link. */
+/** Checks an address on its own. */
 export function validateEmail(email: string): ValidationError | null {
   const fields = emailProblems(email);
   return fields.length > 0 ? new ValidationError(fields) : null;
-}
-
-export interface PasswordChangeInput {
-  readonly currentPassword: string;
-  readonly newPassword: string;
-}
-
-export interface RegistrationInput {
-  readonly email: string;
-  readonly name: string;
-  readonly password: string;
-  /**
-   * The version of the terms of use the person accepted.
-   *
-   * Carried explicitly rather than assumed by the server: what was agreed to
-   * is a property of the screen the person actually read.
-   */
-  readonly termsVersion: string;
-}
-
-/**
- * Checks a registration form, returning every problem at once.
- *
- * Returns null when the input is acceptable, so a caller can write
- * `const invalid = validateRegistration(input); if (invalid) …`.
- */
-export function validateRegistration(
-  input: RegistrationInput,
-): ValidationError | null {
-  const fields: FieldError[] = [...emailProblems(input.email)];
-
-  const name = input.name.trim();
-  if (name === "") {
-    fields.push({ field: "name", message: "Informe seu nome." });
-  } else if ([...name].length > MAX_NAME_LENGTH) {
-    fields.push({
-      field: "name",
-      message: `O nome deve ter no máximo ${MAX_NAME_LENGTH} caracteres.`,
-    });
-  }
-
-  fields.push(...validatePassword(input.password));
-
-  return fields.length > 0 ? new ValidationError(fields) : null;
-}
-
-/**
- * Length is the only password rule, following the same guidance the API does:
- * length beats composition, so there is no demand for symbols or digits.
- *
- * Counted in characters rather than bytes, so a passphrase using accents is
- * not credited with more length than it has.
- */
-function validatePassword(password: string): FieldError[] {
-  const length = [...password].length;
-
-  if (password === "") {
-    return [{ field: "password", message: "Escolha uma senha." }];
-  }
-  if (length < MIN_PASSWORD_LENGTH) {
-    return [
-      {
-        field: "password",
-        message: `A senha precisa de pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`,
-      },
-    ];
-  }
-  if (length > MAX_PASSWORD_LENGTH) {
-    return [
-      {
-        field: "password",
-        message: `A senha deve ter no máximo ${MAX_PASSWORD_LENGTH} caracteres.`,
-      },
-    ];
-  }
-  return [];
 }
 
 export interface LoginInput {
@@ -156,7 +100,7 @@ export interface LoginInput {
 /**
  * Checks a login form for emptiness only.
  *
- * It deliberately does not apply the password rules: an account created before
+ * It deliberately does not apply any password rule: an account created before
  * a rule changed must still be able to sign in, and telling the user their
  * password is "too short" at the login screen leaks how the stored one looks.
  */
@@ -174,70 +118,14 @@ export function validateLogin(input: LoginInput): ValidationError | null {
 }
 
 /**
- * Checks a password change before it is sent.
+ * Checks the second-factor step for emptiness.
  *
- * Mirrors the API's rule rather than relaxing it: the API validates
- * independently and remains the authority, and this only spares a round trip.
- * The "different from the current one" check is here too because the answer is
- * knowable without asking, and a form that says so immediately is kinder than
- * one that waits for a rejection.
+ * The length is not checked: a code from the app has six digits and a recovery
+ * code does not, and only the platform knows which was given.
  */
-export function validatePasswordChange(
-  input: PasswordChangeInput,
-): ValidationError | null {
-  const fields: FieldError[] = [];
-
-  if (input.currentPassword === "") {
-    fields.push({ field: "currentPassword", message: "Informe sua senha atual." });
-  }
-
-  const length = [...input.newPassword].length;
-  if (input.newPassword === "") {
-    fields.push({ field: "newPassword", message: "Escolha uma nova senha." });
-  } else if (length < MIN_PASSWORD_LENGTH) {
-    fields.push({
-      field: "newPassword",
-      message: `A senha deve ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`,
-    });
-  } else if (length > MAX_PASSWORD_LENGTH) {
-    fields.push({
-      field: "newPassword",
-      message: `A senha deve ter no máximo ${MAX_PASSWORD_LENGTH} caracteres.`,
-    });
-  } else if (input.newPassword === input.currentPassword) {
-    fields.push({
-      field: "newPassword",
-      message: "A nova senha precisa ser diferente da atual.",
-    });
-  }
-
-  return fields.length > 0 ? new ValidationError(fields) : null;
-}
-
-/** Checks a new password chosen from a reset link, where there is no old one. */
-export function validateNewPassword(password: string): ValidationError | null {
-  const length = [...password].length;
-
-  if (password === "") {
-    return new ValidationError([
-      { field: "password", message: "Escolha uma nova senha." },
-    ]);
-  }
-  if (length < MIN_PASSWORD_LENGTH) {
-    return new ValidationError([
-      {
-        field: "password",
-        message: `A senha deve ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`,
-      },
-    ]);
-  }
-  if (length > MAX_PASSWORD_LENGTH) {
-    return new ValidationError([
-      {
-        field: "password",
-        message: `A senha deve ter no máximo ${MAX_PASSWORD_LENGTH} caracteres.`,
-      },
-    ]);
+export function validateSecondFactorCode(code: string): ValidationError | null {
+  if (code.trim() === "") {
+    return new ValidationError([{ field: "code", message: "Informe o código." }]);
   }
   return null;
 }

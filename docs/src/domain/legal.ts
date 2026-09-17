@@ -58,9 +58,11 @@ export const PRIVACY_POLICY: LegalDocument = {
   // 1.1 names Resend as a processor and declares the international transfer
   // that sending a password-reset mail entails. The terms did not change, so
   // their version did not either. 1.4 lists the third local-storage record:
-  // which field completes a document's name, per template.
-  version: "1.4",
-  effectiveFrom: "2026-09-14",
+  // which field completes a document's name, per template. 2.0 is the move of
+  // identity to the Imobiliary platform: no password and no e-mail are handled
+  // here any more, Resend is gone, and what is held belongs to the office.
+  version: "2.0",
+  effectiveFrom: "2026-09-17",
 };
 
 export const TERMS_OF_USE: LegalDocument = {

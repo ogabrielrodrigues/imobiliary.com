@@ -2,15 +2,30 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 
 import { AuthenticationError, UnexpectedError } from "../domain/errors.ts";
-import type { Session, User } from "../domain/user.ts";
-import type { AuthGateway, CallContext, Clock, SessionStore } from "./ports.ts";
-import { RefreshCoordinator, SessionManager } from "./session.ts";
+import type { Organization, Session, User } from "../domain/user.ts";
+import type {
+  CallContext,
+  Clock,
+  DocgenToken,
+  IdentityGateway,
+  SessionStore,
+} from "./ports.ts";
+import {
+  DocgenTokenCache,
+  RefreshCoordinator,
+  SessionManager,
+} from "./session.ts";
 
 const user: User = {
   id: "01a08374-3567-79e9-83a1-ab0c71a3f88e",
   email: "ada@example.com",
   name: "Ada Lovelace",
   createdAt: new Date("2026-09-01T00:00:00Z"),
+};
+
+const organization: Organization = {
+  id: "01a08374-3567-79e9-83a1-000000000001",
+  name: "Central Imoveis",
 };
 
 const now = new Date("2026-09-09T12:00:00Z");
@@ -22,6 +37,8 @@ function sessionExpiring(minutes: number, suffix = "1"): Session {
     refreshToken: `refresh-${suffix}`,
     refreshExpiresAt: new Date(now.getTime() + 30 * 86_400_000),
     user,
+    organization,
+    role: "admin",
   };
 }
 
@@ -50,34 +67,31 @@ class FakeStore implements SessionStore {
   }
 }
 
-/** Records what was asked of the API and lets a test choose the answers. */
-class FakeAuth implements AuthGateway {
-  // Present to satisfy the port. SessionManager never reaches for any of them.
-  async deleteAccount(): Promise<void> {}
-  async changePassword(): Promise<never> {
-    throw new Error("not used by these tests");
-  }
-  async requestPasswordReset(): Promise<void> {}
-  async resetPassword(): Promise<void> {}
-  async exportAccount(): Promise<never> {
-    throw new Error("not used by these tests");
-  }
-
+/**
+ * Records what was asked of the platform and lets a test choose the answers.
+ *
+ * A minted token is named after the access token it was minted from, which is
+ * what lets a test see that the token sent to the document service came from
+ * the session the manager was holding at the time.
+ */
+class FakeIdentity implements IdentityGateway {
   refreshCalls = 0;
   logoutCalls = 0;
+  tokenCalls = 0;
   refreshDelayMs = 0;
   refreshFails: Error | null = null;
+  tokenFails: Error | null = null;
 
-  register(): Promise<void> {
-    throw new Error("not used");
+  signIn(): Promise<never> {
+    throw new Error("not used by these tests");
   }
 
-  login(): Promise<Session> {
-    throw new Error("not used");
+  completeSecondFactor(): Promise<never> {
+    throw new Error("not used by these tests");
   }
 
-  currentUser(): Promise<User> {
-    return Promise.resolve(user);
+  switchOrganization(): Promise<never> {
+    throw new Error("not used by these tests");
   }
 
   async refresh(_ctx: CallContext, _refreshToken: string): Promise<Session> {
@@ -92,6 +106,15 @@ class FakeAuth implements AuthGateway {
   logout(): Promise<void> {
     this.logoutCalls += 1;
     return Promise.resolve();
+  }
+
+  docgenToken(ctx: CallContext): Promise<DocgenToken> {
+    this.tokenCalls += 1;
+    if (this.tokenFails) return Promise.reject(this.tokenFails);
+    return Promise.resolve({
+      token: `docgen-from-${ctx.accessToken}`,
+      expiresAt: new Date(now.getTime() + 5 * 60_000),
+    });
   }
 }
 
@@ -181,25 +204,67 @@ describe("RefreshCoordinator", () => {
   });
 });
 
+describe("DocgenTokenCache", () => {
+  it("mints once while the token is still good", async () => {
+    const cache = new DocgenTokenCache(clock);
+    let minted = 0;
+    const mint = async () => {
+      minted += 1;
+      return { token: `t-${minted}`, expiresAt: new Date(now.getTime() + 300_000) };
+    };
+
+    assert.equal(await cache.token("office-a", mint), "t-1");
+    assert.equal(await cache.token("office-a", mint), "t-1");
+    assert.equal(minted, 1);
+
+    // Another office is another token: the office decides what the document
+    // service shows.
+    assert.equal(await cache.token("office-b", mint), "t-2");
+  });
+
+  it("mints again near expiry, and after being forgotten", async () => {
+    const cache = new DocgenTokenCache(clock);
+    let minted = 0;
+    const expiring = async () => {
+      minted += 1;
+      // Within the skew, so it counts as spent the moment it is held.
+      return { token: `t-${minted}`, expiresAt: new Date(now.getTime() + 10_000) };
+    };
+
+    await cache.token("office-a", expiring);
+    await cache.token("office-a", expiring);
+    assert.equal(minted, 2);
+
+    cache.forget("office-a");
+    await cache.token("office-a", expiring);
+    assert.equal(minted, 3);
+  });
+});
+
 describe("SessionManager", () => {
-  let auth: FakeAuth;
+  let auth: FakeIdentity;
   let store: FakeStore;
   let manager: SessionManager;
 
   function build(session: Session | null) {
-    auth = new FakeAuth();
+    auth = new FakeIdentity();
     store = new FakeStore(session);
     manager = new SessionManager({
-      auth,
+      identity: auth,
       store,
       coordinator: new RefreshCoordinator(),
+      tokens: new DocgenTokenCache(clock),
       clock,
     });
   }
 
   beforeEach(() => build(sessionExpiring(15)));
 
-  it("passes the access token to the call", async () => {
+  /**
+   * The document service never sees the platform's own access token: what
+   * reaches it is a short token minted for this session.
+   */
+  it("passes a minted document-service token to the call", async () => {
     const seen: (string | undefined)[] = [];
 
     await manager.authorize({}, async (ctx) => {
@@ -207,8 +272,16 @@ describe("SessionManager", () => {
       return "done";
     });
 
-    assert.deepEqual(seen, ["access-1"]);
+    assert.deepEqual(seen, ["docgen-from-access-1"]);
+    assert.equal(auth.tokenCalls, 1);
     assert.equal(auth.refreshCalls, 0);
+  });
+
+  it("reuses the minted token across calls", async () => {
+    await manager.authorize({}, async () => "one");
+    await manager.authorize({}, async () => "two");
+
+    assert.equal(auth.tokenCalls, 1);
   });
 
   it("keeps the caller's client address", async () => {
@@ -237,7 +310,7 @@ describe("SessionManager", () => {
     const token = await manager.authorize({}, async (ctx) => ctx.accessToken);
 
     assert.equal(auth.refreshCalls, 1);
-    assert.equal(token, "access-2");
+    assert.equal(token, "docgen-from-access-2");
     assert.equal(store.session?.refreshToken, "refresh-2");
   });
 
@@ -256,7 +329,7 @@ describe("SessionManager", () => {
     ]);
 
     assert.equal(auth.refreshCalls, 1, "the refresh secret was replayed");
-    assert.deepEqual(tokens, ["access-2", "access-2"]);
+    assert.deepEqual(tokens, ["docgen-from-access-2", "docgen-from-access-2"]);
   });
 
   it("retries once when the API rejects a token it had accepted", async () => {
@@ -270,7 +343,20 @@ describe("SessionManager", () => {
 
     assert.equal(attempts, 2);
     assert.equal(auth.refreshCalls, 1);
-    assert.equal(token, "access-2");
+    assert.equal(token, "docgen-from-access-2");
+    // A minted token is worthless once the session behind it is gone, so the
+    // refusal drops it rather than handing the same one over again.
+    assert.equal(auth.tokenCalls, 2);
+  });
+
+  it("clears the session when the platform refuses to mint a token", async () => {
+    auth.tokenFails = new AuthenticationError();
+
+    await assert.rejects(
+      manager.authorize({}, async () => "unreachable"),
+      AuthenticationError,
+    );
+    assert.equal(store.session, null);
   });
 
   it("does not retry an error that is not about authentication", async () => {
@@ -301,7 +387,7 @@ describe("SessionManager", () => {
     assert.equal(store.clears, 1);
   });
 
-  it("signs out at the API and locally", async () => {
+  it("signs out at the platform and locally", async () => {
     await manager.signOut({});
 
     assert.equal(auth.logoutCalls, 1);
@@ -310,7 +396,7 @@ describe("SessionManager", () => {
 
   // Whatever the API says, the user asked to be signed out, so the local
   // session must not survive the attempt.
-  it("clears the session even when signing out at the API fails", async () => {
+  it("clears the session even when signing out at the platform fails", async () => {
     auth.logout = () => Promise.reject(new UnexpectedError("network down"));
 
     await assert.rejects(manager.signOut({}), UnexpectedError);

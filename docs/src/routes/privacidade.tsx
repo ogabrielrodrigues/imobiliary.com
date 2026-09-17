@@ -61,8 +61,10 @@ function PrivacyPolicyPage() {
             <strong className="text-foreground">
               Somos controladores dos dados da sua conta
             </strong>{" "}
-            (nome, e-mail, senha e registros de acesso). Nós decidimos coletá-los
-            para que a plataforma funcione.
+            (nome, e-mail e registros de acesso). Nós decidimos coletá-los para
+            que a plataforma funcione. A conta em si, com a senha e a
+            verificação em duas etapas, fica no imobiliary.com: é a mesma conta,
+            e é lá que ela é criada, alterada e encerrada.
           </li>
           <li>
             <strong className="text-foreground">
@@ -87,16 +89,19 @@ function PrivacyPolicyPage() {
 
       <LegalSection title="3. Que dados tratamos">
         <P>
-          <strong className="text-foreground">Da sua conta:</strong> nome,
-          e-mail e senha. A senha nunca é armazenada: guardamos apenas um hash
-          argon2id, do qual o valor original não pode ser recuperado. Registramos
-          também quando a senha foi alterada pela última vez, para invalidar
-          acessos emitidos antes disso.
+          <strong className="text-foreground">Da sua conta:</strong> nome e
+          e-mail, que chegam do imobiliary.com quando você entra.{" "}
+          <strong className="text-foreground">
+            Nenhuma senha passa por aqui
+          </strong>
+          : você entra com a conta do imobiliary.com, e esta plataforma recebe
+          apenas um token de cinco minutos, que serve para identificar você e o
+          seu escritório. Não enviamos e-mail nem comunicação de marketing.
         </P>
         <P>
-          Seu e-mail é usado para entrar na conta e para as mensagens de
-          segurança: o link de redefinição de senha e o aviso de que a senha foi
-          alterada. Não enviamos comunicação de marketing.
+          <strong className="text-foreground">Do seu escritório:</strong> o
+          nome dele, atualizado a cada acesso. Modelos e documentos pertencem ao
+          escritório, e todos os seus membros trabalham com os mesmos.
         </P>
         <P>
           <strong className="text-foreground">Dos seus modelos:</strong> o
@@ -136,9 +141,8 @@ function PrivacyPolicyPage() {
       <LegalSection title="4. Com que finalidade e sob qual base legal">
         <LegalList>
           <li>
-            Criar e manter sua conta, autenticar seus acessos e gerar os
-            documentos que você pede: <em>execução de contrato</em> (art. 7º,
-            V).
+            Identificar você e o seu escritório e gerar os documentos que você
+            pede: <em>execução de contrato</em> (art. 7º, V).
           </li>
           <li>
             Limitar tentativas abusivas de acesso e proteger a plataforma:{" "}
@@ -189,29 +193,11 @@ function PrivacyPolicyPage() {
 
       <LegalSection title="6. Com quem compartilhamos">
         <P>
-          Não vendemos, alugamos nem cedemos dados pessoais, e não há integração
-          com serviços de análise, marketing ou monitoramento. Um único terceiro
-          recebe dado seu, e apenas para uma finalidade:
-        </P>
-        <LegalList>
-          <li>
-            <strong className="text-foreground">Resend</strong> (Resend, Inc.,
-            Estados Unidos), que entrega nossos e-mails de segurança: o link de
-            redefinição de senha e o aviso de que a senha foi alterada. Recebe
-            seu endereço de e-mail e seu primeiro nome, apenas quando uma dessas
-            mensagens precisa ser enviada. Atua como <em>operador</em>, sob
-            nossas instruções, e não pode usar esses dados para finalidade
-            própria.
-          </li>
-        </LegalList>
-        <P>
-          Como o Resend fica nos Estados Unidos, esse envio é uma{" "}
-          <strong className="text-foreground">
-            transferência internacional de dados
-          </strong>{" "}
-          (art. 33). Ela é feita sob cláusulas contratuais padrão, na forma da
-          Resolução CD/ANPD n.º 19/2024, e limitada ao mínimo necessário para a
-          mensagem chegar até você.
+          Não vendemos, alugamos nem cedemos dados pessoais, não há integração
+          com serviços de análise, marketing ou monitoramento, e nenhum dado seu
+          sai para um terceiro. O imobiliary.com, de onde vem a sua conta, é a
+          mesma controladora desta plataforma, e a política de privacidade de lá
+          descreve o que é tratado por lá.
         </P>
         <P>
           Fora isso, seu navegador não faz requisição a nenhum servidor de
@@ -228,22 +214,14 @@ function PrivacyPolicyPage() {
       <LegalSection title="7. Por quanto tempo guardamos">
         <LegalList>
           <li>
-            <strong className="text-foreground">
-              Conta, modelos e documentos:
-            </strong>{" "}
-            enquanto sua conta existir. Não há prazo de expurgo automático: os
-            dados permanecem até que você os exclua.
+            <strong className="text-foreground">Modelos e documentos:</strong>{" "}
+            enquanto o escritório existir. Não há prazo de expurgo automático:
+            os dados permanecem até que você os exclua.
           </li>
           <li>
-            <strong className="text-foreground">Sessões:</strong> os registros de
-            sessão expiram em 30 dias e são apagados automaticamente.
-          </li>
-          <li>
-            <strong className="text-foreground">
-              Links de redefinição de senha:
-            </strong>{" "}
-            30 minutos, ou até serem usados, o que vier primeiro. Guardamos
-            apenas um resumo criptográfico do link, nunca ele próprio.
+            <strong className="text-foreground">Sessões:</strong> a sessão fica
+            no cookie e expira em 30 dias; o token de acesso aos documentos vale
+            cinco minutos e existe só na memória do servidor.
           </li>
           <li>
             <strong className="text-foreground">Endereço IP:</strong> até dez
@@ -251,11 +229,11 @@ function PrivacyPolicyPage() {
           </li>
         </LegalList>
         <P>
-          Quando você exclui a conta, apagamos os registros e também os arquivos
-          armazenados. Uma exceção técnica: se um arquivo seu for
-          byte-a-byte idêntico ao de outra conta, ele é fisicamente um só, e
-          permanece enquanto a outra conta precisar dele. Os seus registros, em
-          qualquer caso, são apagados.
+          Quando você exclui um documento, apagamos os registros e também o
+          arquivo armazenado. Uma exceção técnica: se um arquivo for
+          byte-a-byte idêntico ao de outro escritório, ele é fisicamente um só,
+          e permanece enquanto o outro escritório precisar dele. Os seus
+          registros, em qualquer caso, são apagados.
         </P>
       </LegalSection>
 
@@ -265,22 +243,24 @@ function PrivacyPolicyPage() {
         </P>
         <LegalList>
           <li>
-            Senhas protegidas com argon2id, com sal individual, nos parâmetros
-            recomendados pela OWASP.
+            Nenhum segredo de autenticação guardado aqui: os tokens que
+            recebemos do imobiliary.com são verificados com chaves públicas, de
+            modo que um acesso indevido a este servidor não permite emitir
+            nenhum.
           </li>
           <li>
             Sessão em cookie cifrado e assinado, inacessível ao JavaScript da
             página.
           </li>
           <li>
-            Isolamento por conta aplicado na própria consulta ao banco, e não
-            como verificação posterior que se possa esquecer.
+            Isolamento por escritório aplicado na própria consulta ao banco, e
+            não como verificação posterior que se possa esquecer.
           </li>
           <li>
             Tráfego cifrado em trânsito (HTTPS), com HSTS e uma política de
             segurança de conteúdo restritiva.
           </li>
-          <li>Limitação de tentativas de acesso por endereço e por conta.</li>
+          <li>Limitação de requisições por endereço e por escritório.</li>
         </LegalList>
         <P>
           <strong className="text-foreground">
@@ -303,13 +283,15 @@ function PrivacyPolicyPage() {
         <LegalList>
           <li>
             <strong className="text-foreground">Acesso e portabilidade:</strong>{" "}
-            em <em>Ajustes › Meus dados</em>, dentro da sua conta, você baixa um arquivo
-            com tudo o que guardamos, em formato aberto e legível.
+            em <em>Ajustes › Dados do escritório</em> você baixa um arquivo com
+            tudo o que guardamos aqui, em formato aberto e legível.
           </li>
           <li>
-            <strong className="text-foreground">Eliminação:</strong> na mesma
-            tela, você exclui sua conta. A exclusão é imediata, definitiva e
-            leva junto modelos, documentos e arquivos.
+            <strong className="text-foreground">
+              Acesso e eliminação da sua conta:
+            </strong>{" "}
+            no imobiliary.com, em <em>Ajustes › Meus dados</em>, porque é lá que
+            a conta existe.
           </li>
           <li>
             <strong className="text-foreground">

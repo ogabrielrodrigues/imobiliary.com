@@ -3,18 +3,18 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 
 import { PageBody, PageHeader } from "@/components/page";
 import { AccessibilityPanel } from "@/components/settings/accessibility-panel";
+import { AccountPanel } from "@/components/settings/account-panel";
 import { AppearancePanel } from "@/components/settings/appearance-panel";
-import { DeletePanel } from "@/components/settings/delete-panel";
 import { ExportPanel } from "@/components/settings/export-panel";
-import { PasswordPanel } from "@/components/settings/password-panel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CONTROLLER } from "@/domain/legal";
+import { platformLinks } from "@/server/auth";
 
 const TABS = [
   { value: "aparencia", label: "Aparência", icon: IconPalette },
   { value: "acessibilidade", label: "Acessibilidade", icon: IconAccessible },
-  { value: "seguranca", label: "Segurança", icon: IconShieldCheck },
-  { value: "dados", label: "Meus dados", icon: IconUser },
+  { value: "seguranca", label: "Conta", icon: IconShieldCheck },
+  { value: "dados", label: "Dados do escritório", icon: IconUser },
 ] as const;
 
 type Tab = (typeof TABS)[number]["value"];
@@ -37,11 +37,15 @@ export const Route = createFileRoute("/_app/ajustes")({
    */
   validateSearch: (search: Record<string, unknown>): SettingsSearch =>
     isTab(search["aba"]) ? { aba: search["aba"] } : {},
+  // The platform's addresses come from the server: the deployment configures
+  // them, and the account panel links to them.
+  loader: async () => ({ links: await platformLinks() }),
   head: () => ({ meta: [{ title: "Ajustes | Imobiliary Docs" }] }),
   component: SettingsPage,
 });
 
 function SettingsPage() {
+  const { links } = Route.useLoaderData();
   const { aba = DEFAULT_TAB } = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
 
@@ -94,7 +98,7 @@ function SettingsPage() {
           </TabsContent>
 
           <TabsContent value="seguranca" className="flex flex-col gap-4">
-            <PasswordPanel />
+            <AccountPanel links={links} />
           </TabsContent>
 
           {/*
@@ -106,9 +110,13 @@ function SettingsPage() {
           <TabsContent value="dados" className="flex flex-col gap-4">
             <p className="max-w-2xl text-small leading-relaxed text-muted-foreground">
               A Lei n.º 13.709/2018 (LGPD) garante a você o direito de acessar,
-              levar consigo e eliminar seus dados. As duas coisas abaixo são
-              imediatas: não passam por pedido nem por análise. Os detalhes do
-              que guardamos estão na{" "}
+              levar consigo e eliminar seus dados. A cópia abaixo é imediata:
+              não passa por pedido nem por análise. Os dados da sua conta, e o
+              encerramento dela, ficam no{" "}
+              <a href={links.account} className="text-primary-text hover:underline">
+                imobiliary.com
+              </a>
+              . Os detalhes do que guardamos estão na{" "}
               <Link to="/privacidade" className="text-primary-text hover:underline">
                 Política de Privacidade
               </Link>
@@ -116,7 +124,6 @@ function SettingsPage() {
             </p>
 
             <ExportPanel />
-            <DeletePanel />
 
             <p className="max-w-2xl text-caption leading-relaxed text-faint">
               Para correção de dados, dúvidas ou qualquer outro pedido, escreva

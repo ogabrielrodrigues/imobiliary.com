@@ -11,6 +11,18 @@ const MIN_SESSION_SECRET_LENGTH = 32;
 export interface Config {
   /** Where the docgen API lives. Never exposed to the browser. */
   readonly apiUrl: string;
+  /**
+   * Where the Imobiliary API lives, which owns identity. Never exposed to the
+   * browser either: it is reached from this server only.
+   */
+  readonly identityApiUrl: string;
+  /**
+   * Where the Imobiliary platform is served, such as https://imobiliary.com.
+   *
+   * Creating an account, recovering a password and changing a second factor
+   * happen there, so this platform links to it rather than offering its own.
+   */
+  readonly platformUrl: string;
   /** Key that seals the session cookie. */
   readonly sessionSecret: string;
   /**
@@ -53,6 +65,8 @@ export function getConfig(): Config {
 
   cached = {
     apiUrl: process.env["DOCGEN_API_URL"] ?? "http://127.0.0.1:8080",
+    identityApiUrl: process.env["IMOBILIARY_API_URL"] ?? "http://127.0.0.1:8081",
+    platformUrl: (process.env["IMOBILIARY_APP_URL"] ?? "http://localhost:3001").replace(/\/+$/, ""),
     sessionSecret,
     trustProxyHeaders: process.env["TRUST_PROXY_HEADERS"] === "true",
     isProduction: process.env["NODE_ENV"] === "production",

@@ -12,7 +12,11 @@ import {
   getRequestIP,
 } from "@tanstack/react-start/server";
 
-import { RefreshCoordinator, SessionManager } from "../application/session.ts";
+import {
+  DocgenTokenCache,
+  RefreshCoordinator,
+  SessionManager,
+} from "../application/session.ts";
 import type { CallContext } from "../application/ports.ts";
 import { systemClock } from "../application/ports.ts";
 import { ValidationError } from "../domain/errors.ts";
@@ -21,6 +25,8 @@ import {
   createDocgenClient,
   type DocgenClient,
 } from "../infrastructure/api/docgen-client.ts";
+import { createIdentityClient } from "../infrastructure/api/identity-client.ts";
+import type { IdentityGateway } from "../application/ports.ts";
 import { createCookieSessionStore } from "../infrastructure/session/cookie-session-store.ts";
 
 /**
@@ -30,7 +36,14 @@ import { createCookieSessionStore } from "../infrastructure/session/cookie-sessi
  */
 const coordinator = new RefreshCoordinator();
 
+/**
+ * Process-wide as well: a five-minute token is worth reusing across the
+ * requests of one session, and it never leaves this process.
+ */
+const docgenTokens = new DocgenTokenCache(systemClock);
+
 let client: DocgenClient | null = null;
+let identityClient: IdentityGateway | null = null;
 
 /**
  * Built lazily. Reading configuration at module load would throw during the
@@ -41,12 +54,19 @@ export function docgen(): DocgenClient {
   return client;
 }
 
+/** The Imobiliary platform, which owns identity. Built lazily, as above. */
+export function identity(): IdentityGateway {
+  identityClient ??= createIdentityClient({ baseUrl: getConfig().identityApiUrl });
+  return identityClient;
+}
+
 /** A session manager bound to the current request's cookie. */
 export function sessions(): SessionManager {
   return new SessionManager({
-    auth: docgen().auth,
+    identity: identity(),
     store: createCookieSessionStore(),
     coordinator,
+    tokens: docgenTokens,
     clock: systemClock,
   });
 }

@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { Brand } from "@/components/brand";
 import { LegalFooter } from "@/components/legal-page";
-import { currentUser } from "@/server/auth";
+import { currentUser, platformLinks } from "@/server/auth";
 import { CONTROLLER, unfilledLegalFields } from "@/domain/legal";
 import { absoluteUrl, pageSeo } from "@/lib/seo";
 import { MAIN_CONTENT_ID } from "@/components/route-announcer";
@@ -21,7 +21,12 @@ export const Route = createFileRoute("/")({
    * search is unaffected; a shared cache in front of this would have to vary on
    * the session cookie.
    */
-  loader: () => currentUser(),
+  loader: async () => ({
+    user: await currentUser(),
+    // Creating an account happens on the Imobiliary platform, and the
+    // deployment says where that is.
+    links: await platformLinks(),
+  }),
   head: () => ({
     ...pageSeo({
       title: "Imobiliary Docs | contratos a partir dos seus modelos",
@@ -77,7 +82,7 @@ function softwareApplication() {
 }
 
 function LandingPage() {
-  const user = Route.useLoaderData();
+  const { user, links } = Route.useLoaderData();
   const signedIn = user !== null;
 
   return (
@@ -132,12 +137,21 @@ function LandingPage() {
             reads correctly whether or not the visitor already has an account.
             Only the call to action has to know.
           */}
-          <Link
-            to={signedIn ? "/dashboard" : "/criar-conta"}
-            className="rounded-md bg-primary px-4 py-2.25 text-control font-semibold text-primary-foreground"
-          >
-            {signedIn ? "Abrir o dashboard" : "Criar conta"}
-          </Link>
+          {signedIn ? (
+            <Link
+              to="/dashboard"
+              className="rounded-md bg-primary px-4 py-2.25 text-control font-semibold text-primary-foreground"
+            >
+              Abrir o dashboard
+            </Link>
+          ) : (
+            <a
+              href={links.signUp}
+              className="rounded-md bg-primary px-4 py-2.25 text-control font-semibold text-primary-foreground"
+            >
+              Criar conta no imobiliary.com
+            </a>
+          )}
         </section>
       </main>
 

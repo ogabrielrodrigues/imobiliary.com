@@ -18,8 +18,9 @@ import type {
 } from "../domain/template.ts";
 import type {
   LoginInput,
-  PasswordChangeInput,
-  RegistrationInput,
+  Membership,
+  Organization,
+  Role,
   Session,
   User,
 } from "../domain/user.ts";
@@ -50,37 +51,71 @@ export interface StatsGateway {
   ): Promise<DashboardStats>;
 }
 
-export interface AuthGateway {
-  /**
-   * Answers the same whether or not the address already had an account, so
-   * nothing comes back to tell the two apart.
-   */
-  register(ctx: CallContext, input: RegistrationInput): Promise<void>;
-  /** Erases the account and everything belonging to it. Article 18, VI. */
-  deleteAccount(ctx: CallContext): Promise<void>;
-  /** Everything held about the account, as a file. Article 18, II and V. */
-  exportAccount(ctx: CallContext): Promise<FileContent>;
-  login(ctx: CallContext, input: LoginInput): Promise<Session>;
+/**
+ * What a sign-in attempt earns: either a session, or a challenge the second
+ * factor's code is answered with.
+ */
+export type SignInOutcome =
+  | { readonly kind: "session"; readonly session: Session }
+  | {
+      readonly kind: "second_factor";
+      readonly challenge: string;
+      readonly organizations: readonly Membership[];
+    };
+
+/** A short token for the document service, and when it stops being accepted. */
+export interface DocgenToken {
+  readonly token: string;
+  readonly expiresAt: Date;
+}
+
+/**
+ * The Imobiliary platform, which owns identity.
+ *
+ * There is no sign-up, no password change and no recovery here: those belong
+ * to that platform's own screens, and this one links to them.
+ */
+export interface IdentityGateway {
+  signIn(ctx: CallContext, input: LoginInput): Promise<SignInOutcome>;
+  /** One challenge is one attempt; a refused code sends the person back. */
+  completeSecondFactor(
+    ctx: CallContext,
+    input: {
+      readonly challenge: string;
+      readonly code: string;
+      readonly organizationId?: string | undefined;
+    },
+  ): Promise<Session>;
   /** Consumes the secret and returns a whole new session. */
   refresh(ctx: CallContext, refreshToken: string): Promise<Session>;
   /** Always succeeds, whether or not the secret matched a live session. */
   logout(ctx: CallContext, refreshToken: string): Promise<void>;
-  currentUser(ctx: CallContext): Promise<User>;
-  /**
-   * Replaces the password and returns a whole new session.
-   *
-   * A session comes back because the change ends every session of the
-   * account, this one included: without the replacement the caller would be
-   * signed out by its own successful request.
-   */
-  changePassword(
+  /** Moves the session to another office the same account belongs to. */
+  switchOrganization(
     ctx: CallContext,
-    input: PasswordChangeInput,
+    input: { readonly refreshToken: string; readonly organizationId: string },
   ): Promise<Session>;
-  /** Always succeeds, whether or not the address belongs to anyone. */
-  requestPasswordReset(ctx: CallContext, email: string): Promise<void>;
-  /** Consumes a one-time token. Ends every session of the account. */
-  resetPassword(ctx: CallContext, token: string, password: string): Promise<void>;
+  /**
+   * Mints a token for the document service from the session's own access
+   * token, which `ctx` carries. It lasts five minutes and is the only
+   * credential the document service ever sees.
+   */
+  docgenToken(ctx: CallContext): Promise<DocgenToken>;
+}
+
+/** Who a document-service token speaks for. */
+export interface Caller {
+  readonly user: User;
+  readonly office: Organization;
+  readonly role: Role;
+}
+
+/** The office, as the document service holds it. */
+export interface OfficeGateway {
+  /** Useful for confirming a token is accepted, and whose office it names. */
+  current(ctx: CallContext): Promise<Caller>;
+  /** Everything the office holds there, as a file. Article 18, II and V. */
+  exportOffice(ctx: CallContext): Promise<FileContent>;
 }
 
 export interface TemplateGateway {

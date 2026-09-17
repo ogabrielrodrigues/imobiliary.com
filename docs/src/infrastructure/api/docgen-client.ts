@@ -11,12 +11,13 @@
  */
 
 import type {
-  AuthGateway,
   BatchGateway,
   CallContext,
   DocumentFilter,
   DocumentGateway,
+  Caller,
   FileContent,
+  OfficeGateway,
   Page,
   StatsGateway,
   TemplateGateway,
@@ -29,13 +30,7 @@ import type {
   TemplateUploadInput,
   TemplateVersion,
 } from "../../domain/template.ts";
-import type {
-  LoginInput,
-  PasswordChangeInput,
-  RegistrationInput,
-  Session,
-  User,
-} from "../../domain/user.ts";
+import type { Role, User } from "../../domain/user.ts";
 import {
   encodeSegment,
   filenameFrom,
@@ -53,13 +48,11 @@ interface ApiUser {
   created_at: string;
 }
 
-interface ApiSession {
-  access_token: string;
-  token_type: string;
-  expires_at: string;
-  refresh_token: string;
-  refresh_expires_at: string;
+/** What the document service answers about the caller of a token. */
+interface ApiCaller {
   user: ApiUser;
+  office: { id: string; name: string; created_at: string };
+  role: Role;
 }
 
 interface ApiTemplateVersion {
@@ -128,7 +121,7 @@ interface ApiStats {
 // ----- client --------------------------------------------------------------
 
 export interface DocgenClient {
-  readonly auth: AuthGateway;
+  readonly office: OfficeGateway;
   readonly templates: TemplateGateway;
   readonly documents: DocumentGateway;
   readonly batches: BatchGateway;
@@ -139,7 +132,7 @@ export function createDocgenClient(options: TransportOptions): DocgenClient {
   const http = new Transport(options);
 
   return {
-    auth: createAuthGateway(http),
+    office: createOfficeGateway(http),
     templates: createTemplateGateway(http),
     documents: createDocumentGateway(http),
     batches: createBatchGateway(http),
@@ -211,95 +204,24 @@ function createStatsGateway(http: Transport): StatsGateway {
   };
 }
 
-function createAuthGateway(http: Transport): AuthGateway {
+function createOfficeGateway(http: Transport): OfficeGateway {
   return {
-    async register(ctx: CallContext, input: RegistrationInput): Promise<void> {
-      // 202 with no body for every well-formed request, taken address or not,
-      // so there is nothing to decode and nothing that could tell them apart.
-      await http.send(ctx, "POST", "/v1/auth/register", {
-        body: JSON.stringify({
-          email: input.email,
-          name: input.name,
-          password: input.password,
-          // Required by the API since acceptance began being recorded.
-          terms_version: input.termsVersion,
-        }),
-        contentType: "application/json",
-      });
+    async current(ctx: CallContext): Promise<Caller> {
+      const body = await http.json<ApiCaller>(ctx, "GET", "/v1/me");
+      return {
+        user: toUser(body.user),
+        office: { id: body.office.id, name: body.office.name },
+        role: body.role,
+      };
     },
 
-    async deleteAccount(ctx: CallContext): Promise<void> {
-      await http.send(ctx, "DELETE", "/v1/me");
-    },
-
-    async exportAccount(ctx: CallContext): Promise<FileContent> {
+    async exportOffice(ctx: CallContext): Promise<FileContent> {
       const response = await http.send(ctx, "GET", "/v1/me/export");
       return {
         filename: filenameFrom(response.headers.get("content-disposition")),
         contentType: response.headers.get("content-type") ?? "application/json",
         bytes: new Uint8Array(await response.arrayBuffer()),
       };
-    },
-
-    async login(ctx: CallContext, input: LoginInput): Promise<Session> {
-      return toSession(
-        await http.json<ApiSession>(ctx, "POST", "/v1/auth/login", {
-          email: input.email,
-          password: input.password,
-        }),
-      );
-    },
-
-    async refresh(ctx: CallContext, refreshToken: string): Promise<Session> {
-      return toSession(
-        await http.json<ApiSession>(ctx, "POST", "/v1/auth/refresh", {
-          refresh_token: refreshToken,
-        }),
-      );
-    },
-
-    async logout(ctx: CallContext, refreshToken: string): Promise<void> {
-      await http.send(ctx, "POST", "/v1/auth/logout", {
-        body: JSON.stringify({ refresh_token: refreshToken }),
-        contentType: "application/json",
-      });
-    },
-
-    async currentUser(ctx: CallContext): Promise<User> {
-      return toUser(await http.json<ApiUser>(ctx, "GET", "/v1/me"));
-    },
-
-    async changePassword(
-      ctx: CallContext,
-      input: PasswordChangeInput,
-    ): Promise<Session> {
-      return toSession(
-        await http.json<ApiSession>(ctx, "POST", "/v1/me/password", {
-          current_password: input.currentPassword,
-          new_password: input.newPassword,
-        }),
-      );
-    },
-
-    async requestPasswordReset(
-      ctx: CallContext,
-      email: string,
-    ): Promise<void> {
-      await http.send(ctx, "POST", "/v1/auth/password/forgot", {
-        body: JSON.stringify({ email }),
-        contentType: "application/json",
-      });
-    },
-
-    async resetPassword(
-      ctx: CallContext,
-      token: string,
-      password: string,
-    ): Promise<void> {
-      await http.send(ctx, "POST", "/v1/auth/password/reset", {
-        body: JSON.stringify({ token, new_password: password }),
-        contentType: "application/json",
-      });
     },
   };
 }
@@ -462,16 +384,6 @@ function toUser(body: ApiUser): User {
     email: body.email,
     name: body.name,
     createdAt: new Date(body.created_at),
-  };
-}
-
-function toSession(body: ApiSession): Session {
-  return {
-    accessToken: body.access_token,
-    accessExpiresAt: new Date(body.expires_at),
-    refreshToken: body.refresh_token,
-    refreshExpiresAt: new Date(body.refresh_expires_at),
-    user: toUser(body.user),
   };
 }
 

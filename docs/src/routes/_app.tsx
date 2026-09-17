@@ -20,7 +20,7 @@ import {
 import { Brand } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import type { User } from "@/domain/user";
+import type { CurrentUser } from "@/server/auth";
 import { cn } from "@/lib/utils";
 import { currentUser, logout } from "@/server/auth";
 
@@ -88,7 +88,7 @@ function AppShell() {
  * renders through a portal, which does not survive hydration here. It closes
  * on any navigation, and Base UI returns focus to the menu button.
  */
-function MobileBar({ user }: { readonly user: User }) {
+function MobileBar({ user }: { readonly user: CurrentUser }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
@@ -131,7 +131,7 @@ function MobileBar({ user }: { readonly user: User }) {
 }
 
 /** What the sidebar holds, shared by the fixed sidebar and the drawer. */
-function SidebarContent({ user }: { readonly user: User }) {
+function SidebarContent({ user }: { readonly user: CurrentUser }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -214,14 +214,19 @@ function SidebarContent({ user }: { readonly user: User }) {
             aria-hidden="true"
             className="flex size-7 shrink-0 items-center justify-center rounded-full bg-border text-label font-semibold text-muted-foreground"
           >
-            {initialsOf(user.name)}
+            {initialsOf(user.user.name)}
           </span>
           <span className="flex min-w-0 flex-col">
             <span className="truncate text-caption font-medium">
-              {user.name}
+              {user.user.name}
             </span>
+            {/*
+              The office, not the address: templates and documents belong to
+              it, and every member of the office works with the same ones, so
+              which office this session is in is what a person needs to see.
+            */}
             <span className="truncate text-label text-faint">
-              {user.email}
+              {user.organization.name}
             </span>
           </span>
         </div>

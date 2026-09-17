@@ -1,13 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { ValidationError } from "./errors.ts";
-import {
-  MIN_PASSWORD_LENGTH,
-  normalizeEmail,
-  validateLogin,
-  validateRegistration,
-} from "./user.ts";
+import { normalizeEmail, validateLogin, validateSecondFactorCode } from "./user.ts";
 import { formatBytes } from "./template.ts";
 import {
   countFilled,
@@ -18,55 +12,6 @@ import {
 describe("email", () => {
   it("normalises the way the API does", () => {
     assert.equal(normalizeEmail("  ADA@Example.COM "), "ada@example.com");
-  });
-});
-
-describe("registration", () => {
-  const valid = {
-    email: "ada@example.com",
-    name: "Ada Lovelace",
-    password: "uma-senha-bem-longa",
-    termsVersion: "1.0",
-  };
-
-  it("accepts valid input", () => {
-    assert.equal(validateRegistration(valid), null);
-  });
-
-  it("reports every problem at once", () => {
-    const invalid = validateRegistration({
-      email: "",
-      name: "  ",
-      password: "",
-      termsVersion: "1.0",
-    });
-
-    assert.ok(invalid instanceof ValidationError);
-    assert.equal(invalid.fields.length, 3);
-  });
-
-  // The API enforces 12; the design system's copy says 8 and is wrong. If this
-  // test ever fails because the constant moved, the API moved first — or
-  // someone weakened the client to make a form easier, which is the bug.
-  it("requires at least as long a password as the API", () => {
-    assert.equal(MIN_PASSWORD_LENGTH, 12);
-
-    const invalid = validateRegistration({
-      ...valid,
-      password: "x".repeat(MIN_PASSWORD_LENGTH - 1),
-    });
-    assert.ok(invalid?.messageFor("password"));
-  });
-
-  it("counts password length in characters, not bytes", () => {
-    // Twelve accented characters are twelve characters, even though they are
-    // more than twelve bytes.
-    assert.equal(validateRegistration({ ...valid, password: "ç".repeat(12) }), null);
-  });
-
-  it("rejects a malformed address", () => {
-    const invalid = validateRegistration({ ...valid, email: "not-an-address" });
-    assert.ok(invalid?.messageFor("email"));
   });
 });
 
@@ -83,6 +28,16 @@ describe("login", () => {
   it("catches an empty form", () => {
     const invalid = validateLogin({ email: "", password: "" });
     assert.equal(invalid?.fields.length, 2);
+  });
+});
+
+describe("the second factor", () => {
+  it("asks for a code and nothing more", () => {
+    assert.equal(validateSecondFactorCode("123456"), null);
+    // A recovery code is not six digits, and only the platform knows which
+    // kind was given, so length is deliberately not checked.
+    assert.equal(validateSecondFactorCode("abcd-efgh"), null);
+    assert.ok(validateSecondFactorCode("   ")?.messageFor("code"));
   });
 });
 
