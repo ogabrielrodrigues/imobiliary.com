@@ -58,7 +58,7 @@ import {
   type NameSource,
 } from "@/domain/document-name";
 import type { FieldError } from "@/domain/errors";
-import { groupPlaceholders } from "@/domain/placeholder";
+import { groupPlaceholders } from "@imobiliary/docx/placeholder";
 import type { Template } from "@/domain/template";
 import { saveFile } from "@/lib/download";
 import { cn } from "@/lib/utils";

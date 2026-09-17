@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { NO_FORMAT, NO_MARKS, type Block, type BlockFormat } from "../../domain/block.ts";
-import { normalizeBlocks, parseBlockSource } from "../../domain/block-source.ts";
+import { NO_FORMAT, NO_MARKS, type Block, type BlockFormat } from "./block.ts";
+import { normalizeBlocks, parseBlockSource } from "./block-source.ts";
 import { buildDocumentXml, buildDocx, buildNumberingXml, SOURCE_PART } from "./build.ts";
 import { MAIN_DOCUMENT_PART, parseDocumentXml, parseDocx, parseNumberingXml } from "./parse.ts";
 import { readZipEntry } from "./zip.ts";

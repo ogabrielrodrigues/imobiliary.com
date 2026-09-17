@@ -1,0 +1,32 @@
+{
+  "name": "@imobiliary/docx",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./blocks": "./src/block.ts",
+    "./block-source": "./src/block-source.ts",
+    "./placeholder": "./src/placeholder.ts",
+    "./zip": "./src/zip.ts",
+    "./parse": "./src/parse.ts",
+    "./build": "./src/build.ts",
+    "./preview": "./src/document-preview.tsx"
+  },
+  "scripts": {
+    "test": "node --test \"src/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "check": "pnpm typecheck && pnpm test"
+  },
+  "dependencies": {
+    "@imobiliary/ui": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.0",
+    "@types/react": "^19.2.18",
+    "react": "^19.2.8",
+    "typescript": "^7.0.2"
+  }
+}

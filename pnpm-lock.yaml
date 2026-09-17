@@ -19,6 +19,9 @@ importers:
       '@fontsource-variable/jetbrains-mono':
         specifier: 5.3.0
         version: 5.3.0
+      '@imobiliary/docx':
+        specifier: workspace:*
+        version: link:../packages/docx
       '@tabler/icons-react':
         specifier: ^3.46.0
         version: 3.46.0(react@19.2.8)
@@ -143,6 +146,25 @@ importers:
       vite:
         specifier: ^8.2.2
         version: 8.2.2(@types/node@26.5.0)(jiti@2.7.0)
+
+  packages/docx:
+    dependencies:
+      '@imobiliary/ui':
+        specifier: workspace:*
+        version: link:../ui
+    devDependencies:
+      '@types/node':
+        specifier: ^26.5.0
+        version: 26.5.0
+      '@types/react':
+        specifier: ^19.2.18
+        version: 19.2.18
+      react:
+        specifier: ^19.2.8
+        version: 19.2.8
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
 
   packages/ui:
     dependencies:

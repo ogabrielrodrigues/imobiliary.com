@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { NO_FORMAT, NO_MARKS, type Block, type BlockFormat, type Marks } from "../domain/block.ts";
+import { NO_FORMAT, NO_MARKS, type Block, type BlockFormat, type Marks } from "@imobiliary/docx/blocks";
 import { blocksToEditor, editorToBlocks, pointsOf, type EditorNode } from "./editor-document.ts";
 
 const text = (value: string, marks: Partial<Marks> = {}) =>

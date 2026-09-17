@@ -57,7 +57,7 @@ import {
   type Block,
   type BlockType,
   type LineSpacing,
-} from "@/domain/block";
+} from "@imobiliary/docx/blocks";
 import {
   groupPlaceholders,
   humanize,
@@ -65,7 +65,7 @@ import {
   MAX_PLACEHOLDER_NAME_LENGTH,
   placeholderSyntax,
   toPlaceholderName,
-} from "@/domain/placeholder";
+} from "@imobiliary/docx/placeholder";
 import { blocksToEditor, EDITOR_NODES, editorToBlocks, pointsOf } from "@/lib/editor-document";
 import { cn } from "@/lib/utils";
 

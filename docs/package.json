@@ -12,6 +12,7 @@
     "check": "pnpm typecheck && pnpm check:layers && pnpm test"
   },
   "dependencies": {
+    "@imobiliary/docx": "workspace:*",
     "@base-ui/react": "^1.8.0",
     "@fontsource-variable/fustat": "5.3.0",
     "@fontsource-variable/jetbrains-mono": "5.3.0",

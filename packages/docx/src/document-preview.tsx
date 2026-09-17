@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@imobiliary/ui/cn";
 
 import {
   BASE_FONT_SIZE,
@@ -9,8 +9,8 @@ import {
   type ListPosition,
   type Marks,
   type Segment,
-} from "@/domain/block";
-import { humanize, placeholderSyntax } from "@/domain/placeholder";
+} from "./block.ts";
+import { humanize, placeholderSyntax } from "./placeholder.ts";
 
 /** Which placeholder has its input open. One at a time, across the document. */
 export interface EditingState {

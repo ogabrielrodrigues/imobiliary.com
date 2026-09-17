@@ -25,8 +25,8 @@ import {
   type ListPosition,
   type Marks,
   type Segment,
-} from "../../domain/block.ts";
-import { normalizeBlocks, serializeBlockSource } from "../../domain/block-source.ts";
+} from "./block.ts";
+import { normalizeBlocks, serializeBlockSource } from "./block-source.ts";
 import { writeZip, type ZipEntry } from "./zip.ts";
 import { MAIN_DOCUMENT_PART } from "./parse.ts";
 

@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { IconAlertCircle, IconAlertTriangle, IconDownload, IconFilePlus, IconPencil, IconPlus, IconStack2, IconTrash } from "@tabler/icons-react";
 
 import { messageFor, summaryOf, type Failure } from "@/application/result";
-import { DocumentPreview, PlaceholderField } from "@/components/document-preview";
+import { DocumentPreview, PlaceholderField } from "@imobiliary/docx/preview";
 import { Dropzone } from "@/components/dropzone";
 import { BoundFormField } from "@/components/form-field";
 import {
@@ -28,8 +28,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { placeholdersOf, type Block, type Marks } from "@/domain/block";
-import type { EditingState } from "@/components/document-preview";
+import { placeholdersOf, type Block, type Marks } from "@imobiliary/docx/blocks";
+import type { EditingState } from "@imobiliary/docx/preview";
 import type { ReactNode } from "react";
 import { countFilled, validateDocumentData } from "@/domain/document";
 import {
@@ -44,7 +44,7 @@ import {
 } from "@/domain/document-name";
 import { loadNameSource, saveNameSource } from "@/lib/document-name-storage";
 import type { GeneratedDocument } from "@/domain/document";
-import { groupPlaceholders, placeholderSyntax } from "@/domain/placeholder";
+import { groupPlaceholders, placeholderSyntax } from "@imobiliary/docx/placeholder";
 import {
   formatBytes,
   validateTemplateFile,

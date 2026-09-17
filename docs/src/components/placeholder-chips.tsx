@@ -1,4 +1,4 @@
-import { groupPlaceholders, placeholderSyntax } from "@/domain/placeholder";
+import { groupPlaceholders, placeholderSyntax } from "@imobiliary/docx/placeholder";
 
 /**
  * The fields a template declares, grouped for reading.

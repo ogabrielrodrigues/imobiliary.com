@@ -27,7 +27,7 @@ import {
   type ListKind,
   type Marks,
   type Segment,
-} from "../../domain/block.ts";
+} from "./block.ts";
 import { readZipEntry } from "./zip.ts";
 
 export const MAIN_DOCUMENT_PART = "word/document.xml";

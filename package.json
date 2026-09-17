@@ -25,6 +25,7 @@
     "web:build": "pnpm --filter ./web build",
     "web:check": "pnpm --filter ./web check",
     "ui:check": "pnpm --filter ./packages/ui check",
+    "docx:check": "pnpm --filter ./packages/docx check",
     "security": "node scripts/security.mjs"
   }
 }

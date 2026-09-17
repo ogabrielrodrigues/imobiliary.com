@@ -32,8 +32,8 @@ import {
   type ListKind,
   type Marks,
   type Segment,
-} from "../domain/block.ts";
-import { isFontSize, normalizeBlocks } from "../domain/block-source.ts";
+} from "@imobiliary/docx/blocks";
+import { isFontSize, normalizeBlocks } from "@imobiliary/docx/block-source";
 
 /**
  * The subset of TipTap's `JSONContent` this schema produces, as read back.

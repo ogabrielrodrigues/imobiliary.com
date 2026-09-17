@@ -4,7 +4,7 @@ import { Subscript } from "@tiptap/extension-subscript";
 import { Superscript } from "@tiptap/extension-superscript";
 import { FontSize } from "@tiptap/extension-text-style";
 
-import { LINE_SPACINGS, MAX_INDENT, type LineSpacing } from "@/domain/block";
+import { LINE_SPACINGS, MAX_INDENT, type LineSpacing } from "@imobiliary/docx/blocks";
 import { EDITOR_NODES, pointsOf } from "@/lib/editor-document";
 
 declare module "@tiptap/core" {

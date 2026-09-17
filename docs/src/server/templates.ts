@@ -19,7 +19,7 @@ import {
   type Template,
   type TemplateVersion,
 } from "../domain/template.ts";
-import type { Block } from "../domain/block.ts";
+import type { Block } from "@imobiliary/docx/blocks";
 import {
   blockOf,
   describesDocument,
@@ -27,11 +27,11 @@ import {
   normalizeBlocks,
   parseBlockSource,
   validateBlocks,
-} from "../domain/block-source.ts";
+} from "@imobiliary/docx/block-source";
 import { cleanDocumentName } from "../domain/document-name.ts";
-import { buildDocx, SOURCE_PART } from "../infrastructure/docx/build.ts";
-import { parseDocx } from "../infrastructure/docx/parse.ts";
-import { readZipEntry } from "../infrastructure/docx/zip.ts";
+import { buildDocx, SOURCE_PART } from "@imobiliary/docx/build";
+import { parseDocx } from "@imobiliary/docx/parse";
+import { readZipEntry } from "@imobiliary/docx/zip";
 import { assertSameOrigin, callContext, docgen, sessions } from "./runtime.ts";
 
 /**

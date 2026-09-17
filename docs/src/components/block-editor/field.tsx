@@ -1,7 +1,7 @@
 import { InputRule, mergeAttributes, Node, nodePasteRule } from "@tiptap/core";
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from "@tiptap/react";
 
-import { humanize, isValidPlaceholderName, placeholderSyntax } from "@/domain/placeholder";
+import { humanize, isValidPlaceholderName, placeholderSyntax } from "@imobiliary/docx/placeholder";
 import { EDITOR_NODES } from "@/lib/editor-document";
 import { cn } from "@/lib/utils";
 

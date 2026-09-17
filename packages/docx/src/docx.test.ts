@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { placeholdersOf } from "../../domain/block.ts";
+import { placeholdersOf } from "./block.ts";
 import { parseDocumentXml, parseDocx } from "./parse.ts";
 import { MAX_ENTRY_BYTES, readZipEntry, writeZip, ZipError } from "./zip.ts";
 
