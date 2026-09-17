@@ -271,6 +271,12 @@ If-Match: "3"
       </article>
 
       <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/sessions/docgen-token</span><span class="access">session</span></div>
+        <p>A five-minute token for the document service, audience <code>docgen</code>, signed with the access token key and carrying the user, the office, its name, the e-mail and the role. The document service verifies it with the public keys, which <code>imobiliary public-keys</code> prints; this API refuses it.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>{ token, expires_at }</code></dd></dl>
+      </article>
+
+      <article class="op-card">
         <div class="sig"><span class="m post">POST</span><span class="path">/v1/sessions/switch</span><span class="access">public · credentials</span></div>
         <p>Spends the refresh token for a session in another office the account belongs to.</p>
         <dl class="io"><dt>Body</dt><dd><code>refresh_token</code>, <code>organization_id</code></dd><dt>Answers</dt><dd><code>200</code> <code>Session</code> · <code>401</code> · <code>403</code></dd></dl>

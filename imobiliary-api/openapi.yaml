@@ -349,6 +349,32 @@ paths:
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /v1/sessions/docgen-token:
+    post:
+      tags: [Sessions]
+      summary: A short token for the document service
+      description: |
+        Mints a five-minute token for the caller's session, audience `docgen`,
+        signed with the same Ed25519 key as access tokens. It carries `sub`,
+        `org`, `org_name`, `email`, `name` and `role`. The document service
+        verifies it with the public keys (`imobiliary public-keys` prints
+        them); this API refuses it, since its audience is not this API's.
+      operationId: issueDocgenToken
+      responses:
+        "200":
+          description: The token.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, expires_at]
+                properties:
+                  token: { type: string }
+                  expires_at: { $ref: "#/components/schemas/Instant" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
   /v1/sessions/switch:
     post:
       tags: [Sessions]

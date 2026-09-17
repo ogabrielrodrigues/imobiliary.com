@@ -70,13 +70,33 @@ func main() {
 		err = serve(logger)
 	case "migrate":
 		err = migrate(logger)
+	case "public-keys":
+		err = publicKeys()
 	default:
-		err = fmt.Errorf("unknown command %q; use serve or migrate", command)
+		err = fmt.Errorf("unknown command %q; use serve, migrate or public-keys", command)
 	}
 	if err != nil {
 		logger.Error("stopped", slog.String("command", command), slog.Any("error", err))
 		os.Exit(1)
 	}
+}
+
+// publicKeys prints the verification keys of the access token signer, in the
+// form the document service reads from DOCGEN_IDENTITY_PUBLIC_KEYS. They are
+// public: printing them reveals nothing that signs.
+func publicKeys() error {
+	// The server's configuration, so the keys come from the same place,
+	// .env included, as the ones the running service signs with.
+	cfg, err := config.LoadServer()
+	if err != nil {
+		return err
+	}
+	signer, err := token.NewSigner(cfg.TokenKeys, cfg.TokenKeyID, time.Minute)
+	if err != nil {
+		return err
+	}
+	fmt.Println(signer.PublicKeySpec())
+	return nil
 }
 
 func migrate(logger *slog.Logger) error {

@@ -2,6 +2,9 @@ package http
 
 import (
 	"net/http"
+	"time"
+
+	"imobiliary/internal/platform/token"
 )
 
 type documentFieldBody struct {
@@ -31,4 +34,28 @@ func (s *Server) handleContractDocumentFields(w http.ResponseWriter, r *http.Req
 		out.Fields = append(out.Fields, documentFieldBody{Name: f.Name, Value: f.Value})
 	}
 	writeJSON(w, s.logger, http.StatusOK, out)
+}
+
+type docgenTokenBody struct {
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// handleDocgenToken mints a token for the document service for the caller's
+// session: the user, the office they are working in, and their role there.
+func (s *Server) handleDocgenToken(w http.ResponseWriter, r *http.Request) {
+	caller := callerFrom(r.Context())
+	raw, expiresAt, err := s.signer.IssueDocgen(token.DocgenSubject{
+		UserID:           caller.User.ID,
+		OrganizationID:   caller.Organization.ID,
+		OrganizationName: caller.Organization.Name,
+		Email:            caller.User.Email,
+		Name:             caller.User.Name,
+		Role:             string(caller.Role),
+	})
+	if err != nil {
+		writeError(w, s.logger, err)
+		return
+	}
+	writeJSON(w, s.logger, http.StatusOK, docgenTokenBody{Token: raw, ExpiresAt: expiresAt})
 }

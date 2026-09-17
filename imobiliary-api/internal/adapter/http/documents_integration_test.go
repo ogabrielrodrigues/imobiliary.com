@@ -3,6 +3,7 @@
 package http_test
 
 import (
+	"encoding/base64"
 	"net/http"
 	"strings"
 	"testing"
@@ -76,4 +77,30 @@ func TestContractDocumentFields(t *testing.T) {
 
 	other := a.officeAdmin("bia@example.com", "Norte")
 	a.expect(http.StatusNotFound, http.MethodGet, "/v1/contracts/"+c.ID+"/document-fields", other.access, nil)
+}
+
+func TestDocgenToken(t *testing.T) {
+	a := newAPI(t)
+	admin := a.officeAdmin("ana@example.com", "Central")
+	var out struct {
+		Token     string `json:"token"`
+		ExpiresAt string `json:"expires_at"`
+	}
+	a.expect(http.StatusOK, http.MethodPost, "/v1/sessions/docgen-token", admin.access, nil).decode(t, &out)
+	parts := strings.Split(out.Token, ".")
+	if len(parts) != 3 || out.ExpiresAt == "" {
+		t.Fatalf("token %q", out.Token)
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"aud":["docgen"]`, `"email":"ana@example.com"`, `"org_name":"Central"`, `"role":"admin"`} {
+		if !strings.Contains(string(payload), want) {
+			t.Errorf("payload %s lacks %s", payload, want)
+		}
+	}
+	// It opens nothing here.
+	a.expect(http.StatusUnauthorized, http.MethodGet, "/v1/me", out.Token, nil)
+	a.expect(http.StatusUnauthorized, http.MethodPost, "/v1/sessions/docgen-token", "", nil)
 }

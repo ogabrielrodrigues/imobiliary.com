@@ -143,6 +143,9 @@ func (s *Server) Handler() http.Handler {
 	admin := chain2(s.requireAuth, s.requireEnrolled, s.requireAdmin, s.limitWrites)
 
 	mux.Handle("GET /v1/me", authenticated(http.HandlerFunc(s.handleMe)))
+	// A short token for the document service, which verifies it with the
+	// public key alone (PLANO-FASE-7.md §4).
+	mux.Handle("POST /v1/sessions/docgen-token", authenticated(http.HandlerFunc(s.handleDocgenToken)))
 	mux.Handle("POST /v1/me/password", write(http.HandlerFunc(s.handleChangePassword)))
 	mux.Handle("DELETE /v1/me/totp", write(http.HandlerFunc(s.handleDisableMFA)))
 	mux.Handle("POST /v1/me/totp/recovery-codes", write(http.HandlerFunc(s.handleRegenerateRecoveryCodes)))

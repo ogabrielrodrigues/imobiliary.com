@@ -250,3 +250,71 @@ func ParseKeys(spec string) (map[string][]byte, string, error) {
 	current := slices.Max(slices.Collect(maps.Keys(keys)))
 	return keys, current, nil
 }
+
+// AudienceDocgen is the document service's audience. A token for it is
+// accepted there and nowhere else: ParseAccess here pins AudienceAPI.
+const AudienceDocgen = "docgen"
+
+// DocgenTTL is how long a token for the document service lives. The platform
+// asks for one per call to that service, so it never needs to be long.
+const DocgenTTL = 5 * time.Minute
+
+// DocgenSubject is who a token for the document service speaks for. The
+// e-mail lets that service find the account it held before the platforms
+// shared their identity (PLANO-FASE-7.md §4).
+type DocgenSubject struct {
+	UserID           uuid.UUID
+	OrganizationID   uuid.UUID
+	OrganizationName string
+	Email            string
+	Name             string
+	Role             string
+}
+
+// DocgenClaims are what a token for the document service carries.
+type DocgenClaims struct {
+	jwt.RegisteredClaims
+	Organization     string `json:"org"`
+	OrganizationName string `json:"org_name"`
+	Email            string `json:"email"`
+	Name             string `json:"name"`
+	Role             string `json:"role"`
+}
+
+// IssueDocgen mints a token for the document service, signed with the same
+// key as access tokens and verified there with the public half.
+func (s *Signer) IssueDocgen(sub DocgenSubject) (string, time.Time, error) {
+	now := s.now()
+	expiresAt := now.Add(DocgenTTL)
+	claims := DocgenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    Issuer,
+			Subject:   sub.UserID.String(),
+			Audience:  jwt.ClaimStrings{AudienceDocgen},
+			ID:        uuid.NewV4().String(),
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
+		},
+		Organization: sub.OrganizationID.String(), OrganizationName: sub.OrganizationName,
+		Email: sub.Email, Name: sub.Name, Role: sub.Role,
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
+	tok.Header["kid"] = s.keyID
+	signed, err := tok.SignedString(s.private)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("token: sign docgen token: %w", err)
+	}
+	return signed, expiresAt, nil
+}
+
+// PublicKeySpec writes the verification keys in the form another service
+// reads them: "name:base64,name:base64", sorted by name.
+func (s *Signer) PublicKeySpec() string {
+	names := slices.Sorted(maps.Keys(s.publics))
+	parts := make([]string, 0, len(names))
+	for _, name := range names {
+		parts = append(parts, name+":"+base64.StdEncoding.EncodeToString(s.publics[name]))
+	}
+	return strings.Join(parts, ",")
+}

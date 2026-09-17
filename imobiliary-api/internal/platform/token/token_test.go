@@ -212,3 +212,42 @@ func TestSecrets(t *testing.T) {
 		t.Error("two secrets hash the same")
 	}
 }
+
+func TestDocgenTokens(t *testing.T) {
+	s := newSigner(t, map[string][]byte{"1": seed(t), "2": seed(t)}, "2")
+	sub := DocgenSubject{UserID: uuid.NewV7(), OrganizationID: uuid.NewV7(), OrganizationName: "Central",
+		Email: "ana@example.com", Name: "Ana", Role: "admin"}
+	raw, expiresAt, err := s.IssueDocgen(sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if time.Until(expiresAt) > DocgenTTL {
+		t.Errorf("expires at %s", expiresAt)
+	}
+
+	// This service refuses it: the audience is the document service's.
+	if _, err := s.ParseAccess(raw); !errors.Is(err, ErrInvalidToken) {
+		t.Errorf("ParseAccess accepted a docgen token: %v", err)
+	}
+
+	// The document service verifies it with the published public keys alone.
+	publics := map[string]ed25519.PublicKey{}
+	for _, entry := range strings.Split(s.PublicKeySpec(), ",") {
+		name, key, _ := strings.Cut(entry, ":")
+		b, err := base64.StdEncoding.DecodeString(key)
+		if err != nil || len(b) != ed25519.PublicKeySize {
+			t.Fatalf("public key %q: %v", entry, err)
+		}
+		publics[name] = b
+	}
+	var claims DocgenClaims
+	parser := jwt.NewParser(jwt.WithValidMethods([]string{"EdDSA"}), jwt.WithIssuer(Issuer), jwt.WithAudience(AudienceDocgen))
+	if _, err := parser.ParseWithClaims(raw, &claims, func(tok *jwt.Token) (any, error) {
+		return publics[tok.Header["kid"].(string)], nil
+	}); err != nil {
+		t.Fatalf("the public key does not verify it: %v", err)
+	}
+	if claims.Email != sub.Email || claims.Organization != sub.OrganizationID.String() || claims.OrganizationName != "Central" || claims.Role != "admin" {
+		t.Errorf("claims %+v", claims)
+	}
+}
