@@ -20,20 +20,45 @@ import type {
  *
  * Keying on the secret itself is what makes this correct: two requests share a
  * rotation exactly when they would otherwise have collided.
+ *
+ * A rotation is also remembered for a short grace period after it finishes.
+ * Two tabs reloading together send requests that each carry the cookie as it
+ * was when the tab asked; the second can reach this process just after the
+ * first rotation completed, still holding the consumed secret. Without the
+ * grace period it would present that secret to the API and revoke the chain
+ * (seen on 2026-09-16). The remembered result is only the new session, kept
+ * in memory, and it is dropped once the period ends.
  */
 export class RefreshCoordinator {
   readonly #inFlight = new Map<string, Promise<Session>>();
+  readonly #recent = new Map<string, { readonly session: Session; readonly at: number }>();
+  readonly #now: () => number;
+  readonly #graceMs: number;
+
+  constructor(options: { now?: () => number; graceMs?: number } = {}) {
+    this.#now = options.now ?? Date.now;
+    this.#graceMs = options.graceMs ?? ROTATION_GRACE_MS;
+  }
 
   async run(
     refreshToken: string,
     refresh: () => Promise<Session>,
   ): Promise<Session> {
+    this.#sweep();
+    const recent = this.#recent.get(refreshToken);
+    if (recent) return recent.session;
+
     const existing = this.#inFlight.get(refreshToken);
     if (existing) return existing;
 
-    const attempt = refresh().finally(() => {
-      this.#inFlight.delete(refreshToken);
-    });
+    const attempt = refresh()
+      .then((session) => {
+        this.#recent.set(refreshToken, { session, at: this.#now() });
+        return session;
+      })
+      .finally(() => {
+        this.#inFlight.delete(refreshToken);
+      });
 
     this.#inFlight.set(refreshToken, attempt);
     return attempt;
@@ -43,7 +68,23 @@ export class RefreshCoordinator {
   get pending(): number {
     return this.#inFlight.size;
   }
+
+  /** Forgets rotations older than the grace period. Map order is insertion order. */
+  #sweep(): void {
+    const cutoff = this.#now() - this.#graceMs;
+    for (const [token, entry] of this.#recent) {
+      if (entry.at > cutoff) break;
+      this.#recent.delete(token);
+    }
+  }
 }
+
+/**
+ * How long a finished rotation answers for the secret it consumed. Long enough
+ * for requests a browser sent together, short enough that the new session is
+ * not kept around.
+ */
+export const ROTATION_GRACE_MS = 10_000;
 
 /**
  * How long before an access token actually expires it is treated as expired.

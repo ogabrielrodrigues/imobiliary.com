@@ -118,6 +118,40 @@ describe("RefreshCoordinator", () => {
     assert.equal(coordinator.pending, 0, "the entry was not released");
   });
 
+  it("answers a late caller with the rotation that consumed its secret", async () => {
+    let clock = 0;
+    const coordinator = new RefreshCoordinator({ now: () => clock, graceMs: 10_000 });
+    let runs = 0;
+    const refresh = async () => {
+      runs += 1;
+      return sessionExpiring(15, String(runs + 1));
+    };
+
+    const first = await coordinator.run("refresh-1", refresh);
+    // Another tab's request, sent with the old cookie, arrives afterwards.
+    clock += 400;
+    const late = await coordinator.run("refresh-1", refresh);
+    assert.equal(runs, 1, "the consumed secret was presented again");
+    assert.equal(late, first);
+
+    // Past the grace period the secret is exchanged again, and the API decides.
+    clock += 10_000;
+    await coordinator.run("refresh-1", refresh);
+    assert.equal(runs, 2);
+  });
+
+  it("does not remember a rotation that failed", async () => {
+    const coordinator = new RefreshCoordinator();
+    let runs = 0;
+    const failing = async (): Promise<Session> => {
+      runs += 1;
+      throw new Error("refused");
+    };
+    await assert.rejects(coordinator.run("refresh-1", failing));
+    await assert.rejects(coordinator.run("refresh-1", failing));
+    assert.equal(runs, 2);
+  });
+
   it("keeps different secrets independent", async () => {
     const coordinator = new RefreshCoordinator();
     let runs = 0;

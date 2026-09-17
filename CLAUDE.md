@@ -1530,9 +1530,12 @@ _Update this section as work proceeds. It is what a fresh session reads first._
     - **Not yet seen in the browser**: the pane's session was revoked by the
       refresh race below before the check. Typecheck, 71 web tests and every
       Go suite pass.
-    - **Found: two tabs reloading together can revoke the session.** A request
-      with the old refresh token arriving just after single-flight released
-      the rotation is taken by the API as a replay. Spun off as a separate task.
+    - **Fixed: two tabs reloading together revoked the session.** A request
+      with the old refresh token arrived just after single-flight had released
+      the rotation, and the API took it as a replay. `RefreshCoordinator`
+      (web and docs, identical) now also answers a consumed secret with the
+      rotation that consumed it for `ROTATION_GRACE_MS` (10 s), kept in memory
+      and swept; a failed rotation is not remembered. Tested in both.
 
 ### Next step
 
