@@ -327,13 +327,15 @@ type ContractPartyView struct {
 
 // RentRecord is one stored instalment.
 type RentRecord struct {
-	ID         uuid.UUID
-	Sequence   int
-	DueOn      domain.Date
-	Amount     domain.Money
-	LateFee    domain.Money
-	AmountPaid *domain.Money
-	PaidOn     *domain.Date
+	ID       uuid.UUID
+	Sequence int
+	DueOn    domain.Date
+	Amount   domain.Money
+	// ChargesTotal is the sum of the charges billed with the rent.
+	ChargesTotal domain.Money
+	LateFee      domain.Money
+	AmountPaid   *domain.Money
+	PaidOn       *domain.Date
 }
 
 // ContractRepository stores contracts, bound to an organisation-scoped
@@ -365,7 +367,121 @@ type ScopedRepositories struct {
 	Properties PropertyRepository
 	Contracts  ContractRepository
 	Amendments AmendmentRepository
+	Rents      RentRepository
+	Dashboard  DashboardRepository
 	Audit      AuditRepository
+}
+
+// RentView is one instalment with what identifies its contract.
+type RentView struct {
+	ID               uuid.UUID
+	ContractID       uuid.UUID
+	Registry         string
+	Address          domain.Address
+	TenantNames      []string
+	Sequence         int
+	DueOn            domain.Date
+	Amount           domain.Money
+	ChargesTotal     domain.Money
+	LateFee          domain.Money
+	AmountPaid       *domain.Money
+	PaidOn           *domain.Date
+	LatePenaltyRate  domain.Rate
+	LateInterestRate domain.Rate
+	// Charges is filled by Get only.
+	Charges []domain.Charge
+}
+
+// Due is the rent with its charges, what a payment settles before any late fee.
+func (r *RentView) Due() domain.Money {
+	due, err := r.Amount.Add(r.ChargesTotal)
+	if err != nil {
+		return r.Amount
+	}
+	return due
+}
+
+// RentQuery filters the office's instalments. Status is "", "overdue",
+// "pending" (unpaid, not yet due), "open" (unpaid) or "paid".
+type RentQuery struct {
+	Search     string
+	Status     string
+	DueFrom    *domain.Date
+	DueTo      *domain.Date
+	ContractID *uuid.UUID
+	Today      domain.Date
+	After      *RentCursor
+	Limit      int
+}
+
+// RentCursor pages the list, which runs by due day.
+type RentCursor struct {
+	DueOn domain.Date
+	ID    uuid.UUID
+}
+
+// RentRepository reads and settles instalments, bound to an
+// organisation-scoped transaction.
+type RentRepository interface {
+	List(ctx context.Context, q RentQuery) ([]RentView, error)
+	// Get is one instalment with its charges.
+	Get(ctx context.Context, id uuid.UUID) (*RentView, error)
+	// Pay settles an unpaid instalment; one already paid is ErrConflict, so
+	// of two concurrent payments one fails.
+	Pay(ctx context.Context, id uuid.UUID, p domain.Payment) error
+	// Reverse puts a paid instalment back to unpaid; an unpaid one is ErrConflict.
+	Reverse(ctx context.Context, id uuid.UUID) error
+	// AddCharge adds a charge to an unpaid instalment; a paid one is ErrConflict.
+	AddCharge(ctx context.Context, c *domain.Charge, at time.Time) error
+	// RemoveCharge removes a charge from an unpaid instalment.
+	RemoveCharge(ctx context.Context, rentID, chargeID uuid.UUID) error
+	// HasCharges reports whether any instalment of a contract carries a charge.
+	HasCharges(ctx context.Context, contractID uuid.UUID) (bool, error)
+}
+
+// MonthFigures are the receipts of a month.
+type MonthFigures struct {
+	// Expected is every instalment due in the month, rent and charges.
+	Expected      domain.Money
+	ExpectedCount int
+	// Received is what came in during the month, whatever the due day.
+	Received      domain.Money
+	ReceivedCount int
+	// Open is what is due in the month and not paid.
+	Open      domain.Money
+	OpenCount int
+	// OfficeFee is the administration fee on the rents received in the month.
+	OfficeFee domain.Money
+}
+
+// Portfolio is what the office manages today.
+type Portfolio struct {
+	Properties       int
+	LeasedProperties int
+	ActiveContracts  int
+	// RentRoll is the sum of the current rents of the active contracts.
+	RentRoll domain.Money
+}
+
+// ContractDeadline is a contract with a date coming up.
+type ContractDeadline struct {
+	ContractID uuid.UUID
+	Registry   string
+	Address    domain.Address
+	On         domain.Date
+}
+
+// DashboardRepository answers the dashboard's figures.
+type DashboardRepository interface {
+	Month(ctx context.Context, from, to domain.Date) (MonthFigures, error)
+	// Overdue is the count and the rent with charges of what is unpaid and past due.
+	Overdue(ctx context.Context, today domain.Date) (int, domain.Money, error)
+	Portfolio(ctx context.Context, today domain.Date) (Portfolio, error)
+	// Expiring lists running contracts that end between today and until.
+	Expiring(ctx context.Context, today, until domain.Date, limit int) ([]ContractDeadline, error)
+	// AdjustmentsDue lists running contracts with an index whose twelve months
+	// since the start or the last adjustment end by until.
+	AdjustmentsDue(ctx context.Context, today, until domain.Date, limit int) ([]ContractDeadline, error)
 }
 
 // AmendmentRepository stores rent adjustments, bound to an organisation-scoped

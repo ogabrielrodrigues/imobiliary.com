@@ -29,13 +29,14 @@ type instalmentBody struct {
 }
 
 type rentBody struct {
-	ID         string        `json:"id"`
-	Sequence   int           `json:"sequence"`
-	DueOn      domain.Date   `json:"due_on"`
-	Amount     domain.Money  `json:"amount"`
-	LateFee    domain.Money  `json:"late_fee"`
-	AmountPaid *domain.Money `json:"amount_paid"`
-	PaidOn     *domain.Date  `json:"paid_on"`
+	ID           string        `json:"id"`
+	Sequence     int           `json:"sequence"`
+	DueOn        domain.Date   `json:"due_on"`
+	Amount       domain.Money  `json:"amount"`
+	ChargesTotal domain.Money  `json:"charges_total"`
+	LateFee      domain.Money  `json:"late_fee"`
+	AmountPaid   *domain.Money `json:"amount_paid"`
+	PaidOn       *domain.Date  `json:"paid_on"`
 	// Status is computed on the office's calendar, never stored.
 	Status string `json:"status"`
 }
@@ -125,7 +126,7 @@ func presentContract(v *usecase.ContractView) contractBody {
 	}
 	for _, r := range v.Rents {
 		out.Rents = append(out.Rents, rentBody{
-			ID: r.ID.String(), Sequence: r.Sequence, DueOn: r.DueOn, Amount: r.Amount, LateFee: r.LateFee,
+			ID: r.ID.String(), Sequence: r.Sequence, DueOn: r.DueOn, Amount: r.Amount, ChargesTotal: r.ChargesTotal, LateFee: r.LateFee,
 			AmountPaid: r.AmountPaid, PaidOn: r.PaidOn, Status: rentStatus(r, v.Today),
 		})
 	}

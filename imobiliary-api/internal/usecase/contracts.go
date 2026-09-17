@@ -227,6 +227,15 @@ func (c *Contracts) Update(ctx context.Context, caller *Caller, contract *domain
 			v.Add("rents", "an instalment was already paid, so the schedule cannot be generated again")
 			return v
 		}
+		// Regenerating the schedule would drop the charges billed with the
+		// instalments.
+		if charged, err := repos.Rents.HasCharges(ctx, contract.ID); err != nil {
+			return err
+		} else if charged {
+			v := &domain.ValidationError{}
+			v.Add("rents", "an instalment has charges, so the schedule cannot be generated again")
+			return v
+		}
 		// Regenerating the schedule would put the agreed rent back over an
 		// adjustment; from the first one on, rent changes go through amendments.
 		if amendments, err := repos.Amendments.List(ctx, contract.ID); err != nil {

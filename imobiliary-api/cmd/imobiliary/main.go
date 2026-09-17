@@ -192,6 +192,11 @@ func serve(logger *slog.Logger) error {
 		Location: saoPaulo,
 		Logger:   logger,
 	})
+	rents := usecase.NewRents(usecase.RentsConfig{
+		Scope:    db,
+		Location: saoPaulo,
+		Logger:   logger,
+	})
 	privacy := usecase.NewPrivacy(usecase.PrivacyConfig{
 		Identity:     identity,
 		Repositories: repos,
@@ -222,6 +227,7 @@ func serve(logger *slog.Logger) error {
 		People:            people,
 		Properties:        properties,
 		Contracts:         contracts,
+		Rents:             rents,
 		Auditor:           auditor,
 		Signer:            signer,
 		Logger:            logger,

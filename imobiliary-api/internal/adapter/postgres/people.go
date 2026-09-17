@@ -25,6 +25,8 @@ func (db *DB) InOrganization(ctx context.Context, organizationID uuid.UUID, fn f
 			Properties: &propertyRepository{q: tx, organizationID: organizationID},
 			Contracts:  &contractRepository{q: tx, organizationID: organizationID},
 			Amendments: &amendmentRepository{q: tx, organizationID: organizationID},
+			Rents:      &rentRepository{q: tx, organizationID: organizationID},
+			Dashboard:  &dashboardRepository{q: tx},
 			Audit:      &auditRepository{tx},
 		})
 	})

@@ -37,6 +37,7 @@ type Options struct {
 	People        *usecase.People
 	Properties    *usecase.Properties
 	Contracts     *usecase.Contracts
+	Rents         *usecase.Rents
 	Auditor       *usecase.Auditor
 	// Signer parses the access tokens this service issued.
 	Signer  *token.Signer
@@ -61,6 +62,7 @@ type Server struct {
 	people        *usecase.People
 	properties    *usecase.Properties
 	contracts     *usecase.Contracts
+	rents         *usecase.Rents
 	auditor       *usecase.Auditor
 	signer        *token.Signer
 	logger        *slog.Logger
@@ -84,6 +86,7 @@ func NewServer(opts Options) *Server {
 		people:        opts.People,
 		properties:    opts.Properties,
 		contracts:     opts.Contracts,
+		rents:         opts.Rents,
 		auditor:       opts.Auditor,
 		signer:        opts.Signer,
 		logger:        opts.Logger,
@@ -176,6 +179,17 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /v1/contracts/{contractID}/amendments/preview", write(http.HandlerFunc(s.handlePreviewAmendment)))
 	mux.Handle("POST /v1/contracts/{contractID}/amendments", write(http.HandlerFunc(s.handleCreateAmendment)))
 	mux.Handle("DELETE /v1/contracts/{contractID}/amendments/{amendmentID}", write(http.HandlerFunc(s.handleDeleteAmendment)))
+
+	// Rents and the dashboard. The payment preview writes nothing and is
+	// charged as a write, like the other previews.
+	mux.Handle("GET /v1/rents", authenticated(http.HandlerFunc(s.handleListRents)))
+	mux.Handle("GET /v1/rents/{rentID}", authenticated(http.HandlerFunc(s.handleGetRent)))
+	mux.Handle("POST /v1/rents/{rentID}/payment/preview", write(http.HandlerFunc(s.handlePreviewPayment)))
+	mux.Handle("POST /v1/rents/{rentID}/payment", write(http.HandlerFunc(s.handlePayRent)))
+	mux.Handle("DELETE /v1/rents/{rentID}/payment", write(http.HandlerFunc(s.handleReversePayment)))
+	mux.Handle("POST /v1/rents/{rentID}/charges", write(http.HandlerFunc(s.handleAddCharge)))
+	mux.Handle("DELETE /v1/rents/{rentID}/charges/{chargeID}", write(http.HandlerFunc(s.handleRemoveCharge)))
+	mux.Handle("GET /v1/dashboard", authenticated(http.HandlerFunc(s.handleDashboard)))
 
 	// Probes, and the catch-all that answers JSON rather than net/http's text.
 	mux.HandleFunc("GET /healthz", s.handleLive)

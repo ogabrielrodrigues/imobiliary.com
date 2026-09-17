@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Imobiliary API
-  version: "0.5.0"
+  version: "0.6.0"
   summary: Rental property management for brokers, small agencies and owners.
   description: |
     The API behind the Imobiliary platform. It covers identity and the office
@@ -128,6 +128,8 @@ tags:
     description: |
       Leases of the office's properties, with their parties, the legal notices
       acknowledged and the schedule of rents.
+  - name: Rents
+    description: Instalments across contracts, payments, charges and the dashboard.
   - name: Operations
     description: Probes for the orchestrator.
 
@@ -1478,6 +1480,261 @@ paths:
         "428": { $ref: "#/components/responses/PreconditionRequired" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /v1/rents:
+    get:
+      tags: [Rents]
+      summary: Search the office's instalments
+      description: |
+        Every contract's instalments by due day, paged with `next_cursor`.
+        `status` is `overdue` (unpaid and past due), `pending` (unpaid, due
+        today or later), `open` (unpaid) or `paid`, computed against today in
+        America/Sao_Paulo. `q` matches the contract number, the street or a
+        party's name.
+      operationId: listRents
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [overdue, pending, open, paid] } }
+        - { name: due_from, in: query, schema: { $ref: "#/components/schemas/Date" } }
+        - { name: due_to, in: query, schema: { $ref: "#/components/schemas/Date" } }
+        - { name: contract_id, in: query, schema: { $ref: "#/components/schemas/ID" } }
+        - name: limit
+          in: query
+          description: Default 50, at most 200.
+          schema: { type: integer, minimum: 1 }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: A page.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rents]
+                properties:
+                  rents:
+                    type: array
+                    items: { $ref: "#/components/schemas/RentSummary" }
+                  next_cursor: { type: string, description: Absent on the last page. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/rents/{rentID}:
+    parameters:
+      - name: rentID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+    get:
+      tags: [Rents]
+      summary: Read an instalment
+      description: With its charges and, while unpaid, the late fee for paying today.
+      operationId: getRent
+      responses:
+        "200":
+          description: The instalment.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RentDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/rents/{rentID}/payment/preview:
+    parameters:
+      - name: rentID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+    post:
+      tags: [Rents]
+      summary: Compute the late fee for a payment day
+      description: |
+        The penalty rate on the rent with its charges, plus the monthly
+        interest rate prorated over a thirty-day month for each day after the
+        due day, each rounded to the centavo. Paying on or before the due day
+        adds nothing. Records nothing.
+      operationId: previewPayment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [paid_on]
+              properties:
+                paid_on: { $ref: "#/components/schemas/Date" }
+      responses:
+        "200":
+          description: The late fee and the total.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [late_fee, total]
+                properties:
+                  late_fee: { $ref: "#/components/schemas/LateFee" }
+                  total: { $ref: "#/components/schemas/Money" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/rents/{rentID}/payment:
+    parameters:
+      - name: rentID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+    post:
+      tags: [Rents]
+      summary: Record a payment in full
+      description: |
+        `late_fee` left out takes the computed one; `amount_paid` left out is
+        the rent, its charges and the late fee. `paid_on` is not after today.
+        An instalment already paid answers `409 conflict`, which is also what
+        the second of two simultaneous payments receives. Audited. There is no
+        partial payment.
+      operationId: payRent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [paid_on]
+              properties:
+                paid_on: { $ref: "#/components/schemas/Date" }
+                amount_paid: { $ref: "#/components/schemas/Money", description: What actually came in. }
+                late_fee: { $ref: "#/components/schemas/Money", description: The late fee agreed. }
+      responses:
+        "200":
+          description: Paid.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RentDetail" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      tags: [Rents]
+      summary: Reverse a payment
+      description: Puts the instalment back to unpaid, clearing the amount and the late fee. Refused on `payment` when it is not paid. Audited.
+      operationId: reversePayment
+      responses:
+        "200":
+          description: Reversed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RentDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/rents/{rentID}/charges:
+    parameters:
+      - name: rentID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+    post:
+      tags: [Rents]
+      summary: Bill a charge with an unpaid instalment
+      description: |
+        Condominium, IPTU, water, energy or another charge, which needs a
+        description. At most 20 per instalment. Refused on `charges` once the
+        instalment is paid. Once any instalment of a contract has a charge,
+        replacing the contract's terms is refused on `rents`.
+      operationId: addCharge
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, amount]
+              properties:
+                kind: { type: string, enum: [condominium, property_tax, water, energy, other] }
+                description: { type: string, maxLength: 120 }
+                amount: { $ref: "#/components/schemas/Money" }
+      responses:
+        "201":
+          description: Added; the instalment as it is now.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RentDetail" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/rents/{rentID}/charges/{chargeID}:
+    parameters:
+      - name: rentID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+      - name: chargeID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+    delete:
+      tags: [Rents]
+      summary: Remove a charge from an unpaid instalment
+      operationId: removeCharge
+      responses:
+        "200":
+          description: Removed; the instalment as it is now.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RentDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/dashboard:
+    get:
+      tags: [Rents]
+      summary: The office's day at a glance
+      description: |
+        As of today in America/Sao_Paulo. `month`: every instalment due this
+        month (rent and charges), what came in this month whatever the due
+        day, what is due this month and unpaid, and the administration fee on
+        the rents received this month. `overdue`: every unpaid instalment past
+        due. `portfolio`: properties, those with a running contract, running
+        contracts and the sum of their current rents. `expiring`: running
+        contracts ending within sixty days. `adjustments`: running contracts
+        with an index whose twelve months since the start or the last
+        adjustment end within thirty days or already ended. `due_today` and
+        `overdue_rents` list up to twenty instalments each.
+      operationId: getDashboard
+      responses:
+        "200":
+          description: The figures.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Dashboard" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
   # --- operations -------------------------------------------------------------
 
   /healthz:
@@ -2105,6 +2362,7 @@ components:
                   sequence: { type: integer, minimum: 1 }
                   due_on: { $ref: "#/components/schemas/Date" }
                   amount: { $ref: "#/components/schemas/Money" }
+                  charges_total: { $ref: "#/components/schemas/Money" }
                   late_fee: { $ref: "#/components/schemas/Money" }
                   amount_paid: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
                   paid_on: { oneOf: [{ $ref: "#/components/schemas/Date" }, { type: "null" }] }
@@ -2157,6 +2415,102 @@ components:
         notices:
           type: array
           items: { type: string, enum: [adjustment_period] }
+
+    LateFee:
+      type: object
+      required: [days_late, penalty, interest, total]
+      properties:
+        days_late: { type: integer, minimum: 0 }
+        penalty: { $ref: "#/components/schemas/Money" }
+        interest: { $ref: "#/components/schemas/Money" }
+        total: { $ref: "#/components/schemas/Money" }
+
+    RentSummary:
+      type: object
+      required: [id, contract, sequence, due_on, amount, charges_total, due, late_fee, amount_paid, paid_on, status]
+      properties:
+        id: { $ref: "#/components/schemas/ID" }
+        contract:
+          type: object
+          required: [id, registry, address, tenant_names]
+          properties:
+            id: { $ref: "#/components/schemas/ID" }
+            registry: { type: string }
+            address: { $ref: "#/components/schemas/PropertyAddress" }
+            tenant_names: { type: array, items: { type: string } }
+        sequence: { type: integer, minimum: 1 }
+        due_on: { $ref: "#/components/schemas/Date" }
+        amount: { $ref: "#/components/schemas/Money", description: The rent of the instalment. }
+        charges_total: { $ref: "#/components/schemas/Money" }
+        due: { $ref: "#/components/schemas/Money", description: The rent with its charges. }
+        late_fee: { $ref: "#/components/schemas/Money", description: As recorded with the payment; zero while unpaid. }
+        amount_paid: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+        paid_on: { oneOf: [{ $ref: "#/components/schemas/Date" }, { type: "null" }] }
+        status: { type: string, enum: [paid, overdue, pending] }
+
+    RentDetail:
+      allOf:
+        - $ref: "#/components/schemas/RentSummary"
+        - type: object
+          required: [charges, suggested_late_fee]
+          properties:
+            charges:
+              type: array
+              items:
+                type: object
+                required: [id, kind, description, amount]
+                properties:
+                  id: { $ref: "#/components/schemas/ID" }
+                  kind: { type: string, enum: [condominium, property_tax, water, energy, other] }
+                  description: { type: string }
+                  amount: { $ref: "#/components/schemas/Money" }
+            suggested_late_fee: { $ref: "#/components/schemas/LateFee" }
+
+    ContractDeadline:
+      type: object
+      required: [contract_id, registry, address, on]
+      properties:
+        contract_id: { $ref: "#/components/schemas/ID" }
+        registry: { type: string }
+        address: { $ref: "#/components/schemas/PropertyAddress" }
+        on: { $ref: "#/components/schemas/Date" }
+
+    Dashboard:
+      type: object
+      required: [today, month_start, month_end, month, overdue, portfolio, expiring, adjustments, due_today, overdue_rents]
+      properties:
+        today: { $ref: "#/components/schemas/Date" }
+        month_start: { $ref: "#/components/schemas/Date" }
+        month_end: { $ref: "#/components/schemas/Date" }
+        month:
+          type: object
+          required: [expected, expected_count, received, received_count, open, open_count, office_fee]
+          properties:
+            expected: { $ref: "#/components/schemas/Money" }
+            expected_count: { type: integer }
+            received: { $ref: "#/components/schemas/Money" }
+            received_count: { type: integer }
+            open: { $ref: "#/components/schemas/Money" }
+            open_count: { type: integer }
+            office_fee: { $ref: "#/components/schemas/Money" }
+        overdue:
+          type: object
+          required: [count, amount]
+          properties:
+            count: { type: integer }
+            amount: { $ref: "#/components/schemas/Money" }
+        portfolio:
+          type: object
+          required: [properties, leased_properties, active_contracts, rent_roll]
+          properties:
+            properties: { type: integer }
+            leased_properties: { type: integer }
+            active_contracts: { type: integer }
+            rent_roll: { $ref: "#/components/schemas/Money" }
+        expiring: { type: array, items: { $ref: "#/components/schemas/ContractDeadline" } }
+        adjustments: { type: array, items: { $ref: "#/components/schemas/ContractDeadline" } }
+        due_today: { type: array, items: { $ref: "#/components/schemas/RentSummary" } }
+        overdue_rents: { type: array, items: { $ref: "#/components/schemas/RentSummary" } }
 
     ContractSummary:
       allOf:

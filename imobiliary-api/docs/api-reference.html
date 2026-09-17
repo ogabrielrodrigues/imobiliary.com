@@ -112,7 +112,7 @@
 <div class="shell">
   <nav class="rail" aria-label="Sections">
     <div class="brand">imobiliary <span>api</span></div>
-    <div class="ver">v0.5.0 · phase 5</div>
+    <div class="ver">v0.6.0 · phase 6</div>
     <h3>Guide</h3>
     <ul>
       <li><a href="#auth">Authentication</a></li>
@@ -132,6 +132,7 @@
       <li><a href="#people">People</a></li>
       <li><a href="#properties">Properties</a></li>
       <li><a href="#contracts">Contracts</a></li>
+      <li><a href="#rents">Rents</a></li>
       <li><a href="#operations">Operations</a></li>
     </ul>
   </nav>
@@ -553,6 +554,59 @@ If-Match: "3"
         <div class="sig"><span class="m delete">DELETE</span><span class="path">/v1/contracts/{contractID}/amendments/{amendmentID}</span><span class="access">session · writes</span></div>
         <p>Undoes the last adjustment, putting its previous rent back, while the contract runs and no instalment it reached is paid.</p>
         <dl class="io"><dt>Headers</dt><dd><code>If-Match: "&lt;version&gt;"</code></dd><dt>Answers</dt><dd><code>200</code> <code>Contract</code> · <code>404</code> · <code>412</code> · <code>422</code> on <code>amendment</code></dd></dl>
+      </article>
+    </section>
+
+    <section class="block" id="rents">
+      <h2>Rents</h2>
+      <p>Instalments across every contract, and what the office records about them. A payment is always in full. The late fee is the penalty rate on the rent with its charges, plus the monthly interest rate prorated over a thirty-day month for each day after the due day; it can be typed over. Status is computed against today in America/Sao_Paulo and never stored.</p>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/rents</span><span class="access">session</span></div>
+        <p>By due day. <code>status</code> is overdue, pending, open or paid.</p>
+        <dl class="io"><dt>Query</dt><dd><code>q</code>, <code>status</code>, <code>due_from</code>, <code>due_to</code>, <code>contract_id</code>, <code>limit</code>, <code>cursor</code></dd><dt>Answers</dt><dd><code>200</code> <code>{ rents, next_cursor }</code>, each with its contract, <code>due</code> (rent and charges) and <code>status</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/rents/{rentID}</span><span class="access">session</span></div>
+        <p>With its charges and, while unpaid, <code>suggested_late_fee</code> for paying today.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> · <code>404</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/rents/{rentID}/payment/preview</span><span class="access">session · writes</span></div>
+        <p>The late fee and total for a payment day. Records nothing.</p>
+        <dl class="io"><dt>Body</dt><dd><code>{ paid_on }</code></dd><dt>Answers</dt><dd><code>200</code> <code>{ late_fee: { days_late, penalty, interest, total }, total }</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/rents/{rentID}/payment</span><span class="access">session · writes</span></div>
+        <p>Records the payment. Left out, <code>late_fee</code> is computed and <code>amount_paid</code> is the whole amount due. Not after today. Already paid, including by a simultaneous request, is a conflict.</p>
+        <dl class="io"><dt>Body</dt><dd><code>{ paid_on, amount_paid, late_fee }</code></dd><dt>Answers</dt><dd><code>200</code> · <code>409 conflict</code> · <code>422</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m delete">DELETE</span><span class="path">/v1/rents/{rentID}/payment</span><span class="access">session · writes</span></div>
+        <p>Reverses a payment: back to unpaid, audited.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> · <code>422</code> on <code>payment</code> when not paid</dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/rents/{rentID}/charges</span><span class="access">session · writes</span></div>
+        <p>Bills condominium, IPTU, water, energy or another charge (with a description) with an unpaid instalment. Once a contract has a charge, its terms can no longer be replaced.</p>
+        <dl class="io"><dt>Body</dt><dd><code>{ kind, description, amount }</code></dd><dt>Answers</dt><dd><code>201</code> · <code>422</code> on <code>charges</code> once paid</dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m delete">DELETE</span><span class="path">/v1/rents/{rentID}/charges/{chargeID}</span><span class="access">session · writes</span></div>
+        <p>Removes a charge from an unpaid instalment.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> · <code>404</code> · <code>422</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/dashboard</span><span class="access">session</span></div>
+        <p>This month's expected, received and open amounts and the office's administration fee on what was received; every overdue instalment; the portfolio; contracts ending within sixty days; contracts whose twelve months end within thirty days; and up to twenty instalments due today and overdue.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>{ today, month, overdue, portfolio, expiring, adjustments, due_today, overdue_rents }</code></dd></dl>
       </article>
     </section>
 

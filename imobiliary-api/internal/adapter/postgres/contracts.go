@@ -228,8 +228,9 @@ func (r *contractRepository) Get(ctx context.Context, id uuid.UUID) (*domain.Con
 	}
 
 	rows, err = r.q.Query(ctx,
-		`SELECT id, sequence, due_on, rent_amount, late_fee, amount_paid, paid_on
-		   FROM rents WHERE contract_id = $1 ORDER BY sequence`, pgUUID(id))
+		`SELECT r.id, r.sequence, r.due_on, r.rent_amount, r.late_fee, r.amount_paid, r.paid_on,
+		        COALESCE((SELECT sum(rc.amount) FROM rent_charges rc WHERE rc.rent_id = r.id), 0)::bigint
+		   FROM rents r WHERE r.contract_id = $1 ORDER BY r.sequence`, pgUUID(id))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("postgres: rents: %w", err)
 	}
@@ -240,8 +241,10 @@ func (r *contractRepository) Get(ctx context.Context, id uuid.UUID) (*domain.Con
 			due, paid   pgtype.Date
 			amount, fee int64
 			amountPaid  pgtype.Int8
+			charges     int64
 		)
-		err := row.Scan(&rid, &rr.Sequence, &due, &amount, &fee, &amountPaid, &paid)
+		err := row.Scan(&rid, &rr.Sequence, &due, &amount, &fee, &amountPaid, &paid, &charges)
+		rr.ChargesTotal = domain.Money(charges)
 		rr.ID, rr.DueOn, rr.Amount, rr.LateFee, rr.PaidOn = toUUID(rid), toDate(due), domain.Money(amount), domain.Money(fee), toNullDate(paid)
 		if amountPaid.Valid {
 			m := domain.Money(amountPaid.Int64)
