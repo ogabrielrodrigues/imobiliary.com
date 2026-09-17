@@ -173,6 +173,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("PUT /v1/contracts/{contractID}", write(http.HandlerFunc(s.handleUpdateContract)))
 	mux.Handle("POST /v1/contracts/{contractID}/termination", write(http.HandlerFunc(s.handleTerminateContract)))
 	mux.Handle("DELETE /v1/contracts/{contractID}", write(http.HandlerFunc(s.handleDeleteContract)))
+	mux.Handle("POST /v1/contracts/{contractID}/amendments/preview", write(http.HandlerFunc(s.handlePreviewAmendment)))
+	mux.Handle("POST /v1/contracts/{contractID}/amendments", write(http.HandlerFunc(s.handleCreateAmendment)))
+	mux.Handle("DELETE /v1/contracts/{contractID}/amendments/{amendmentID}", write(http.HandlerFunc(s.handleDeleteAmendment)))
 
 	// Probes, and the catch-all that answers JSON rather than net/http's text.
 	mux.HandleFunc("GET /healthz", s.handleLive)

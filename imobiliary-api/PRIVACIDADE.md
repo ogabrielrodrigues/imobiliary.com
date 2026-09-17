@@ -90,6 +90,7 @@ exercício regular de direitos (art. 7º, VI).
 | Partes e seus papéis (locador, locatário, fiador, cônjuge do fiador) | `contract_parties` | identificador da pessoa e papel | idem |
 | Ciência dos avisos legais: código, quem deu e quando | `contract_acknowledgments` e `audit_events` | texto puro | idem na tabela; a auditoria permanece |
 | Parcelas: vencimento, valor, pagamento | `rents` | inteiros e datas | idem |
+| Reajustes: data, índice, alíquota, aluguel anterior e novo, ciência do aviso de prazo | `amendments` | inteiros, datas e o usuário que deu a ciência | idem |
 
 Revelam a situação financeira e as garantias de pessoas físicas. Contrato com
 aluguel pago não pode ser excluído, só rescindido: o registro do pagamento é

@@ -364,7 +364,21 @@ type ScopedRepositories struct {
 	People     PersonRepository
 	Properties PropertyRepository
 	Contracts  ContractRepository
+	Amendments AmendmentRepository
 	Audit      AuditRepository
+}
+
+// AmendmentRepository stores rent adjustments, bound to an organisation-scoped
+// transaction.
+type AmendmentRepository interface {
+	// List is a contract's adjustments, oldest first.
+	List(ctx context.Context, contractID uuid.UUID) ([]domain.Amendment, error)
+	// Create records the adjustment and, as of the contract's version, moves
+	// the contract and its unpaid instalments from sequence from on to the
+	// new rent.
+	Create(ctx context.Context, a *domain.Amendment, version, from int) error
+	// Delete removes the adjustment and puts the previous rent back the same way.
+	Delete(ctx context.Context, a *domain.Amendment, version, from int, at time.Time) error
 }
 
 // OrganizationScope runs work inside one office: a transaction in which the

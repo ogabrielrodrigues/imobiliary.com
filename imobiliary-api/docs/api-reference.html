@@ -112,7 +112,7 @@
 <div class="shell">
   <nav class="rail" aria-label="Sections">
     <div class="brand">imobiliary <span>api</span></div>
-    <div class="ver">v0.4.2 · phase 4</div>
+    <div class="ver">v0.5.0 · phase 5</div>
     <h3>Guide</h3>
     <ul>
       <li><a href="#auth">Authentication</a></li>
@@ -536,6 +536,23 @@ If-Match: "3"
         <div class="sig"><span class="m delete">DELETE</span><span class="path">/v1/contracts/{contractID}</span><span class="access">session · writes</span></div>
         <p>Permanent, with parties, acknowledgements and rents. A contract with a paid rent is terminated instead.</p>
         <dl class="io"><dt>Answers</dt><dd><code>204</code> · <code>404</code> · <code>409 in_use</code></dd></dl>
+      </article>
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/contracts/{contractID}/amendments/preview</span><span class="access">session · writes</span></div>
+        <p>What an adjustment would do: the suggested rent (current rent times one plus the rate, never lower for a negative rate), the first instalment reached, how many unpaid instalments change and the notices. Records nothing.</p>
+        <dl class="io"><dt>Body</dt><dd><code>{ amended_on, index_rate, indexed_rent }</code></dd><dt>Answers</dt><dd><code>200</code> <code>{ previous_rent, suggested_rent, indexed_rent, first_sequence, affected_rents, first_due_on, notices }</code> · <code>422</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/contracts/{contractID}/amendments</span><span class="access">session · writes</span></div>
+        <p>Adjusts the rent from a day on: the contract's current rent and every unpaid instalment whose month starts that day or later, in one transaction. <code>indexed_rent</code> left out takes the suggestion. Less than twelve months after the start or the last adjustment raises <code>adjustment_period</code> (Lei 10.192/2001), to acknowledge. A paid instalment from that month on, or a terminated contract, refuses it. Once adjusted, a contract's terms can no longer be replaced.</p>
+        <dl class="io"><dt>Headers</dt><dd><code>If-Match: "&lt;version&gt;"</code></dd><dt>Body</dt><dd><code>{ amended_on, index_rate, indexed_rent, acknowledgments }</code></dd><dt>Answers</dt><dd><code>201</code> <code>Contract</code> · <code>412</code> · <code>422</code> · <code>428</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m delete">DELETE</span><span class="path">/v1/contracts/{contractID}/amendments/{amendmentID}</span><span class="access">session · writes</span></div>
+        <p>Undoes the last adjustment, putting its previous rent back, while the contract runs and no instalment it reached is paid.</p>
+        <dl class="io"><dt>Headers</dt><dd><code>If-Match: "&lt;version&gt;"</code></dd><dt>Answers</dt><dd><code>200</code> <code>Contract</code> · <code>404</code> · <code>412</code> · <code>422</code> on <code>amendment</code></dd></dl>
       </article>
     </section>
 

@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Imobiliary API
-  version: "0.4.2"
+  version: "0.5.0"
   summary: Rental property management for brokers, small agencies and owners.
   description: |
     The API behind the Imobiliary platform. It covers identity and the office
@@ -1354,6 +1354,130 @@ paths:
         "428": { $ref: "#/components/responses/PreconditionRequired" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /v1/contracts/{contractID}/amendments/preview:
+    parameters:
+      - name: contractID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+    post:
+      tags: [Contracts]
+      summary: Check a rent adjustment before recording it
+      description: |
+        Answers the suggested rent (the current rent times one plus the rate,
+        never lower for a negative rate), the rent that would be recorded, the
+        first instalment it reaches, how many unpaid instalments change and the
+        notices it raises. Records nothing.
+      operationId: previewAmendment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AmendmentInput" }
+      responses:
+        "200":
+          description: The preview.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AmendmentPreview" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/contracts/{contractID}/amendments:
+    parameters:
+      - name: contractID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+    post:
+      tags: [Contracts]
+      summary: Adjust the rent from a day on
+      description: |
+        In one transaction, the contract's `current_rent` and every unpaid
+        instalment whose month starts on `amended_on` or later move to the new
+        rent; a month already running keeps its rent. `amended_on` falls after
+        the start, within the term and after the last adjustment. An
+        adjustment less than twelve months after the start or the last one
+        raises `adjustment_period` (Lei 10.192/2001, art. 2º, § 1º), which must
+        be acknowledged. A paid instalment from that month on refuses it on
+        `amended_on`; so does a terminated contract. Once a contract has an
+        adjustment, replacing its terms is refused on `amendments`.
+      operationId: createAmendment
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          description: The contract's `ETag`.
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AmendmentInput" }
+      responses:
+        "201":
+          description: Recorded; the contract as it is now.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contract" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "428": { $ref: "#/components/responses/PreconditionRequired" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/contracts/{contractID}/amendments/{amendmentID}:
+    parameters:
+      - name: contractID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+      - name: amendmentID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+    delete:
+      tags: [Contracts]
+      summary: Undo the last adjustment
+      description: |
+        Puts the previous rent back on the contract and on the unpaid
+        instalments the adjustment reached, for a mistake. Refused on
+        `amendment` for any adjustment but the last, on a terminated contract,
+        or when an instalment it reached is paid. Audited.
+      operationId: deleteAmendment
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          description: The contract's `ETag`.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Undone; the contract as it is now.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contract" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "428": { $ref: "#/components/responses/PreconditionRequired" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
   # --- operations -------------------------------------------------------------
 
   /healthz:
@@ -1944,7 +2068,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ContractTerms"
         - type: object
-          required: [id, property, parties, acknowledgments, rents, version, created_at, updated_at]
+          required: [id, property, parties, acknowledgments, rents, amendments, version, created_at, updated_at]
           properties:
             id: { $ref: "#/components/schemas/ID" }
             property:
@@ -1988,9 +2112,51 @@ components:
                     type: string
                     enum: [paid, overdue, pending]
                     description: Computed against today; never stored.
+            amendments:
+              type: array
+              description: Rent adjustments, oldest first.
+              items: { $ref: "#/components/schemas/Amendment" }
             version: { type: integer, minimum: 1 }
             created_at: { $ref: "#/components/schemas/Instant" }
             updated_at: { $ref: "#/components/schemas/Instant" }
+
+    AmendmentInput:
+      type: object
+      required: [amended_on, index_rate]
+      properties:
+        amended_on: { $ref: "#/components/schemas/Date" }
+        index_rate: { type: string, description: "The index's percentage for the period, signed, up to four decimal places.", examples: ["4.5", "-3.1812"] }
+        indexed_rent: { $ref: "#/components/schemas/Money", description: The rent agreed. Left out for the suggestion. }
+        acknowledgments:
+          type: array
+          items: { type: string, enum: [adjustment_period] }
+
+    Amendment:
+      type: object
+      required: [id, amended_on, adjustment_index, index_rate, previous_rent, indexed_rent, period_acknowledged_at, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/ID" }
+        amended_on: { $ref: "#/components/schemas/Date" }
+        adjustment_index: { type: string, description: "The contract's index when recorded; empty when it has none." }
+        index_rate: { type: string, examples: ["4.50"] }
+        previous_rent: { $ref: "#/components/schemas/Money" }
+        indexed_rent: { $ref: "#/components/schemas/Money" }
+        period_acknowledged_at: { oneOf: [{ $ref: "#/components/schemas/Instant" }, { type: "null" }] }
+        created_at: { $ref: "#/components/schemas/Instant" }
+
+    AmendmentPreview:
+      type: object
+      required: [previous_rent, suggested_rent, indexed_rent, first_sequence, affected_rents, first_due_on, notices]
+      properties:
+        previous_rent: { $ref: "#/components/schemas/Money" }
+        suggested_rent: { $ref: "#/components/schemas/Money" }
+        indexed_rent: { $ref: "#/components/schemas/Money" }
+        first_sequence: { type: integer, minimum: 1 }
+        affected_rents: { type: integer, minimum: 0 }
+        first_due_on: { oneOf: [{ $ref: "#/components/schemas/Date" }, { type: "null" }] }
+        notices:
+          type: array
+          items: { type: string, enum: [adjustment_period] }
 
     ContractSummary:
       allOf:

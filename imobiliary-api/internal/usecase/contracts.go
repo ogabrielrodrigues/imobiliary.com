@@ -70,7 +70,9 @@ type ContractView struct {
 	Parties  []ContractPartyView
 	Rents    []RentRecord
 	Notices  []domain.NoticeCode
-	Today    domain.Date
+	// Amendments are the rent adjustments, oldest first.
+	Amendments []domain.Amendment
+	Today      domain.Date
 }
 
 // ContractsPage is one page of the list.
@@ -225,6 +227,15 @@ func (c *Contracts) Update(ctx context.Context, caller *Caller, contract *domain
 			v.Add("rents", "an instalment was already paid, so the schedule cannot be generated again")
 			return v
 		}
+		// Regenerating the schedule would put the agreed rent back over an
+		// adjustment; from the first one on, rent changes go through amendments.
+		if amendments, err := repos.Amendments.List(ctx, contract.ID); err != nil {
+			return err
+		} else if len(amendments) > 0 {
+			v := &domain.ValidationError{}
+			v.Add("amendments", "the rent was adjusted, so the schedule cannot be generated again")
+			return v
+		}
 
 		preview, err := c.prepare(ctx, repos, contract)
 		if err != nil {
@@ -306,7 +317,14 @@ func (c *Contracts) Get(ctx context.Context, caller *Caller, id uuid.UUID) (*Con
 		for _, a := range contract.Acknowledgements {
 			notices = append(notices, a.Code)
 		}
-		view = &ContractView{Contract: contract, Property: property, Parties: parties, Rents: rents, Notices: notices, Today: c.Today()}
+		amendments, err := repos.Amendments.List(ctx, id)
+		if err != nil {
+			return err
+		}
+		view = &ContractView{
+			Contract: contract, Property: property, Parties: parties, Rents: rents, Notices: notices,
+			Amendments: amendments, Today: c.Today(),
+		}
 		return nil
 	})
 	return view, err

@@ -83,6 +83,7 @@ type contractBody struct {
 	Parties          []contractPartyBody   `json:"parties"`
 	Acknowledgements []acknowledgementBody `json:"acknowledgments"`
 	Rents            []rentBody            `json:"rents"`
+	Amendments       []amendmentBody       `json:"amendments"`
 	Version          int                   `json:"version"`
 	CreatedAt        time.Time             `json:"created_at"`
 	UpdatedAt        time.Time             `json:"updated_at"`
@@ -113,6 +114,7 @@ func presentContract(v *usecase.ContractView) contractBody {
 		Parties:           make([]contractPartyBody, 0, len(v.Parties)),
 		Acknowledgements:  make([]acknowledgementBody, 0, len(c.Acknowledgements)),
 		Rents:             make([]rentBody, 0, len(v.Rents)),
+		Amendments:        presentAmendments(v.Amendments),
 		Version:           c.Version, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
 	}
 	for _, p := range v.Parties {
