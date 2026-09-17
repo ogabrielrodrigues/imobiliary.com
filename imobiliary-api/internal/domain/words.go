@@ -187,6 +187,19 @@ func PercentText(r Rate) string {
 	return fmt.Sprintf("%s%% (%s)", strings.ReplaceAll(text, ".", ","), RateInWords(r))
 }
 
+// MoneyNumberText is the amount without the currency: "1.600,00". A template
+// that writes its own "R$" needs the number on its own.
+func MoneyNumberText(m Money) string {
+	return strings.TrimPrefix(strings.TrimPrefix(MoneyText(m), "-R$ "), "R$ ")
+}
+
+// RateNumberText is a rate without the sign or the words: "10", "2,5". A
+// template that writes "%" itself needs the number on its own.
+func RateNumberText(r Rate) string {
+	text := strings.TrimSuffix(strings.TrimRight(r.String(), "0"), ".")
+	return strings.ReplaceAll(text, ".", ",")
+}
+
 // CountText is a count as a contract writes it, two digits and the words:
 // "03 (três)", "12 (doze)". Feminine agrees with the noun that follows.
 func CountText(n int, feminine bool) string {

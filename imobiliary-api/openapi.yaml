@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Imobiliary API
-  version: "0.7.1"
+  version: "0.8.0"
   summary: Rental property management for brokers, small agencies and owners.
   description: |
     The API behind the Imobiliary platform. It covers identity and the office
@@ -1394,14 +1394,32 @@ paths:
       description: |
         Every field a template for the document service can use, computed for
         this contract, always in the same order and always all of them; a
-        value is empty when the register does not hold what it needs. The
-        document service substitutes flat fields only, so what varies is
-        written here: each party's qualification (the CIN is written with the
-        CPF's number), the role with its article agreeing with the registered
-        genders ("a locatária", "os locatários", neutral "o(a) locatário(a)"
-        when a person's gender is not registered; a company is feminine),
-        amounts and percentages in words, the guarantee sentence, the notes'
-        count and period, and `foro`, suggested as the property's city.
+        value is empty when the register does not hold what it needs, or when
+        the party it names does not exist.
+
+        The document service substitutes flat fields only, so what varies is
+        written here. The names are grouped:
+
+        * the contract, the property and the money, such as `contrato_numero`,
+          `imovel_endereco`, `imovel_cidade`, `aluguel_valor`,
+          `aluguel_valor_numero`, `aluguel_extenso`, `prazo_meses`,
+          `data_inicio`, `hoje`, `multa_atraso`, `foro`;
+        * each role as a whole: `locador_qualificacao` (the paragraph),
+          `locador_nome` (the names joined), `locador_quantidade`, and the
+          agreement fields `locador_termo`, `locador_titulo`,
+          `locador_termo_inicio`, `locador_do`, `locador_ao`, `locador_no`,
+          `locador_pelo` and `locador_o`, which follow the registered genders
+          ("a locadora", "os locadores", neutral "o(a) locador(a)"; a company
+          is feminine);
+        * each party, field by field and numbered from 1 to 4:
+          `locador_1_nome`, `locador_1_cpf`, `locador_1_estado_civil`,
+          `locador_1_endereco_cidade`, `locatario_2_nome`, and so on, with the
+          same suffixes for `locatario_*` and `fiador_*`.
+
+        A qualification writes the CIN with the CPF's number, and the field
+        `..._rg` repeats it for a model still written for the old document.
+        `imobiliary-api/docs/campos.md` is the catalogue, with an example of
+        every field.
       operationId: getContractDocumentFields
       responses:
         "200":
@@ -1418,7 +1436,14 @@ paths:
                       type: object
                       required: [name, value]
                       properties:
-                        name: { type: string, enum: [contrato_numero, locador_qualificacao, locador_nome, locador_titulo, locador_termo, locador_termo_inicio, locador_do, locador_ao, locador_no, locador_pelo, locador_o, locatario_qualificacao, locatario_nome, locatario_titulo, locatario_termo, locatario_termo_inicio, locatario_do, locatario_ao, locatario_no, locatario_pelo, locatario_o, fiador_qualificacao, fiador_nome, fiador_titulo, fiador_termo, fiador_termo_inicio, fiador_do, fiador_ao, fiador_no, fiador_pelo, fiador_o, imovel_endereco, imovel_matricula, imovel_cartorio, imovel_iptu, aluguel_valor, aluguel_extenso, garantia_texto, caucao_valor, caucao_extenso, caucao_alugueis, prazo_meses, data_inicio, data_termino, data_primeiro_reajuste, data_assinatura_extenso, indice_reajuste, vencimento_dia, multa_atraso, juros_atraso, taxa_administracao, promissorias_quantidade, promissorias_periodo, foro] }
+                        name:
+                          type: string
+                          pattern: "^[a-z][a-z0-9_]*$"
+                          description: |
+                            The field's name, as a template writes it:
+                            `{{.locatario_1_nome}}`. See the description above
+                            for the groups, and `docs/campos.md` for the list.
+                          examples: [contrato_numero, locatario_1_nome, locatario_1_cpf, locador_qualificacao, imovel_endereco, aluguel_valor]
                         value: { type: string }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
