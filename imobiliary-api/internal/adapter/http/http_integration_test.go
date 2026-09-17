@@ -136,6 +136,7 @@ func newAPI(t *testing.T) *api {
 	properties := usecase.NewProperties(usecase.PropertiesConfig{Scope: db, Logger: logger})
 	contracts := usecase.NewContracts(usecase.ContractsConfig{Scope: db, Logger: logger})
 	rents := usecase.NewRents(usecase.RentsConfig{Scope: db, Logger: logger})
+	documents := usecase.NewDocuments(usecase.DocumentsConfig{Scope: db, People: people})
 	privacy := usecase.NewPrivacy(usecase.PrivacyConfig{
 		Identity: identity, Repositories: repos, Hasher: hasher, Sealer: sealer, Mailer: box, Logger: logger,
 	})
@@ -160,7 +161,7 @@ func newAPI(t *testing.T) *api {
 
 	server := httptest.NewServer(adapterhttp.NewServer(adapterhttp.Options{
 		Identity: identity, MFA: mfa, Passwords: passwords, Organizations: organizations,
-		Privacy: privacy, People: people, Properties: properties, Contracts: contracts, Rents: rents,
+		Privacy: privacy, People: people, Properties: properties, Contracts: contracts, Rents: rents, Documents: documents,
 		Auditor: usecase.NewAuditor(repos.Audit, time.Now, logger),
 		Signer:  signer, Logger: logger, Metrics: metrics.NewRegistry(),
 		Ready:    func(context.Context) error { return nil },

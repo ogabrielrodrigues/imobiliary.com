@@ -38,6 +38,7 @@ type Options struct {
 	Properties    *usecase.Properties
 	Contracts     *usecase.Contracts
 	Rents         *usecase.Rents
+	Documents     *usecase.Documents
 	Auditor       *usecase.Auditor
 	// Signer parses the access tokens this service issued.
 	Signer  *token.Signer
@@ -63,6 +64,7 @@ type Server struct {
 	properties    *usecase.Properties
 	contracts     *usecase.Contracts
 	rents         *usecase.Rents
+	documents     *usecase.Documents
 	auditor       *usecase.Auditor
 	signer        *token.Signer
 	logger        *slog.Logger
@@ -87,6 +89,7 @@ func NewServer(opts Options) *Server {
 		properties:    opts.Properties,
 		contracts:     opts.Contracts,
 		rents:         opts.Rents,
+		documents:     opts.Documents,
 		auditor:       opts.Auditor,
 		signer:        opts.Signer,
 		logger:        opts.Logger,
@@ -176,6 +179,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("PUT /v1/contracts/{contractID}", write(http.HandlerFunc(s.handleUpdateContract)))
 	mux.Handle("POST /v1/contracts/{contractID}/termination", write(http.HandlerFunc(s.handleTerminateContract)))
 	mux.Handle("DELETE /v1/contracts/{contractID}", write(http.HandlerFunc(s.handleDeleteContract)))
+	mux.Handle("GET /v1/contracts/{contractID}/document-fields", authenticated(http.HandlerFunc(s.handleContractDocumentFields)))
 	mux.Handle("POST /v1/contracts/{contractID}/amendments/preview", write(http.HandlerFunc(s.handlePreviewAmendment)))
 	mux.Handle("POST /v1/contracts/{contractID}/amendments", write(http.HandlerFunc(s.handleCreateAmendment)))
 	mux.Handle("DELETE /v1/contracts/{contractID}/amendments/{amendmentID}", write(http.HandlerFunc(s.handleDeleteAmendment)))

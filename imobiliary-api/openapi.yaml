@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Imobiliary API
-  version: "0.6.1"
+  version: "0.7.0"
   summary: Rental property management for brokers, small agencies and owners.
   description: |
     The API behind the Imobiliary platform. It covers identity and the office
@@ -1354,6 +1354,49 @@ paths:
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "428": { $ref: "#/components/responses/PreconditionRequired" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/contracts/{contractID}/document-fields:
+    parameters:
+      - name: contractID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+    get:
+      tags: [Contracts]
+      summary: The fields a lease template is filled with
+      description: |
+        Every field a template for the document service can use, computed for
+        this contract, always in the same order and always all of them; a
+        value is empty when the register does not hold what it needs. The
+        document service substitutes flat fields only, so what varies is
+        written here: each party's qualification (the CIN is written with the
+        CPF's number), the role with its article agreeing with the registered
+        genders ("a locatária", "os locatários", neutral "o(a) locatário(a)"
+        when a person's gender is not registered; a company is feminine),
+        amounts and percentages in words, the guarantee sentence, the notes'
+        count and period, and `foro`, suggested as the property's city.
+      operationId: getContractDocumentFields
+      responses:
+        "200":
+          description: The fields.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [fields]
+                properties:
+                  fields:
+                    type: array
+                    items:
+                      type: object
+                      required: [name, value]
+                      properties:
+                        name: { type: string, enum: [contrato_numero, locador_qualificacao, locador_nome, locador_termo, locador_titulo, locatario_qualificacao, locatario_nome, locatario_termo, locatario_titulo, fiador_qualificacao, fiador_nome, fiador_termo, fiador_titulo, imovel_endereco, imovel_matricula, imovel_cartorio, imovel_iptu, aluguel_valor, aluguel_extenso, garantia_texto, caucao_valor, caucao_extenso, caucao_alugueis, prazo_meses, data_inicio, data_termino, data_primeiro_reajuste, data_assinatura_extenso, indice_reajuste, vencimento_dia, multa_atraso, juros_atraso, taxa_administracao, promissorias_quantidade, promissorias_periodo, foro] }
+                        value: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
   /v1/contracts/{contractID}/amendments/preview:
