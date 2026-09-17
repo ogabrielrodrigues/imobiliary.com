@@ -1485,8 +1485,12 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       (list, "Registrar reajuste" dialog with a live preview of the suggested
       rent, the instalments reached and the notice, "Desfazer" on the last).
       "Editar" hides once a contract has adjustments.
-    - **Not yet seen in the browser**: the pane lost its session and signing
-      in is the user's. Typecheck, 66 web tests and every Go suite pass.
+    - Verified in the browser after the user signed in again: an adjustment
+      before twelve months (preview R$ 1.500,00 to R$ 1.567,50, 28 open rents
+      from 10/06/2027, notice shown and blocking until acknowledged), saved
+      with a negotiated R$ 1.560,00 (instalment 8 kept, 9 on moved, "Editar"
+      hidden), then undone (rents and "Editar" back). No console error. Test
+      data deleted.
     - The development database showed migration 0010 applied at 21:35 before
       `pnpm imobiliary:migrate` ran; neither `serve` nor the tests migrate
       it, so it was run outside the session.
