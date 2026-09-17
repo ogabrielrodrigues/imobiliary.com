@@ -1610,6 +1610,21 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       The test document was deleted and the user's records were left as they
       were. On Docs, the new sign-in screen refused a wrong password against
       the platform and its links point at imobiliary.com.
+    - **Each party is answered field by field** (`f6caaae`), after the user
+      said the qualification paragraph was the wrong shape: a paragraph
+      written by the API fits one model and no other. Every role now also
+      answers `locador_1_nome`, `locador_1_cpf`, `locatario_2_estado_civil`
+      and so on, numbered to `MaxPartiesPerRole` (4) with the 28 suffixes in
+      `domain/person_fields.go`; the paragraph stays for whoever wants it.
+      The contract gained the property's address line by line, its utility
+      accounts and owners, the office's name, the guarantee kind, plain-number
+      variants of money and rates, long dates, `hoje`, and the rent as it
+      stands after adjustments: 419 fields. **`imobiliary-api/docs/campos.md`
+      is the catalogue**, in Portuguese, and `TestEveryFieldIsDocumented`
+      fails when a field is added without being written there. The same
+      catalogue is published for the user at
+      https://claude.ai/artifact/3dsJQEkMPa9iHfdLpq1iGD. OpenAPI 0.8.0, whose
+      enum of names became a pattern and a description.
     - **Not verified here:** the signed-in half of Docs against the new
       service (templates, generation, history), which needs the user's own
       password, and the marked model uploaded as a template, which is an

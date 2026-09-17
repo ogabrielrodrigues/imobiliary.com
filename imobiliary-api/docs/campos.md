@@ -1,6 +1,8 @@
 # Campos para montar um documento
 
 Este é o catálogo de tudo o que a plataforma sabe responder sobre um contrato.
+A mesma lista, com busca e um clique para copiar cada marca, está publicada em
+<https://claude.ai/artifact/3dsJQEkMPa9iHfdLpq1iGD>.
 Você marca o seu modelo do Word com esses nomes e, ao gerar um documento a
 partir de um contrato, cada marca vira o texto correspondente.
 
