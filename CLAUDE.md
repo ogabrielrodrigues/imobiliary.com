@@ -366,7 +366,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-16: phase 4 complete (contracts, legal notices and the schedule of rents, API and web); phase 5 (amendments) is next
+**Last updated:** 2026-09-17: phase 6 complete (rents, payments, charges and the dashboard, API and web, verified in the browser); phase 7 (docgen integration) needs its plan with the user
 
 ### Done
 
@@ -1530,9 +1530,18 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       "Vencem hoje", "Em atraso" and the two deadline lists. Aluguéis is live in
       the sidebar ("em breve" is gone); contract rents link to their page and
       show charges.
-    - **Not yet seen in the browser**: the pane's session was revoked by the
-      refresh race below before the check. Typecheck, 71 web tests and every
-      Go suite pass.
+    - **Verified in the browser (2026-09-17)**, on a lease started three
+      months back, beside the user's own records (left untouched): four
+      overdue rents with the right days late; a condominium charge moved the
+      late fee for today from R$ 163,73 to R$ 204,67; the payment dialog
+      refused a future day and recomputed for 5 days (R$ 2.203,33); paid, the
+      charges locked; the dashboard read R$ 2.203,33 received and R$ 200,00
+      fee (10% of rent plus charge), R$ 4.800,00 overdue; paying another rent
+      from the dashboard with the fee waived gave R$ 3.803,33 and R$ 360,00;
+      reversal brought it back to R$ 1.600,00 and R$ 160,00; removing the
+      charge and "Outra" without a description both behaved. At 375px no
+      screen scrolls sideways; rent rows now put the address on its own line
+      below `sm`. Test data deleted.
     - **Fixed: two tabs reloading together revoked the session.** A request
       with the old refresh token arrived just after single-flight had released
       the rotation, and the API took it as a replay. `RefreshCoordinator`
@@ -1542,7 +1551,7 @@ _Update this section as work proceeds. It is what a fresh session reads first._
 
 ### Next step
 
-Verify phase 6 in the browser once signed in again. Then phase 7 of `PLANO.md`
+Phase 7 of `PLANO.md`
 §7: the docgen integration, which needs its own plan with the user first
 (docgen accepting `aud=docgen` tokens, account migration by e-mail, "Gerar
 contrato" through the BFF with the qualification text).

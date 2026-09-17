@@ -190,7 +190,7 @@ function RentTable({
         <ul className="flex flex-col divide-y divide-border">
           {rents.map((rent) => (
             <li key={rent.id} className="flex flex-wrap items-center gap-3 py-2">
-              <Link to="/alugueis/$rentId" params={{ rentId: rent.id }} className="flex min-w-0 flex-1 flex-col hover:underline">
+              <Link to="/alugueis/$rentId" params={{ rentId: rent.id }} className="flex min-w-0 grow basis-full sm:basis-0 flex-col hover:underline">
                 <span className="truncate text-small font-medium">{addressLine(rent.contract.address)}</span>
                 <span className="truncate text-caption text-muted-foreground">
                   {rent.contract.tenantNames.join(", ")} · {rentStatusNote(rent, today)}

@@ -202,7 +202,7 @@ function RentsPage() {
                 <Link
                   to="/alugueis/$rentId"
                   params={{ rentId: rent.id }}
-                  className="flex min-w-0 flex-1 flex-col gap-0.5 hover:underline"
+                  className="flex min-w-0 grow basis-full sm:basis-0 flex-col gap-0.5 hover:underline"
                 >
                   <span className="truncate font-medium">{addressLine(rent.contract.address)}</span>
                   <span className="truncate text-caption text-muted-foreground">{rent.contract.tenantNames.join(", ")}</span>
