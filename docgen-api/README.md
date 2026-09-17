@@ -41,6 +41,11 @@ export DOCGEN_IDENTITY_PUBLIC_KEYS="1:BASE64_OF_32_BYTES"
 go run ./cmd/docgen
 ```
 
+A `.env` beside the command, in `KEY=VALUE` lines, is read for development. A
+variable already present in the environment wins over the file, so a real
+deployment is never overridden by a stray file, and a missing file is not an
+error.
+
 ### Configuration
 
 | Variable | Default | Meaning |

@@ -2,8 +2,10 @@
 package config
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"strconv"
 	"strings"
@@ -124,4 +126,46 @@ func envInt64(key string, fallback int64) (int64, error) {
 		return 0, fmt.Errorf("config: %s: %w", key, errors.New("must be positive"))
 	}
 	return n, nil
+}
+
+// LoadDotEnv sets variables from a KEY=VALUE file, for development. A missing
+// file is not an error, and a variable already set in the environment wins
+// over the file, so a deployment's real environment is never overridden by a
+// stray file.
+//
+// Only the plain form is understood: blank lines, comments starting with #,
+// and KEY=VALUE with an optional pair of surrounding quotes.
+func LoadDotEnv(path string) error {
+	f, err := os.Open(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("config: open %s: %w", path, err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for line := 1; scanner.Scan(); line++ {
+		text := strings.TrimSpace(scanner.Text())
+		if text == "" || strings.HasPrefix(text, "#") {
+			continue
+		}
+		key, value, found := strings.Cut(text, "=")
+		key = strings.TrimSpace(key)
+		if !found || key == "" {
+			return fmt.Errorf("config: %s:%d: expected KEY=VALUE", path, line)
+		}
+		value = strings.TrimSpace(value)
+		if len(value) >= 2 && (value[0] == '"' || value[0] == '\'') && value[len(value)-1] == value[0] {
+			value = value[1 : len(value)-1]
+		}
+		if _, set := os.LookupEnv(key); set {
+			continue
+		}
+		if err := os.Setenv(key, value); err != nil {
+			return fmt.Errorf("config: %s:%d: %w", path, line, err)
+		}
+	}
+	return scanner.Err()
 }
