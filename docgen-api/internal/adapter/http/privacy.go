@@ -24,7 +24,7 @@ import (
 // interpret satisfies the letter of the law and none of its point.
 type exportResponse struct {
 	ExportedAt time.Time         `json:"exported_at"`
-	Account    userResponse      `json:"account"`
+	Office     ownerResponse     `json:"office"`
 	Templates  []exportTemplate  `json:"templates"`
 	Documents  []exportDocument  `json:"documents"`
 	Batches    []exportBatch     `json:"batches"`
@@ -121,7 +121,7 @@ func newExportResponse(e *usecase.AccountExport) exportResponse {
 
 	return exportResponse{
 		ExportedAt: e.ExportedAt,
-		Account:    newUserResponse(e.User),
+		Office:     newOwnerResponse(e.Owner),
 		Templates:  templates,
 		Documents:  documents,
 		Batches:    batches,
@@ -130,8 +130,6 @@ func newExportResponse(e *usecase.AccountExport) exportResponse {
 		Notes: map[string]string{
 			"arquivos": "Os arquivos .docx enviados e gerados não estão neste " +
 				"JSON. Baixe cada um pelos endpoints de download.",
-			"senha": "A senha não é exportável: guardamos apenas um hash " +
-				"argon2id, que não permite recuperar o valor original.",
 			"modelos_excluidos": "Modelos marcados como excluídos continuam " +
 				"listados aqui porque ainda estão armazenados.",
 		},
@@ -140,7 +138,7 @@ func newExportResponse(e *usecase.AccountExport) exportResponse {
 
 // handleExportAccount answers with everything held about the caller.
 func (s *Server) handleExportAccount(w http.ResponseWriter, r *http.Request) {
-	export, err := s.privacy.Export(r.Context(), userFrom(r.Context()).ID, time.Now())
+	export, err := s.privacy.Export(r.Context(), callerFrom(r.Context()).OwnerID, time.Now())
 	if err != nil {
 		writeError(w, s.logger, err)
 		return
@@ -165,15 +163,6 @@ func (s *Server) handleExportAccount(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleDeleteAccount erases the caller's account and everything it owns.
-func (s *Server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
-	if err := s.privacy.DeleteAccount(r.Context(), userFrom(r.Context()).ID); err != nil {
-		writeError(w, s.logger, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
 // handleDeleteDocument erases one generated document.
 func (s *Server) handleDeleteDocument(w http.ResponseWriter, r *http.Request) {
 	documentID, ok := pathID(r, "id")
@@ -182,7 +171,7 @@ func (s *Server) handleDeleteDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.documents.Delete(r.Context(), userFrom(r.Context()).ID, documentID); err != nil {
+	if err := s.documents.Delete(r.Context(), callerFrom(r.Context()).OwnerID, documentID); err != nil {
 		writeError(w, s.logger, err)
 		return
 	}

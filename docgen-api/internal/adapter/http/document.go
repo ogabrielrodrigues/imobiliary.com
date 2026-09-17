@@ -24,6 +24,9 @@ type generateRequest struct {
 	// BatchID joins the document to a batch created with POST /v1/batches, of
 	// the same template. The batch's version is used.
 	BatchID string `json:"batch_id,omitempty"`
+	// Reference ties the document to a record elsewhere, such as
+	// "contract:<id>", for listing with ?reference=.
+	Reference string `json:"reference,omitempty"`
 }
 
 // documentResponse presents a generated document. The download URL is included
@@ -38,7 +41,8 @@ type documentResponse struct {
 	CreatedAt       time.Time         `json:"created_at"`
 	DownloadURL     string            `json:"download_url"`
 	// BatchID is null for a document generated on its own.
-	BatchID *string `json:"batch_id"`
+	BatchID   *string `json:"batch_id"`
+	Reference string  `json:"reference"`
 }
 
 func newDocumentResponse(d *domain.Document) documentResponse {
@@ -57,6 +61,7 @@ func newDocumentResponse(d *domain.Document) documentResponse {
 		CreatedAt:       d.CreatedAt,
 		DownloadURL:     "/v1/documents/" + d.ID.String() + "/download",
 		BatchID:         batchID,
+		Reference:       d.Reference,
 	}
 }
 
@@ -93,12 +98,13 @@ func (s *Server) handleGenerateDocument(w http.ResponseWriter, r *http.Request) 
 	}
 
 	doc, err := s.documents.Generate(r.Context(), usecase.GenerateRequest{
-		OwnerID:    userFrom(r.Context()).ID,
+		OwnerID:    callerFrom(r.Context()).OwnerID,
 		TemplateID: templateID,
 		Version:    body.Version,
 		Filename:   body.Filename,
 		Data:       body.Data,
 		BatchID:    batchID,
+		Reference:  body.Reference,
 	})
 	if err != nil {
 		writeError(w, s.logger, err)
@@ -114,7 +120,7 @@ func (s *Server) handleGetDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	doc, err := s.documents.Get(r.Context(), userFrom(r.Context()).ID, documentID)
+	doc, err := s.documents.Get(r.Context(), callerFrom(r.Context()).OwnerID, documentID)
 	if err != nil {
 		writeError(w, s.logger, err)
 		return
@@ -133,6 +139,7 @@ func (s *Server) handleListDocuments(w http.ResponseWriter, r *http.Request) {
 		writeError(w, s.logger, err)
 		return
 	}
+	filter.Reference = r.URL.Query().Get("reference")
 	switch r.URL.Query().Get("order") {
 	case "", "newest":
 	case "oldest":
@@ -145,7 +152,7 @@ func (s *Server) handleListDocuments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	limit, offset := pagination(r)
-	docs, err := s.documents.List(r.Context(), userFrom(r.Context()).ID, filter, limit, offset)
+	docs, err := s.documents.List(r.Context(), callerFrom(r.Context()).OwnerID, filter, limit, offset)
 	if err != nil {
 		writeError(w, s.logger, err)
 		return
@@ -170,7 +177,7 @@ func (s *Server) handleDownloadDocument(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	doc, content, err := s.documents.Open(r.Context(), userFrom(r.Context()).ID, documentID)
+	doc, content, err := s.documents.Open(r.Context(), callerFrom(r.Context()).OwnerID, documentID)
 	if err != nil {
 		writeError(w, s.logger, err)
 		return

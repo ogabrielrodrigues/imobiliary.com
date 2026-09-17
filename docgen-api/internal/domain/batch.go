@@ -40,6 +40,8 @@ type HistoryEntry struct {
 type DocumentFilter struct {
 	TemplateID *uuid.UUID
 	BatchID    *uuid.UUID
+	// Reference keeps the documents tied to one record elsewhere.
+	Reference string
 	// OldestFirst lists in the order the documents were generated instead of
 	// newest first. Inside a batch that is the order of its spreadsheet rows.
 	OldestFirst bool

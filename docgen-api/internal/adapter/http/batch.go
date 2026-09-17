@@ -72,7 +72,7 @@ func (s *Server) handleCreateBatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	batch, err := s.batches.Create(r.Context(), usecase.CreateBatchRequest{
-		OwnerID:    userFrom(r.Context()).ID,
+		OwnerID:    callerFrom(r.Context()).OwnerID,
 		TemplateID: templateID,
 		Version:    body.Version,
 		Name:       body.Name,
@@ -91,7 +91,7 @@ func (s *Server) handleGetBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	batch, err := s.batches.Get(r.Context(), userFrom(r.Context()).ID, batchID)
+	batch, err := s.batches.Get(r.Context(), callerFrom(r.Context()).OwnerID, batchID)
 	if err != nil {
 		writeError(w, s.logger, err)
 		return
@@ -106,7 +106,7 @@ func (s *Server) handleDeleteBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.batches.Delete(r.Context(), userFrom(r.Context()).ID, batchID); err != nil {
+	if err := s.batches.Delete(r.Context(), callerFrom(r.Context()).OwnerID, batchID); err != nil {
 		writeError(w, s.logger, err)
 		return
 	}
@@ -125,7 +125,7 @@ func (s *Server) handleDownloadBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	owner := userFrom(r.Context()).ID
+	owner := callerFrom(r.Context()).OwnerID
 	batch, err := s.batches.Get(r.Context(), owner, batchID)
 	if err != nil {
 		writeError(w, s.logger, err)
@@ -155,7 +155,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	limit, offset := pagination(r)
-	entries, err := s.batches.History(r.Context(), userFrom(r.Context()).ID, templateID, limit, offset)
+	entries, err := s.batches.History(r.Context(), callerFrom(r.Context()).OwnerID, templateID, limit, offset)
 	if err != nil {
 		writeError(w, s.logger, err)
 		return

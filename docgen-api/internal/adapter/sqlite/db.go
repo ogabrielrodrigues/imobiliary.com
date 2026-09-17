@@ -129,6 +129,17 @@ func (db *DB) migrate(ctx context.Context) error {
 			return fmt.Errorf("sqlite: read migration %s: %w", name, err)
 		}
 
+		// A migration that rebuilds tables says so on its first line. Foreign
+		// keys must be off for that (a pragma ignored inside a transaction, so
+		// set before it on the single writer connection), and every key is
+		// checked again before the commit.
+		rebuilds := strings.HasPrefix(string(statements), "-- docgen: rebuilds tables")
+		if rebuilds {
+			if _, err := db.write.ExecContext(ctx, "PRAGMA foreign_keys = OFF"); err != nil {
+				return fmt.Errorf("sqlite: turn foreign keys off for %s: %w", name, err)
+			}
+		}
+
 		tx, err := db.write.BeginTx(ctx, nil)
 		if err != nil {
 			return fmt.Errorf("sqlite: begin migration %s: %w", name, err)
@@ -136,6 +147,19 @@ func (db *DB) migrate(ctx context.Context) error {
 		if _, err := tx.ExecContext(ctx, string(statements)); err != nil {
 			tx.Rollback()
 			return fmt.Errorf("sqlite: apply migration %s: %w", name, err)
+		}
+		if rebuilds {
+			rows, err := tx.QueryContext(ctx, "PRAGMA foreign_key_check")
+			if err != nil {
+				tx.Rollback()
+				return fmt.Errorf("sqlite: check foreign keys after %s: %w", name, err)
+			}
+			broken := rows.Next()
+			rows.Close()
+			if broken {
+				tx.Rollback()
+				return fmt.Errorf("sqlite: migration %s leaves a broken foreign key", name)
+			}
 		}
 		// PRAGMA does not accept a bound parameter, and version is derived from
 		// the embedded file list rather than from any input.
@@ -145,6 +169,11 @@ func (db *DB) migrate(ctx context.Context) error {
 		}
 		if err := tx.Commit(); err != nil {
 			return fmt.Errorf("sqlite: commit migration %s: %w", name, err)
+		}
+		if rebuilds {
+			if _, err := db.write.ExecContext(ctx, "PRAGMA foreign_keys = ON"); err != nil {
+				return fmt.Errorf("sqlite: turn foreign keys back on after %s: %w", name, err)
+			}
 		}
 	}
 	return nil

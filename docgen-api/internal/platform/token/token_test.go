@@ -1,156 +1,113 @@
 package token
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/base64"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 	"uuid"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
-var testSecret = []byte("a-test-secret-of-at-least-32-bytes!!")
-
-// clockAt returns a fixed time source, so expiry can be tested by moving the
-// clock rather than by waiting.
-func clockAt(t time.Time) func() time.Time {
-	return func() time.Time { return t }
+func keyPair(t *testing.T) (ed25519.PublicKey, ed25519.PrivateKey) {
+	t.Helper()
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pub, priv
 }
 
-func TestIssueAndParseAccessRoundTrip(t *testing.T) {
-	now := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
-	issuer := NewIssuer(testSecret, 15*time.Minute, WithClock(clockAt(now)))
-	userID := uuid.NewV7()
-
-	raw, expiresAt, err := issuer.IssueAccess(userID)
+func sign(t *testing.T, priv ed25519.PrivateKey, kid string, claims Claims) string {
+	t.Helper()
+	tok := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
+	tok.Header["kid"] = kid
+	raw, err := tok.SignedString(priv)
 	if err != nil {
-		t.Fatalf("IssueAccess: %v", err)
+		t.Fatal(err)
 	}
-	if want := now.Add(15 * time.Minute); !expiresAt.Equal(want) {
-		t.Errorf("expiry = %v, want %v", expiresAt, want)
-	}
+	return raw
+}
 
-	got, issuedAt, err := issuer.ParseAccess(raw)
-	if err != nil {
-		t.Fatalf("ParseAccess: %v", err)
-	}
-	if got != userID {
-		t.Errorf("ParseAccess returned %s, want %s", got, userID)
-	}
-	// The issue time is what a password change is later compared against, so a
-	// token that does not carry one is useless for that check.
-	if issuedAt.IsZero() {
-		t.Error("ParseAccess returned no issued-at instant")
+func validClaims() Claims {
+	now := time.Now()
+	return Claims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer: Issuer, Subject: uuid.NewV7().String(), Audience: jwt.ClaimStrings{Audience},
+			IssuedAt: jwt.NewNumericDate(now), ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),
+		},
+		Organization: uuid.NewV7().String(), OrganizationName: "Central",
+		Email: " Ana@Example.com ", Name: "Ana", Role: "admin",
 	}
 }
 
-func TestParseAccessRejectsExpiredToken(t *testing.T) {
-	now := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
-	current := now
-	issuer := NewIssuer(testSecret, 15*time.Minute, WithClock(func() time.Time { return current }))
-
-	raw, _, err := issuer.IssueAccess(uuid.NewV7())
+func TestVerify(t *testing.T) {
+	pub, priv := keyPair(t)
+	v, err := NewVerifier(map[string]ed25519.PublicKey{"1": pub})
 	if err != nil {
-		t.Fatalf("IssueAccess: %v", err)
+		t.Fatal(err)
 	}
-
-	current = now.Add(16 * time.Minute)
-	if _, _, err := issuer.ParseAccess(raw); !errors.Is(err, ErrInvalidToken) {
-		t.Errorf("ParseAccess on an expired token = %v, want ErrInvalidToken", err)
+	claims := validClaims()
+	id, err := v.Verify(sign(t, priv, "1", claims))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id.Email != "ana@example.com" || id.OrganizationName != "Central" || id.Role != "admin" ||
+		id.OrganizationID.String() != claims.Organization {
+		t.Errorf("identity %+v", id)
 	}
 }
 
-func TestParseAccessRejectsForeignSignature(t *testing.T) {
-	now := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
-	mint := NewIssuer([]byte("a-different-secret-of-32-bytes!!!!!!"), time.Hour, WithClock(clockAt(now)))
-	verify := NewIssuer(testSecret, time.Hour, WithClock(clockAt(now)))
+func TestVerifyRefuses(t *testing.T) {
+	pub, priv := keyPair(t)
+	_, otherPriv := keyPair(t)
+	v, _ := NewVerifier(map[string]ed25519.PublicKey{"1": pub})
 
-	raw, _, err := mint.IssueAccess(uuid.NewV7())
-	if err != nil {
-		t.Fatalf("IssueAccess: %v", err)
-	}
+	cases := map[string]string{}
+	cases["another key"] = sign(t, otherPriv, "1", validClaims())
+	cases["unknown kid"] = sign(t, priv, "2", validClaims())
 
-	if _, _, err := verify.ParseAccess(raw); !errors.Is(err, ErrInvalidToken) {
-		t.Errorf("ParseAccess with the wrong key = %v, want ErrInvalidToken", err)
-	}
-}
+	wrongAudience := validClaims()
+	wrongAudience.Audience = jwt.ClaimStrings{"imobiliary-api"}
+	cases["the platform's own audience"] = sign(t, priv, "1", wrongAudience)
 
-// TestParseAccessRejectsUnsignedToken covers the classic algorithm confusion
-// attack: re-encoding a token with "alg":"none" and dropping the signature. It
-// must be refused because the parser pins HS256.
-func TestParseAccessRejectsUnsignedToken(t *testing.T) {
-	now := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
-	issuer := NewIssuer(testSecret, time.Hour, WithClock(clockAt(now)))
+	wrongIssuer := validClaims()
+	wrongIssuer.Issuer = "docgen"
+	cases["another issuer"] = sign(t, priv, "1", wrongIssuer)
 
-	raw, _, err := issuer.IssueAccess(uuid.NewV7())
-	if err != nil {
-		t.Fatalf("IssueAccess: %v", err)
-	}
-	parts := strings.Split(raw, ".")
-	if len(parts) != 3 {
-		t.Fatalf("token has %d segments, want 3", len(parts))
-	}
+	expired := validClaims()
+	expired.ExpiresAt = jwt.NewNumericDate(time.Now().Add(-time.Minute))
+	cases["expired"] = sign(t, priv, "1", expired)
 
-	encode := base64.RawURLEncoding.EncodeToString
-	forged := encode([]byte(`{"alg":"none","typ":"JWT"}`)) + "." + parts[1] + "."
+	noEmail := validClaims()
+	noEmail.Email = ""
+	cases["no e-mail"] = sign(t, priv, "1", noEmail)
 
-	if _, _, err := issuer.ParseAccess(forged); !errors.Is(err, ErrInvalidToken) {
-		t.Errorf("ParseAccess on an unsigned token = %v, want ErrInvalidToken", err)
-	}
-}
+	// An HMAC token keyed with the public key: the classic confusion attack.
+	hmac := jwt.NewWithClaims(jwt.SigningMethodHS256, validClaims())
+	hmac.Header["kid"] = "1"
+	raw, _ := hmac.SignedString([]byte(pub))
+	cases["HS256 with the public key"] = raw
 
-func TestParseAccessRejectsGarbage(t *testing.T) {
-	issuer := NewIssuer(testSecret, time.Hour)
-
-	for _, raw := range []string{"", "not-a-token", "a.b.c", strings.Repeat("x", 500)} {
-		if _, _, err := issuer.ParseAccess(raw); !errors.Is(err, ErrInvalidToken) {
-			t.Errorf("ParseAccess(%q) = %v, want ErrInvalidToken", raw, err)
+	for name, raw := range cases {
+		if _, err := v.Verify(raw); !errors.Is(err, ErrInvalidToken) {
+			t.Errorf("%s: accepted (%v)", name, err)
 		}
 	}
 }
 
-func TestNewRefreshSecretIsUniqueAndOpaque(t *testing.T) {
-	seen := make(map[string]struct{}, 100)
-
-	for range 100 {
-		secret, err := NewRefreshSecret()
-		if err != nil {
-			t.Fatalf("NewRefreshSecret: %v", err)
+func TestParsePublicKeys(t *testing.T) {
+	pub, _ := keyPair(t)
+	keys, err := ParsePublicKeys("1:" + base64.StdEncoding.EncodeToString(pub))
+	if err != nil || len(keys) != 1 {
+		t.Fatalf("keys %v, %v", keys, err)
+	}
+	for _, bad := range []string{"", "abc", "1:bm90LWEta2V5", "1:" + base64.StdEncoding.EncodeToString(pub) + ",1:" + base64.StdEncoding.EncodeToString(pub)} {
+		if _, err := ParsePublicKeys(bad); err == nil {
+			t.Errorf("ParsePublicKeys(%q) accepted", bad)
 		}
-		if _, duplicate := seen[secret]; duplicate {
-			t.Fatal("NewRefreshSecret produced a duplicate")
-		}
-		seen[secret] = struct{}{}
-
-		// 32 random bytes in unpadded base64url.
-		if len(secret) != 43 {
-			t.Errorf("secret length = %d, want 43", len(secret))
-		}
-	}
-}
-
-func TestHashRefreshSecretIsDeterministicAndHidesInput(t *testing.T) {
-	secret, err := NewRefreshSecret()
-	if err != nil {
-		t.Fatalf("NewRefreshSecret: %v", err)
-	}
-
-	first := HashRefreshSecret(secret)
-	if len(first) != 32 {
-		t.Errorf("digest length = %d, want 32", len(first))
-	}
-	if string(first) != string(HashRefreshSecret(secret)) {
-		t.Error("hashing the same secret twice produced different digests")
-	}
-	if strings.Contains(string(first), secret) {
-		t.Error("digest contains the secret itself")
-	}
-
-	other, err := NewRefreshSecret()
-	if err != nil {
-		t.Fatalf("NewRefreshSecret: %v", err)
-	}
-	if string(first) == string(HashRefreshSecret(other)) {
-		t.Error("two different secrets hashed to the same digest")
 	}
 }

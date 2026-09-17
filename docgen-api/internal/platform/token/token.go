@@ -1,133 +1,144 @@
-// Package token issues and validates the two credentials that make up a
-// session: a short-lived signed access token and an opaque refresh secret.
+// Package token verifies the tokens the Imobiliary platform issues for this
+// service (PLANO-FASE-7.md §4). Identity lives there: this service signs
+// nothing and holds no secret, only the public keys it verifies with.
 package token
 
 import (
-	"crypto/rand"
-	"crypto/sha256"
+	"crypto/ed25519"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 	"uuid"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// ErrInvalidToken covers every reason an access token was not accepted. The
-// reason itself is deliberately not reported to the client, which would only
-// help an attacker tell "expired" from "badly signed".
+// ErrInvalidToken covers every reason a token was not accepted. The reason
+// itself is deliberately not reported to the client, which would only help an
+// attacker tell "expired" from "badly signed".
 var ErrInvalidToken = errors.New("token: invalid access token")
 
-// issuerName identifies tokens minted by this service and is validated on
-// parse, so a token issued elsewhere with the same key is still rejected.
-const issuerName = "docgen"
+// Issuer is the platform that signs the tokens, and Audience is this service.
+// Both are checked: a token the platform minted for itself is refused here.
+const (
+	Issuer   = "imobiliary"
+	Audience = "docgen"
+)
 
-// refreshSecretBytes gives a refresh secret 256 bits of entropy, which is what
-// allows it to be stored as a plain SHA-256 digest: guessing the pre-image is
-// infeasible, so the slow KDF used for passwords buys nothing here.
-const refreshSecretBytes = 32
-
-// Issuer mints and verifies access tokens.
-type Issuer struct {
-	secret    []byte
-	accessTTL time.Duration
-	parser    *jwt.Parser
-	now       func() time.Time
+// Claims are what a token for this service carries.
+type Claims struct {
+	jwt.RegisteredClaims
+	Organization     string `json:"org"`
+	OrganizationName string `json:"org_name"`
+	Email            string `json:"email"`
+	Name             string `json:"name"`
+	Role             string `json:"role"`
 }
 
-// Option customises an Issuer.
-type Option func(*Issuer)
+// Identity is who a verified token speaks for.
+type Identity struct {
+	UserID           uuid.UUID
+	OrganizationID   uuid.UUID
+	OrganizationName string
+	Email            string
+	Name             string
+	Role             string
+}
+
+// Verifier checks tokens against the platform's public keys, by name.
+type Verifier struct {
+	keys   map[string]ed25519.PublicKey
+	parser *jwt.Parser
+	now    func() time.Time
+}
+
+// Option customises a Verifier.
+type Option func(*Verifier)
 
 // WithClock replaces the time source, letting tests exercise expiry without
 // sleeping.
 func WithClock(now func() time.Time) Option {
-	return func(i *Issuer) { i.now = now }
+	return func(v *Verifier) { v.now = now }
 }
 
-// NewIssuer returns an Issuer signing with the given HMAC secret.
-func NewIssuer(secret []byte, accessTTL time.Duration, opts ...Option) *Issuer {
-	i := &Issuer{
-		secret:    secret,
-		accessTTL: accessTTL,
-		now:       time.Now,
+// NewVerifier returns a Verifier for the named public keys.
+func NewVerifier(keys map[string]ed25519.PublicKey, opts ...Option) (*Verifier, error) {
+	if len(keys) == 0 {
+		return nil, errors.New("token: at least one public key is required")
 	}
+	v := &Verifier{keys: keys, now: time.Now}
 	for _, opt := range opts {
-		opt(i)
+		opt(v)
 	}
-	i.parser = jwt.NewParser(
-		// Pinning the algorithm is what defeats the classic confusion attack,
-		// where a token is re-signed as "none" or as RS256 using the HMAC key
-		// as an RSA public key.
-		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
-		jwt.WithIssuer(issuerName),
+	v.parser = jwt.NewParser(
+		// Pinning the algorithm is what defeats a token re-signed as "none",
+		// or as HMAC with the public key used as the secret.
+		jwt.WithValidMethods([]string{jwt.SigningMethodEdDSA.Alg()}),
+		jwt.WithIssuer(Issuer),
+		jwt.WithAudience(Audience),
 		jwt.WithExpirationRequired(),
-		jwt.WithTimeFunc(func() time.Time { return i.now() }),
+		jwt.WithTimeFunc(func() time.Time { return v.now() }),
 	)
-	return i
+	return v, nil
 }
 
-// IssueAccess mints an access token for the user and reports when it expires.
-func (i *Issuer) IssueAccess(userID uuid.UUID) (string, time.Time, error) {
-	now := i.now()
-	expiresAt := now.Add(i.accessTTL)
-
-	claims := jwt.RegisteredClaims{
-		Issuer:    issuerName,
-		Subject:   userID.String(),
-		ID:        uuid.NewV4().String(),
-		IssuedAt:  jwt.NewNumericDate(now),
-		NotBefore: jwt.NewNumericDate(now),
-		ExpiresAt: jwt.NewNumericDate(expiresAt),
-	}
-
-	signed, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(i.secret)
-	if err != nil {
-		return "", time.Time{}, fmt.Errorf("token: sign access token: %w", err)
-	}
-	return signed, expiresAt, nil
-}
-
-// ParseAccess validates a raw access token and returns the user it identifies
-// together with the instant it was issued.
-//
-// The issue time is returned because an access token is stateless: nothing can
-// be revoked out from under it, so the only way to reject one minted before a
-// credential changed is to compare the two instants. Without it, changing a
-// password would leave every token already in circulation valid until it
-// expired on its own.
-func (i *Issuer) ParseAccess(raw string) (uuid.UUID, time.Time, error) {
-	var claims jwt.RegisteredClaims
-	_, err := i.parser.ParseWithClaims(raw, &claims, func(*jwt.Token) (any, error) {
-		return i.secret, nil
+// Verify validates a raw token and reads who it speaks for.
+func (v *Verifier) Verify(raw string) (*Identity, error) {
+	var claims Claims
+	_, err := v.parser.ParseWithClaims(raw, &claims, func(t *jwt.Token) (any, error) {
+		id, _ := t.Header["kid"].(string)
+		key, ok := v.keys[id]
+		if !ok {
+			return nil, fmt.Errorf("unknown key %q", id)
+		}
+		return key, nil
 	})
 	if err != nil {
-		return uuid.Nil(), time.Time{}, fmt.Errorf("%w: %w", ErrInvalidToken, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidToken, err)
 	}
-
 	userID, err := uuid.Parse(claims.Subject)
 	if err != nil {
-		return uuid.Nil(), time.Time{}, fmt.Errorf("%w: subject is not a uuid", ErrInvalidToken)
+		return nil, fmt.Errorf("%w: subject is not a uuid", ErrInvalidToken)
 	}
-	if claims.IssuedAt == nil {
-		return uuid.Nil(), time.Time{}, fmt.Errorf("%w: no issued-at claim", ErrInvalidToken)
+	orgID, err := uuid.Parse(claims.Organization)
+	if err != nil {
+		return nil, fmt.Errorf("%w: org is not a uuid", ErrInvalidToken)
 	}
-	return userID, claims.IssuedAt.Time.UTC(), nil
+	if strings.TrimSpace(claims.Email) == "" {
+		return nil, fmt.Errorf("%w: no e-mail", ErrInvalidToken)
+	}
+	return &Identity{
+		UserID: userID, OrganizationID: orgID, OrganizationName: claims.OrganizationName,
+		Email: strings.ToLower(strings.TrimSpace(claims.Email)), Name: claims.Name, Role: claims.Role,
+	}, nil
 }
 
-// NewRefreshSecret returns a fresh opaque refresh secret, URL-safe so it can
-// travel in a JSON body without further encoding.
-func NewRefreshSecret() (string, error) {
-	buf := make([]byte, refreshSecretBytes)
-	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("token: read random bytes: %w", err)
+// ParsePublicKeys reads "name:base64,name:base64", the form the platform's
+// `imobiliary public-keys` prints.
+func ParsePublicKeys(spec string) (map[string]ed25519.PublicKey, error) {
+	keys := map[string]ed25519.PublicKey{}
+	for entry := range strings.SplitSeq(spec, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		name, raw, named := strings.Cut(entry, ":")
+		if !named || name == "" {
+			return nil, fmt.Errorf("token: %q is not name:base64", entry)
+		}
+		if _, dup := keys[name]; dup {
+			return nil, fmt.Errorf("token: key %q appears twice", name)
+		}
+		b, err := base64.StdEncoding.DecodeString(strings.TrimSpace(raw))
+		if err != nil || len(b) != ed25519.PublicKeySize {
+			return nil, fmt.Errorf("token: key %q must be the base64 of %d bytes", name, ed25519.PublicKeySize)
+		}
+		keys[name] = ed25519.PublicKey(b)
 	}
-	return base64.RawURLEncoding.EncodeToString(buf), nil
-}
-
-// HashRefreshSecret derives the digest stored in the database. Only this value
-// is persisted, so a leaked database yields no usable sessions.
-func HashRefreshSecret(secret string) []byte {
-	sum := sha256.Sum256([]byte(secret))
-	return sum[:]
+	if len(keys) == 0 {
+		return nil, errors.New("token: at least one public key is required")
+	}
+	return keys, nil
 }

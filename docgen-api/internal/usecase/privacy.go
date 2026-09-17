@@ -22,7 +22,7 @@ const exportPageSize = 200
 // repository, and collecting them here keeps the two operations that must stay
 // exhaustive in one file where they can be read together.
 type Privacy struct {
-	users     UserRepository
+	owners    OwnerRepository
 	templates TemplateRepository
 	documents DocumentRepository
 	batches   BatchRepository
@@ -32,7 +32,7 @@ type Privacy struct {
 
 // PrivacyConfig collects the dependencies of the Privacy use case.
 type PrivacyConfig struct {
-	Users     UserRepository
+	Owners    OwnerRepository
 	Templates TemplateRepository
 	Documents DocumentRepository
 	Batches   BatchRepository
@@ -47,7 +47,7 @@ func NewPrivacy(cfg PrivacyConfig) *Privacy {
 		logger = slog.Default()
 	}
 	return &Privacy{
-		users:     cfg.Users,
+		owners:    cfg.Owners,
 		templates: cfg.Templates,
 		documents: cfg.Documents,
 		batches:   cfg.Batches,
@@ -56,14 +56,14 @@ func NewPrivacy(cfg PrivacyConfig) *Privacy {
 	}
 }
 
-// AccountExport is everything the service holds about one account.
+// AccountExport is everything the service holds for one office.
 //
 // The values a user typed into their documents travel in Documents[i].Data —
 // they are the substance of the export, not an afterthought, because they are
 // the personal data the service actually accumulates.
 type AccountExport struct {
 	ExportedAt time.Time
-	User       *domain.User
+	Owner      *domain.Owner
 	Templates  []TemplateExport
 	Documents  []domain.Document
 	// Batches are held too: a batch's name is text the account holder typed,
@@ -84,20 +84,20 @@ type TemplateExport struct {
 // It deliberately includes templates that were "deleted": that delete only
 // hides them, and an access request asks what is still held rather than what is
 // still shown. Saying otherwise in an export would be a lie told in writing.
-func (s *Privacy) Export(ctx context.Context, userID uuid.UUID, now time.Time) (*AccountExport, error) {
-	user, err := s.users.ByID(ctx, userID)
+func (s *Privacy) Export(ctx context.Context, ownerID uuid.UUID, now time.Time) (*AccountExport, error) {
+	owner, err := s.owners.ByID(ctx, ownerID)
 	if err != nil {
 		return nil, err
 	}
 
-	templates, err := s.templates.AllForOwner(ctx, userID)
+	templates, err := s.templates.AllForOwner(ctx, ownerID)
 	if err != nil {
 		return nil, err
 	}
 
 	exported := make([]TemplateExport, 0, len(templates))
 	for i := range templates {
-		versions, err := s.templates.VersionsOf(ctx, userID, templates[i].ID)
+		versions, err := s.templates.VersionsOf(ctx, ownerID, templates[i].ID)
 		if err != nil {
 			return nil, err
 		}
@@ -110,7 +110,7 @@ func (s *Privacy) Export(ctx context.Context, userID uuid.UUID, now time.Time) (
 
 	var documents []domain.Document
 	for offset := 0; ; offset += exportPageSize {
-		page, err := s.documents.List(ctx, userID, domain.DocumentFilter{}, exportPageSize, offset)
+		page, err := s.documents.List(ctx, ownerID, domain.DocumentFilter{}, exportPageSize, offset)
 		if err != nil {
 			return nil, err
 		}
@@ -122,47 +122,18 @@ func (s *Privacy) Export(ctx context.Context, userID uuid.UUID, now time.Time) (
 
 	var batches []domain.Batch
 	if s.batches != nil {
-		if batches, err = s.batches.AllForOwner(ctx, userID); err != nil {
+		if batches, err = s.batches.AllForOwner(ctx, ownerID); err != nil {
 			return nil, err
 		}
 	}
 
 	return &AccountExport{
 		ExportedAt: now.UTC(),
-		User:       user,
+		Owner:      owner,
 		Templates:  exported,
 		Documents:  documents,
 		Batches:    batches,
 	}, nil
-}
-
-// DeleteAccount erases an account and everything belonging to it.
-//
-// This is a real delete, unlike the one templates get: the rows go, the
-// cascades fire, and the stored files go with them. It is what makes article
-// 18 VI exercisable rather than merely promised.
-//
-// The database transaction commits before any file is touched, and it reports
-// which hashes nothing refers to any more. Removing files first would leave a
-// live row pointing at a missing body; removing them after means a crash in
-// between leaks a file rather than breaking a record — the safer of the two
-// failures, and the one a later sweep can still clean up.
-func (s *Privacy) DeleteAccount(ctx context.Context, userID uuid.UUID) error {
-	orphaned, err := s.users.Delete(ctx, userID)
-	if err != nil {
-		return err
-	}
-
-	for _, hash := range orphaned {
-		if err := s.blobs.Delete(hash); err != nil {
-			// The account is already gone; refusing the whole request now would
-			// tell the user their data survived when most of it did not. The
-			// leftover file is logged so it can be swept.
-			s.logger.Error("could not erase stored file after account deletion",
-				slog.String("hash", hash), slog.Any("error", err))
-		}
-	}
-	return nil
 }
 
 // Filename is the name an export is offered under.

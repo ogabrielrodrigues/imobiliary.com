@@ -2,6 +2,8 @@ package domain
 
 import (
 	"time"
+	"unicode"
+	"unicode/utf8"
 	"uuid"
 )
 
@@ -25,6 +27,28 @@ type Document struct {
 	// BatchID is the batch the document was generated in, or nil for one
 	// generated on its own.
 	BatchID *uuid.UUID
+	// Reference ties the document to a record elsewhere, such as
+	// "contract:<id>" on the Imobiliary platform. Empty when there is none.
+	Reference string
+}
+
+// MaxReferenceLength bounds a document's reference.
+const MaxReferenceLength = 100
+
+// ValidateReference checks a document's reference: at most 100 characters,
+// none of them a control character.
+func ValidateReference(reference string) error {
+	v := &ValidationError{}
+	if utf8.RuneCountInString(reference) > MaxReferenceLength {
+		v.Add("reference", "must be at most 100 characters")
+	}
+	for _, r := range reference {
+		if unicode.IsControl(r) {
+			v.Add("reference", "must not contain control characters")
+			break
+		}
+	}
+	return v.OrNil()
 }
 
 // ValidateDocumentData checks the supplied values against the placeholder

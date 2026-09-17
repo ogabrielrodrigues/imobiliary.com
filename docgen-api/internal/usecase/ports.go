@@ -19,54 +19,6 @@ import (
 	"docgen/internal/domain"
 )
 
-// UserRepository stores accounts.
-type UserRepository interface {
-	Create(ctx context.Context, u *domain.User) error
-	ByEmail(ctx context.Context, email string) (*domain.User, error)
-	ByID(ctx context.Context, id uuid.UUID) (*domain.User, error)
-	// Delete erases the account and everything cascading from it, reporting
-	// the blob hashes no surviving row refers to any more.
-	Delete(ctx context.Context, id uuid.UUID) ([]string, error)
-	// UpdatePassword replaces the stored hash and records when it changed.
-	UpdatePassword(ctx context.Context, id uuid.UUID, hash string, at time.Time) error
-}
-
-// PasswordResetRepository stores the one-time tokens that authorise setting a
-// password without knowing the old one.
-type PasswordResetRepository interface {
-	Create(ctx context.Context, r *domain.PasswordReset) error
-	ByHash(ctx context.Context, hash []byte) (*domain.PasswordReset, error)
-	// Consume marks a token used, reporting domain.ErrNotFound when it was
-	// already spent - the check and the write are one statement, so two
-	// requests racing the same token cannot both succeed.
-	Consume(ctx context.Context, id uuid.UUID, at time.Time) error
-	// InvalidateForUser spends every outstanding token of an account, which is
-	// what a completed reset or a password change does to the ones still in
-	// inboxes.
-	InvalidateForUser(ctx context.Context, userID uuid.UUID, at time.Time) error
-}
-
-// Mailer sends one plain-text message to one address.
-//
-// Plain strings rather than a shared struct: a type would have to live either
-// here or in the adapter, and the first makes the adapter depend on the use
-// case for a record of four fields while the second points the dependency the
-// wrong way entirely.
-type Mailer interface {
-	Send(ctx context.Context, to, subject, body string) error
-}
-
-// SessionRepository stores refresh tokens and the links between them.
-type SessionRepository interface {
-	Create(ctx context.Context, t *domain.RefreshToken) error
-	ByHash(ctx context.Context, hash []byte) (*domain.RefreshToken, error)
-	// Rotate consumes a token and stores its successor atomically, reporting
-	// domain.ErrSessionReused when the token was already consumed.
-	Rotate(ctx context.Context, oldID uuid.UUID, usedAt time.Time, next *domain.RefreshToken) error
-	Revoke(ctx context.Context, id uuid.UUID, at time.Time) error
-	RevokeAllForUser(ctx context.Context, userID uuid.UUID, at time.Time) error
-}
-
 // TemplateRepository stores templates and their immutable versions. Every
 // method takes the owner, because ownership is enforced in the query.
 type TemplateRepository interface {
@@ -131,18 +83,6 @@ type BlobStore interface {
 	// nothing refers to it: content addressing means one file can be the body
 	// of rows belonging to several accounts.
 	Delete(hash string) error
-}
-
-// PasswordHasher hides the choice of key derivation function.
-type PasswordHasher interface {
-	Hash(plain string) (string, error)
-	Verify(plain, encoded string) error
-}
-
-// TokenIssuer mints and validates access tokens.
-type TokenIssuer interface {
-	IssueAccess(userID uuid.UUID) (string, time.Time, error)
-	ParseAccess(raw string) (userID uuid.UUID, issuedAt time.Time, err error)
 }
 
 // Clock supplies the current time. Injecting it keeps expiry and rotation

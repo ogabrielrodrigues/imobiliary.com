@@ -12,11 +12,9 @@ import (
 	"time"
 
 	adapterhttp "docgen/internal/adapter/http"
-	"docgen/internal/adapter/mail"
 	"docgen/internal/adapter/sqlite"
 	"docgen/internal/platform/blob"
 	"docgen/internal/platform/config"
-	"docgen/internal/platform/password"
 	"docgen/internal/platform/ratelimit"
 	"docgen/internal/platform/token"
 	"docgen/internal/usecase"
@@ -35,9 +33,6 @@ const (
 
 // templateCacheSize is how many compiled templates are kept in memory.
 const templateCacheSize = 128
-
-// sessionCleanupInterval is how often expired refresh tokens are purged.
-const sessionCleanupInterval = time.Hour
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -70,33 +65,23 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
-	users := sqlite.NewUserRepository(db)
-	sessions := sqlite.NewSessionRepository(db)
+	publicKeys, err := token.ParsePublicKeys(cfg.IdentityPublicKeys)
+	if err != nil {
+		return err
+	}
+	verifier, err := token.NewVerifier(publicKeys)
+	if err != nil {
+		return err
+	}
+
+	owners := sqlite.NewOwnerRepository(db)
 	templates := sqlite.NewTemplateRepository(db)
 	documents := sqlite.NewDocumentRepository(db)
 	batches := sqlite.NewBatchRepository(db)
 
 	cache := usecase.NewTemplateCache(templateCacheSize)
 
-	// Without a provider key the service logs mail instead of sending it, so a
-	// development run prints the reset link in the terminal and no message can
-	// reach a real person by accident.
-	// config.Load already refused to start with neither, so exactly one applies.
-	var mailer usecase.Mailer = mail.NewResend(cfg.ResendAPIKey, cfg.MailFrom)
-	if cfg.ResendAPIKey == "" {
-		logger.Warn("DOCGEN_MAIL_LOG is on: mail, including password-reset links, is written to this log")
-		mailer = mail.NewLogger(logger)
-	}
-
-	identity := usecase.NewIdentity(usecase.IdentityConfig{
-		Users:      users,
-		Sessions:   sessions,
-		Hasher:     password.NewHasher(),
-		Tokens:     token.NewIssuer(cfg.JWTSecret, cfg.AccessTokenTTL),
-		Mailer:     mailer,
-		RefreshTTL: cfg.RefreshTokenTTL,
-		Logger:     logger,
-	})
+	access := usecase.NewAccess(usecase.AccessConfig{Verifier: verifier, Owners: owners, Logger: logger})
 	templateService := usecase.NewTemplates(usecase.TemplatesConfig{
 		Repo:      templates,
 		Blobs:     blobs,
@@ -111,21 +96,8 @@ func run(logger *slog.Logger) error {
 		Cache:     cache,
 	})
 
-	passwordService := usecase.NewPasswords(usecase.PasswordsConfig{
-		Users:      users,
-		Sessions:   sessions,
-		Resets:     sqlite.NewPasswordResetRepository(db),
-		Hasher:     password.NewHasher(),
-		Tokens:     token.NewIssuer(cfg.JWTSecret, cfg.AccessTokenTTL),
-		Mailer:     mailer,
-		AppURL:     cfg.AppURL,
-		ResetTTL:   cfg.PasswordResetTTL,
-		RefreshTTL: cfg.RefreshTokenTTL,
-		Logger:     logger,
-	})
-
 	privacyService := usecase.NewPrivacy(usecase.PrivacyConfig{
-		Users:     users,
+		Owners:    owners,
 		Templates: templates,
 		Documents: documents,
 		Batches:   batches,
@@ -135,21 +107,18 @@ func run(logger *slog.Logger) error {
 
 	limiters := adapterhttp.Limiters{
 		Global: newLimiter(cfg.RateLimits.GlobalPerIP),
-		Auth:   newLimiter(cfg.RateLimits.AuthPerIP),
 		Write:  newLimiter(cfg.RateLimits.WritePerUser),
 	}
 	defer func() {
 		limiters.Global.Close()
-		limiters.Auth.Close()
 		limiters.Write.Close()
 	}()
 
 	server := adapterhttp.NewServer(adapterhttp.Options{
-		Identity:  identity,
+		Access:    access,
 		Templates: templateService,
 		Documents: documentService,
 		Privacy:   privacyService,
-		Passwords: passwordService,
 		Stats:     usecase.NewStats(usecase.StatsConfig{Repo: sqlite.NewStatsRepository(db)}),
 		Batches: usecase.NewBatches(usecase.BatchesConfig{
 			Templates: templates,
@@ -164,8 +133,6 @@ func run(logger *slog.Logger) error {
 		MaxUploadBytes:    cfg.MaxTemplateBytes,
 		TrustProxyHeaders: cfg.TrustProxyHeaders,
 	})
-
-	go purgeExpiredSessions(ctx, sessions, sqlite.NewPasswordResetRepository(db), logger)
 
 	httpServer := &http.Server{
 		Addr:              cfg.Addr,
@@ -218,39 +185,4 @@ func run(logger *slog.Logger) error {
 
 func newLimiter(rule config.Rule) *ratelimit.Limiter {
 	return ratelimit.New(rule.Rate, rule.Burst)
-}
-
-// purgeExpiredSessions removes refresh tokens that can no longer be used,
-// keeping the table from growing without bound.
-func purgeExpiredSessions(ctx context.Context, sessions *sqlite.SessionRepository, resets *sqlite.PasswordResetRepository, logger *slog.Logger) {
-	ticker := time.NewTicker(sessionCleanupInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			removed, err := sessions.DeleteExpired(ctx, time.Now().UTC())
-			if err != nil {
-				logger.Warn("purging expired sessions failed", slog.Any("error", err))
-				continue
-			}
-			if removed > 0 {
-				logger.Info("purged expired sessions", slog.Int64("count", removed))
-			}
-
-			// Reset tokens are swept by the same tick. They are short-lived and
-			// spent quickly, so leaving them would accumulate rows that prove
-			// nothing anybody needs.
-			spent, err := resets.DeleteExpired(ctx, time.Now().UTC())
-			if err != nil {
-				logger.Warn("purging password resets failed", slog.Any("error", err))
-				continue
-			}
-			if spent > 0 {
-				logger.Info("purged password resets", slog.Int64("count", spent))
-			}
-		}
-	}
 }

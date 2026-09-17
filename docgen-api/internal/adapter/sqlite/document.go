@@ -23,7 +23,7 @@ func NewDocumentRepository(db *DB) *DocumentRepository {
 }
 
 const documentColumns = "id, owner_id, template_id, template_version_id, template_version, " +
-	"filename, blob_hash, size, data, created_at, batch_id"
+	"filename, blob_hash, size, data, created_at, batch_id, reference"
 
 // nullableID stores an optional identifier as a blob or as NULL.
 func nullableID(id *uuid.UUID) any {
@@ -35,7 +35,7 @@ func nullableID(id *uuid.UUID) any {
 
 // Create records a generated document.
 func (r *DocumentRepository) Create(ctx context.Context, d *domain.Document) error {
-	const query = `INSERT INTO documents (` + documentColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	const query = `INSERT INTO documents (` + documentColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	data, err := json.Marshal(d.Data)
 	if err != nil {
@@ -45,7 +45,7 @@ func (r *DocumentRepository) Create(ctx context.Context, d *domain.Document) err
 	_, err = r.db.write.ExecContext(ctx, query,
 		idOf(d.ID), idOf(d.OwnerID), idOf(d.TemplateID), idOf(d.TemplateVersionID),
 		d.TemplateVersion, d.Filename, d.BlobHash, d.Size, string(data),
-		formatTime(d.CreatedAt), nullableID(d.BatchID),
+		formatTime(d.CreatedAt), nullableID(d.BatchID), d.Reference,
 	)
 	if err != nil {
 		return fmt.Errorf("sqlite: create document: %w", err)
@@ -75,6 +75,10 @@ func (r *DocumentRepository) List(ctx context.Context, ownerID uuid.UUID, filter
 	if filter.BatchID != nil {
 		query += ` AND batch_id = ?`
 		args = append(args, idOf(*filter.BatchID))
+	}
+	if filter.Reference != "" {
+		query += ` AND reference = ?`
+		args = append(args, filter.Reference)
 	}
 	// Ids are UUIDv7, so their order is creation order.
 	if filter.OldestFirst {
@@ -117,7 +121,7 @@ func scanDocumentRow(row rowScanner) (*domain.Document, error) {
 
 	err := row.Scan(
 		&rawID, &rawOwnerID, &rawTemplateID, &rawVersionID, &d.TemplateVersion,
-		&d.Filename, &d.BlobHash, &d.Size, &data, &createdAt, &rawBatchID,
+		&d.Filename, &d.BlobHash, &d.Size, &data, &createdAt, &rawBatchID, &d.Reference,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("document: %w", domain.ErrNotFound)

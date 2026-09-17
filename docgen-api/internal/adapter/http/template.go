@@ -75,7 +75,7 @@ func (s *Server) handleCreateTemplate(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	result, err := s.templates.Create(r.Context(),
-		userFrom(r.Context()).ID,
+		callerFrom(r.Context()).OwnerID,
 		r.FormValue("name"),
 		r.FormValue("description"),
 		file,
@@ -101,7 +101,7 @@ func (s *Server) handleAddTemplateVersion(w http.ResponseWriter, r *http.Request
 	}
 	defer file.Close()
 
-	result, err := s.templates.AddVersion(r.Context(), userFrom(r.Context()).ID, templateID, file)
+	result, err := s.templates.AddVersion(r.Context(), callerFrom(r.Context()).OwnerID, templateID, file)
 	if err != nil {
 		writeError(w, s.logger, err)
 		return
@@ -116,7 +116,7 @@ func (s *Server) handleGetTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := s.templates.Get(r.Context(), userFrom(r.Context()).ID, templateID)
+	result, err := s.templates.Get(r.Context(), callerFrom(r.Context()).OwnerID, templateID)
 	if err != nil {
 		writeError(w, s.logger, err)
 		return
@@ -127,7 +127,7 @@ func (s *Server) handleGetTemplate(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleListTemplates(w http.ResponseWriter, r *http.Request) {
 	limit, offset := pagination(r)
 
-	templates, err := s.templates.List(r.Context(), userFrom(r.Context()).ID, limit, offset)
+	templates, err := s.templates.List(r.Context(), callerFrom(r.Context()).OwnerID, limit, offset)
 	if err != nil {
 		writeError(w, s.logger, err)
 		return
@@ -153,7 +153,7 @@ func (s *Server) handleListTemplateVersions(w http.ResponseWriter, r *http.Reque
 	}
 	limit, offset := pagination(r)
 
-	versions, err := s.templates.ListVersions(r.Context(), userFrom(r.Context()).ID, templateID, limit, offset)
+	versions, err := s.templates.ListVersions(r.Context(), callerFrom(r.Context()).OwnerID, templateID, limit, offset)
 	if err != nil {
 		writeError(w, s.logger, err)
 		return
@@ -173,7 +173,7 @@ func (s *Server) handleDeleteTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.templates.Delete(r.Context(), userFrom(r.Context()).ID, templateID); err != nil {
+	if err := s.templates.Delete(r.Context(), callerFrom(r.Context()).OwnerID, templateID); err != nil {
 		writeError(w, s.logger, err)
 		return
 	}
@@ -198,7 +198,7 @@ func (s *Server) handleDownloadTemplateVersion(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	file, err := s.templates.OpenVersion(r.Context(), userFrom(r.Context()).ID, templateID, &version)
+	file, err := s.templates.OpenVersion(r.Context(), callerFrom(r.Context()).OwnerID, templateID, &version)
 	if err != nil {
 		writeError(w, s.logger, err)
 		return

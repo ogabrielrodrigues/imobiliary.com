@@ -24,6 +24,7 @@ const (
 	codeNotFound       errorCode = "not_found"
 	codeConflict       errorCode = "conflict"
 	codeUnauthorized   errorCode = "unauthorized"
+	codeGone           errorCode = "gone"
 	codeRateLimited    errorCode = "rate_limited"
 	codePayloadTooBig  errorCode = "payload_too_large"
 	codeBadRequest     errorCode = "bad_request"
@@ -81,13 +82,9 @@ func writeError(w http.ResponseWriter, logger *slog.Logger, err error) {
 	case errors.Is(err, domain.ErrAlreadyExists):
 		writeFailure(w, logger, http.StatusConflict, codeConflict, "resource already exists")
 
-	case errors.Is(err, domain.ErrInvalidCredentials),
-		errors.Is(err, domain.ErrSessionExpired),
-		errors.Is(err, domain.ErrSessionReused),
-		errors.Is(err, token.ErrInvalidToken):
-		// All four collapse into one response. Telling a caller that a session
-		// was revoked for reuse, rather than simply rejected, would confirm to
-		// a thief that the stolen secret had been genuine.
+	case errors.Is(err, token.ErrInvalidToken):
+		// Why a token was refused is not reported: "expired" and "badly
+		// signed" read the same to the caller.
 		writeFailure(w, logger, http.StatusUnauthorized, codeUnauthorized, "authentication failed")
 
 	default:

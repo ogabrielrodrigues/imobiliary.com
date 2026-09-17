@@ -97,7 +97,7 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	report, err := s.stats.Report(r.Context(), usecase.StatsRequest{
-		OwnerID:  userFrom(r.Context()).ID,
+		OwnerID:  callerFrom(r.Context()).OwnerID,
 		Days:     days,
 		Location: loc,
 	})

@@ -5,7 +5,9 @@ package http_test
 import (
 	"archive/zip"
 	"bytes"
-	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"database/sql"
 	json "encoding/json/v2"
 	"io"
 	"io/fs"
@@ -18,22 +20,19 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
+	"uuid"
 
 	adapterhttp "docgen/internal/adapter/http"
 	"docgen/internal/adapter/sqlite"
 	"docgen/internal/platform/blob"
-	"docgen/internal/platform/password"
 	"docgen/internal/platform/ratelimit"
 	"docgen/internal/platform/token"
 	"docgen/internal/usecase"
-)
 
-// jwtSecret is a fixed key: these tests care about the flow, not about key
-// management.
-var jwtSecret = []byte("an-integration-test-secret-of-32b!!!")
+	"github.com/golang-jwt/jwt/v5"
+)
 
 // testServer is a fully wired service in front of a throwaway database.
 type testServer struct {
@@ -42,49 +41,13 @@ type testServer struct {
 	// blobDir lets a test confirm that erasure reached the filesystem, which
 	// is the half of it a database assertion cannot see.
 	blobDir string
-	// mailbox is where the reset link can be read back, since following it is
-	// the only way to exercise the flow the way a person would.
-	mailbox *testMailbox
+	// dbPath lets a test put rows the API cannot create any more, such as an
+	// account from before identity moved to the platform.
+	dbPath string
+	// signingKey signs tokens the way the Imobiliary platform does.
+	signingKey ed25519.PrivateKey
 }
 
-// testMailbox collects the messages the service tried to send.
-type testMailbox struct {
-	mu   sync.Mutex
-	sent []sentMail
-}
-
-type sentMail struct {
-	to      string
-	subject string
-	body    string
-}
-
-func (m *testMailbox) Send(_ context.Context, to, subject, body string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.sent = append(m.sent, sentMail{to: to, subject: subject, body: body})
-	return nil
-}
-
-// last returns the most recent message, failing the test when there is none.
-func (m *testMailbox) last(t *testing.T) sentMail {
-	t.Helper()
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if len(m.sent) == 0 {
-		t.Fatal("no message was sent")
-	}
-	return m.sent[len(m.sent)-1]
-}
-
-// count reports how many messages have been sent.
-func (m *testMailbox) count() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return len(m.sent)
-}
-
-// storedBlobs counts the files under the blob directory.
 func (s *testServer) storedBlobs() int {
 	s.t.Helper()
 
@@ -147,15 +110,18 @@ func newTestServer(t *testing.T, opts serverOptions) *testServer {
 	documentsRepo := sqlite.NewDocumentRepository(db)
 	cache := usecase.NewTemplateCache(16)
 
-	mailbox := &testMailbox{}
-	identity := usecase.NewIdentity(usecase.IdentityConfig{
-		Users:      sqlite.NewUserRepository(db),
-		Sessions:   sqlite.NewSessionRepository(db),
-		Hasher:     password.NewHasher(),
-		Tokens:     token.NewIssuer(jwtSecret, 15*time.Minute),
-		Mailer:     mailbox,
-		RefreshTTL: 24 * time.Hour,
-		Logger:     testLogger(),
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifier, err := token.NewVerifier(map[string]ed25519.PublicKey{"1": public})
+	if err != nil {
+		t.Fatal(err)
+	}
+	access := usecase.NewAccess(usecase.AccessConfig{
+		Verifier: verifier,
+		Owners:   sqlite.NewOwnerRepository(db),
+		Logger:   testLogger(),
 	})
 	templates := usecase.NewTemplates(usecase.TemplatesConfig{
 		Repo:      templatesRepo,
@@ -171,21 +137,8 @@ func newTestServer(t *testing.T, opts serverOptions) *testServer {
 		Cache:     cache,
 	})
 
-	passwords := usecase.NewPasswords(usecase.PasswordsConfig{
-		Users:      sqlite.NewUserRepository(db),
-		Sessions:   sqlite.NewSessionRepository(db),
-		Resets:     sqlite.NewPasswordResetRepository(db),
-		Hasher:     password.NewHasher(),
-		Tokens:     token.NewIssuer(jwtSecret, 15*time.Minute),
-		Mailer:     mailbox,
-		AppURL:     "https://docs.example.com",
-		ResetTTL:   30 * time.Minute,
-		RefreshTTL: 24 * time.Hour,
-		Logger:     testLogger(),
-	})
-
 	privacy := usecase.NewPrivacy(usecase.PrivacyConfig{
-		Users:     sqlite.NewUserRepository(db),
+		Owners:    sqlite.NewOwnerRepository(db),
 		Templates: templatesRepo,
 		Documents: documentsRepo,
 		Batches:   batchesRepo,
@@ -195,21 +148,18 @@ func newTestServer(t *testing.T, opts serverOptions) *testServer {
 
 	limiters := adapterhttp.Limiters{
 		Global: ratelimit.New(opts.globalRate, opts.globalBurst),
-		Auth:   ratelimit.New(opts.authRate, opts.authBurst),
 		Write:  ratelimit.New(opts.writeRate, opts.writeBurst),
 	}
 	t.Cleanup(func() {
 		limiters.Global.Close()
-		limiters.Auth.Close()
 		limiters.Write.Close()
 	})
 
 	server := adapterhttp.NewServer(adapterhttp.Options{
-		Identity:  identity,
+		Access:    access,
 		Templates: templates,
 		Documents: documents,
 		Privacy:   privacy,
-		Passwords: passwords,
 		Stats:     usecase.NewStats(usecase.StatsConfig{Repo: sqlite.NewStatsRepository(db)}),
 		Batches: usecase.NewBatches(usecase.BatchesConfig{
 			Templates: templatesRepo,
@@ -227,7 +177,7 @@ func newTestServer(t *testing.T, opts serverOptions) *testServer {
 	httpServer := httptest.NewServer(server.Handler())
 	t.Cleanup(httpServer.Close)
 
-	return &testServer{Server: httpServer, t: t, blobDir: filepath.Join(dir, "blobs"), mailbox: mailbox}
+	return &testServer{Server: httpServer, t: t, blobDir: filepath.Join(dir, "blobs"), dbPath: filepath.Join(dir, "test.db"), signingKey: private}
 }
 
 // do sends a request and returns the response.
@@ -351,12 +301,7 @@ func expectStatus(t *testing.T, resp *http.Response, want int) {
 
 // Response shapes, mirroring what the handlers produce.
 type sessionBody struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	User         struct {
-		ID    string `json:"id"`
-		Email string `json:"email"`
-	} `json:"user"`
+	AccessToken string
 }
 
 type templateBody struct {
@@ -394,25 +339,32 @@ type errorBody struct {
 	} `json:"error"`
 }
 
-// registerAndLogin creates an account and returns its access token.
+// registerAndLogin returns a token for a new office whose member has this
+// e-mail, signed the way the Imobiliary platform signs them. Each call is a
+// different office, which is what the isolation tests rely on.
 func (s *testServer) registerAndLogin(email string) sessionBody {
 	s.t.Helper()
+	return sessionBody{AccessToken: s.tokenFor(uuid.NewV7(), email, "Escritório de "+email)}
+}
 
-	credentials := map[string]string{
-		"email":         email,
-		"name":          "Test Account",
-		"password":      "a-sufficiently-long-password",
-		"terms_version": "1.0",
+// tokenFor signs a token for a member of an office.
+func (s *testServer) tokenFor(office uuid.UUID, email, officeName string) string {
+	s.t.Helper()
+	now := time.Now()
+	claims := token.Claims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer: token.Issuer, Subject: uuid.NewV7().String(), Audience: jwt.ClaimStrings{token.Audience},
+			IssuedAt: jwt.NewNumericDate(now), ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),
+		},
+		Organization: office.String(), OrganizationName: officeName, Email: email, Name: "Membro", Role: "member",
 	}
-	expectStatus(s.t, s.postJSON("/v1/auth/register", "", credentials), http.StatusAccepted)
-
-	var session sessionBody
-	decode(s.t, s.postJSON("/v1/auth/login", "", map[string]string{
-		"email":    email,
-		"password": "a-sufficiently-long-password",
-	}), http.StatusOK, &session)
-
-	return session
+	tok := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
+	tok.Header["kid"] = "1"
+	raw, err := tok.SignedString(s.signingKey)
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	return raw
 }
 
 // buildDOCX assembles a minimal archive whose paragraph is split across runs,
@@ -697,81 +649,6 @@ func TestAccountsAreIsolated(t *testing.T) {
 			"data":        map[string]string{"value": "stolen"},
 		}), http.StatusNotFound)
 	})
-}
-
-// TestRefreshRotationOverHTTP exercises the session lifecycle through the API,
-// including the response to a replayed secret.
-func TestRefreshRotationOverHTTP(t *testing.T) {
-	server := newTestServer(t, defaultServerOptions())
-	first := server.registerAndLogin("rotation@example.com")
-
-	var second sessionBody
-	decode(t, server.postJSON("/v1/auth/refresh", "", map[string]string{
-		"refresh_token": first.RefreshToken,
-	}), http.StatusOK, &second)
-
-	if second.RefreshToken == first.RefreshToken {
-		t.Error("the refresh secret was not rotated")
-	}
-	if second.AccessToken == "" {
-		t.Error("refresh returned no access token")
-	}
-
-	// Replaying the consumed secret must fail...
-	expectStatus(t, server.postJSON("/v1/auth/refresh", "", map[string]string{
-		"refresh_token": first.RefreshToken,
-	}), http.StatusUnauthorized)
-
-	// ...and must have taken the whole chain down with it.
-	expectStatus(t, server.postJSON("/v1/auth/refresh", "", map[string]string{
-		"refresh_token": second.RefreshToken,
-	}), http.StatusUnauthorized)
-}
-
-func TestLogoutEndsTheSession(t *testing.T) {
-	server := newTestServer(t, defaultServerOptions())
-	session := server.registerAndLogin("logout@example.com")
-
-	expectStatus(t, server.postJSON("/v1/auth/logout", "", map[string]string{
-		"refresh_token": session.RefreshToken,
-	}), http.StatusNoContent)
-
-	expectStatus(t, server.postJSON("/v1/auth/refresh", "", map[string]string{
-		"refresh_token": session.RefreshToken,
-	}), http.StatusUnauthorized)
-}
-
-// TestRateLimitOnCredentialEndpoint is what makes password guessing
-// impractical: after the burst is spent the endpoint answers 429 with a
-// Retry-After hint.
-func TestRateLimitOnCredentialEndpoint(t *testing.T) {
-	opts := defaultServerOptions()
-	opts.authRate = 0
-	opts.authBurst = 3
-	server := newTestServer(t, opts)
-
-	credentials := map[string]string{
-		"email":    "victim@example.com",
-		"password": "guess",
-	}
-
-	for i := range 3 {
-		resp := server.postJSON("/v1/auth/login", "", credentials)
-		resp.Body.Close()
-		if resp.StatusCode == http.StatusTooManyRequests {
-			t.Fatalf("attempt %d was limited while the burst should still allow it", i+1)
-		}
-	}
-
-	resp := server.postJSON("/v1/auth/login", "", credentials)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusTooManyRequests {
-		t.Fatalf("status = %d, want 429 once the burst is spent", resp.StatusCode)
-	}
-	if resp.Header.Get("Retry-After") == "" {
-		t.Error("a 429 response carries no Retry-After header")
-	}
 }
 
 func TestHealthEndpointIsPublic(t *testing.T) {
@@ -1130,9 +1007,9 @@ func TestExportCarriesEverythingHeld(t *testing.T) {
 	}
 
 	var export struct {
-		Account struct {
-			Email string `json:"email"`
-		} `json:"account"`
+		Office struct {
+			Name string `json:"name"`
+		} `json:"office"`
 		Templates []struct {
 			Name    string `json:"name"`
 			Deleted bool   `json:"deleted"`
@@ -1143,8 +1020,8 @@ func TestExportCarriesEverythingHeld(t *testing.T) {
 	}
 	decode(t, resp, http.StatusOK, &export)
 
-	if export.Account.Email != "export@example.com" {
-		t.Errorf("export names account %q", export.Account.Email)
+	if export.Office.Name != "Escritório de export@example.com" {
+		t.Errorf("export names office %q", export.Office.Name)
 	}
 
 	// The value the user typed is the substance of the export.
@@ -1167,64 +1044,6 @@ func TestExportCarriesEverythingHeld(t *testing.T) {
 	}
 }
 
-// TestDeleteAccountErasesRowsAndFiles is the assertion the whole erasure right
-// rests on: the database rows go, and so do the stored files — except one whose
-// bytes another account still needs.
-func TestDeleteAccountErasesRowsAndFiles(t *testing.T) {
-	server := newTestServer(t, defaultServerOptions())
-	leaving := server.registerAndLogin("leaving@example.com")
-	staying := server.registerAndLogin("staying@example.com")
-
-	// Byte-identical uploads, so the content-addressed store keeps one file
-	// that both accounts depend on.
-	shared := buildDOCX(t, "Compartilhado {{.nome}}")
-
-	var mine templateBody
-	decode(t, server.uploadTemplate("/v1/templates", leaving.AccessToken, "Meu",
-		shared), http.StatusCreated, &mine)
-	var theirs templateBody
-	decode(t, server.uploadTemplate("/v1/templates", staying.AccessToken, "Deles",
-		shared), http.StatusCreated, &theirs)
-
-	// And one template only the leaving account has.
-	var only templateBody
-	decode(t, server.uploadTemplate("/v1/templates", leaving.AccessToken, "Só meu",
-		buildDOCX(t, "Exclusivo {{.cpf}}")), http.StatusCreated, &only)
-
-	var document documentBody
-	decode(t, server.postJSON("/v1/documents", leaving.AccessToken, map[string]any{
-		"template_id": only.ID,
-		"data":        map[string]string{"cpf": "123.456.789-00"},
-	}), http.StatusCreated, &document)
-
-	// Two template bodies plus one rendered document: the shared upload counts
-	// once, which is the deduplication this test exists to respect.
-	if got := server.storedBlobs(); got != 3 {
-		t.Fatalf("stored %d files before deletion, want 3", got)
-	}
-
-	expectStatus(t, server.delete("/v1/me", leaving.AccessToken), http.StatusNoContent)
-
-	// The account is gone: its token no longer names anybody.
-	expectStatus(t, server.get("/v1/me", leaving.AccessToken), http.StatusUnauthorized)
-	expectStatus(t, server.get("/v1/templates/"+only.ID, leaving.AccessToken), http.StatusUnauthorized)
-
-	// Only the shared upload survives on disk.
-	if got := server.storedBlobs(); got != 1 {
-		t.Errorf("stored %d files after deletion, want only the shared one", got)
-	}
-
-	// And the other account is untouched, body included.
-	var stillThere templateBody
-	decode(t, server.get("/v1/templates/"+theirs.ID, staying.AccessToken), http.StatusOK, &stillThere)
-	if stillThere.Name != "Deles" {
-		t.Errorf("the surviving template reads %q", stillThere.Name)
-	}
-	expectStatus(t, server.get("/v1/templates/"+theirs.ID+"/versions/1/file", staying.AccessToken), http.StatusOK)
-}
-
-// TestDeleteDocumentRemovesTheValuesTyped covers erasure of a single document,
-// which is what a user reaches for when one contract was a mistake.
 func TestDeleteDocumentRemovesTheValuesTyped(t *testing.T) {
 	server := newTestServer(t, defaultServerOptions())
 	session := server.registerAndLogin("one-document@example.com")
@@ -1256,253 +1075,93 @@ func TestDeleteDocumentRemovesTheValuesTyped(t *testing.T) {
 	expectStatus(t, server.get("/v1/templates/"+created.ID, session.AccessToken), http.StatusOK)
 }
 
-// TestRegistrationRecordsTermsAcceptance covers the evidence side of the terms:
-// a checkbox that leaves no trace proves nothing later.
-func TestRegistrationRecordsTermsAcceptance(t *testing.T) {
+// Accounts, sessions and passwords moved to the platform: the old routes say so.
+func TestAccountRoutesAreGone(t *testing.T) {
 	server := newTestServer(t, defaultServerOptions())
+	session := server.registerAndLogin("gone@example.com")
+	for _, path := range []string{"/v1/auth/register", "/v1/auth/login", "/v1/auth/refresh", "/v1/auth/password/forgot"} {
+		expectStatus(t, server.postJSON(path, "", map[string]string{}), http.StatusGone)
+	}
+	expectStatus(t, server.postJSON("/v1/me/password", session.AccessToken, map[string]string{}), http.StatusGone)
+	expectStatus(t, server.delete("/v1/me", session.AccessToken), http.StatusGone)
+}
 
-	// Without a version there is nothing to record, so the account is refused.
-	expectStatus(t, server.postJSON("/v1/auth/register", "", map[string]string{
-		"email":    "no-terms@example.com",
-		"name":     "Sem Aceite",
-		"password": "a-sufficiently-long-password",
+// A token from the platform is who the request speaks for; members of one
+// office share its templates, and the office's name follows the platform.
+func TestMembersOfAnOfficeShareItsTemplates(t *testing.T) {
+	server := newTestServer(t, defaultServerOptions())
+	office := uuid.NewV7()
+	ana := server.tokenFor(office, "ana@example.com", "Central")
+	bia := server.tokenFor(office, "bia@example.com", "Central Imóveis")
+
+	var created templateBody
+	decode(t, server.uploadTemplate("/v1/templates", ana, "Contrato", buildDOCX(t, "Olá {{.nome}}")), http.StatusCreated, &created)
+	expectStatus(t, server.get("/v1/templates/"+created.ID, bia), http.StatusOK)
+
+	var me struct {
+		User struct {
+			Email string `json:"email"`
+		} `json:"user"`
+		Office struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"office"`
+		Role string `json:"role"`
+	}
+	decode(t, server.get("/v1/me", bia), http.StatusOK, &me)
+	if me.User.Email != "bia@example.com" || me.Office.ID != office.String() || me.Office.Name != "Central Imóveis" || me.Role != "member" {
+		t.Errorf("me %+v", me)
+	}
+}
+
+// An account from before the platform owned identity moves to the office of
+// the first member who signs in with its e-mail, once.
+func TestLegacyAccountMovesToTheOfficeByEmail(t *testing.T) {
+	server := newTestServer(t, defaultServerOptions())
+	legacy := uuid.NewV7()
+	legacyToken := server.tokenFor(legacy, "legacy-setup@example.com", "Setup")
+
+	var created templateBody
+	decode(t, server.uploadTemplate("/v1/templates", legacyToken, "Antigo", buildDOCX(t, "Olá {{.nome}}")), http.StatusCreated, &created)
+	// Turn the setup office into what migration 0005 makes of an old account.
+	raw, err := sql.Open("sqlite", server.dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	if _, err := raw.ExecContext(t.Context(),
+		`UPDATE owners SET kind = 'legacy_account', email = 'ada@example.com' WHERE id = ?`, legacy[:]); err != nil {
+		t.Fatal(err)
+	}
+
+	office := uuid.NewV7()
+	ada := server.tokenFor(office, "ADA@example.com", "Central")
+	expectStatus(t, server.get("/v1/templates/"+created.ID, ada), http.StatusOK)
+
+	other := server.tokenFor(uuid.NewV7(), "ada@example.com", "Outro")
+	expectStatus(t, server.get("/v1/templates/"+created.ID, other), http.StatusNotFound)
+}
+
+func TestDocumentsFilterByReference(t *testing.T) {
+	server := newTestServer(t, defaultServerOptions())
+	session := server.registerAndLogin("ref@example.com")
+	var created templateBody
+	decode(t, server.uploadTemplate("/v1/templates", session.AccessToken, "Contrato", buildDOCX(t, "Olá {{.nome}}")), http.StatusCreated, &created)
+	for _, ref := range []string{"contract:1", "contract:1", "contract:2", ""} {
+		expectStatus(t, server.postJSON("/v1/documents", session.AccessToken, map[string]any{
+			"template_id": created.ID, "data": map[string]string{"nome": "Ana"}, "reference": ref,
+		}), http.StatusCreated)
+	}
+	var list struct {
+		Items []struct {
+			Reference string `json:"reference"`
+		} `json:"items"`
+	}
+	decode(t, server.get("/v1/documents?reference=contract:1", session.AccessToken), http.StatusOK, &list)
+	if len(list.Items) != 2 || list.Items[0].Reference != "contract:1" {
+		t.Errorf("documents for contract:1 = %+v", list.Items)
+	}
+	expectStatus(t, server.postJSON("/v1/documents", session.AccessToken, map[string]any{
+		"template_id": created.ID, "data": map[string]string{"nome": "Ana"}, "reference": strings.Repeat("x", 101),
 	}), http.StatusUnprocessableEntity)
-
-	expectStatus(t, server.postJSON("/v1/auth/register", "", map[string]string{
-		"email":         "with-terms@example.com",
-		"name":          "Com Aceite",
-		"password":      "a-sufficiently-long-password",
-		"terms_version": "1.0",
-	}), http.StatusAccepted)
-}
-
-// TestChangePasswordEndsTheOtherSessions is the assertion the whole feature
-// rests on: changing a password has to expel whoever else was signed in, and
-// has to do it now rather than whenever their access token happens to lapse.
-func TestChangePasswordEndsTheOtherSessions(t *testing.T) {
-	server := newTestServer(t, defaultServerOptions())
-	const email = "change@example.com"
-	const oldPassword = "a-sufficiently-long-password"
-	const newPassword = "uma-senha-bem-diferente-agora"
-
-	first := server.registerAndLogin(email)
-
-	// A second sign-in, standing in for the other device — or the intruder.
-	var second sessionBody
-	decode(t, server.postJSON("/v1/auth/login", "", map[string]string{
-		"email":    email,
-		"password": oldPassword,
-	}), http.StatusOK, &second)
-
-	// Both work before the change.
-	expectStatus(t, server.get("/v1/me", first.AccessToken), http.StatusOK)
-	expectStatus(t, server.get("/v1/me", second.AccessToken), http.StatusOK)
-
-	// A JWT issue time is carried in whole seconds, so the rule that retires a
-	// token minted before a password change can only resolve to the second.
-	// Crossing one here is what makes the assertion below mean anything:
-	// without it the old token shares a second with the change and survives,
-	// which is the one-second window the design accepts.
-	time.Sleep(1100 * time.Millisecond)
-	var replacement sessionBody
-	decode(t, server.postJSON("/v1/me/password", first.AccessToken, map[string]string{
-		"current_password": oldPassword,
-		"new_password":     newPassword,
-	}), http.StatusOK, &replacement)
-
-	// The session handed back keeps the browser that asked signed in.
-	expectStatus(t, server.get("/v1/me", replacement.AccessToken), http.StatusOK)
-
-	// And the other one is out immediately — not in fifteen minutes, when its
-	// access token would have expired on its own. This is the assertion that
-	// separates a real password change from a decorative one.
-	expectStatus(t, server.get("/v1/me", second.AccessToken), http.StatusUnauthorized)
-	expectStatus(t, server.get("/v1/me", first.AccessToken), http.StatusUnauthorized)
-
-	// Its refresh token is gone too, so it cannot mint its way back in.
-	expectStatus(t, server.postJSON("/v1/auth/refresh", "", map[string]string{
-		"refresh_token": second.RefreshToken,
-	}), http.StatusUnauthorized)
-
-	// The old password no longer opens anything; the new one does.
-	expectStatus(t, server.postJSON("/v1/auth/login", "", map[string]string{
-		"email": email, "password": oldPassword,
-	}), http.StatusUnauthorized)
-	expectStatus(t, server.postJSON("/v1/auth/login", "", map[string]string{
-		"email": email, "password": newPassword,
-	}), http.StatusOK)
-
-	// And the account holder is told, which is how a victim of a takeover finds
-	// out about it.
-	if notice := server.mailbox.last(t); !strings.Contains(notice.subject, "senha foi alterada") {
-		t.Errorf("no password-change notice was sent; last subject was %q", notice.subject)
-	}
-}
-
-// TestChangePasswordRefusesTheWrongCurrentPassword covers the guard that stops
-// a stolen session from becoming a stolen account.
-func TestChangePasswordRefusesTheWrongCurrentPassword(t *testing.T) {
-	server := newTestServer(t, defaultServerOptions())
-	session := server.registerAndLogin("guard@example.com")
-
-	expectStatus(t, server.postJSON("/v1/me/password", session.AccessToken, map[string]string{
-		"current_password": "not-the-current-password",
-		"new_password":     "uma-senha-bem-diferente-agora",
-	}), http.StatusUnauthorized)
-
-	// Too short, and rejected on the same grounds registration would use.
-	expectStatus(t, server.postJSON("/v1/me/password", session.AccessToken, map[string]string{
-		"current_password": "a-sufficiently-long-password",
-		"new_password":     "curta",
-	}), http.StatusUnprocessableEntity)
-
-	// Unchanged, which is a mistake worth naming rather than silently accepting.
-	expectStatus(t, server.postJSON("/v1/me/password", session.AccessToken, map[string]string{
-		"current_password": "a-sufficiently-long-password",
-		"new_password":     "a-sufficiently-long-password",
-	}), http.StatusUnprocessableEntity)
-
-	// None of that ended the session.
-	expectStatus(t, server.get("/v1/me", session.AccessToken), http.StatusOK)
-}
-
-// TestForgotPasswordSaysNothingAboutTheAddress covers the enumeration guard: an
-// endpoint anyone can reach must not become a way to ask who has an account.
-func TestForgotPasswordSaysNothingAboutTheAddress(t *testing.T) {
-	server := newTestServer(t, defaultServerOptions())
-	server.registerAndLogin("known@example.com")
-
-	before := server.mailbox.count()
-
-	expectStatus(t, server.postJSON("/v1/auth/password/forgot", "", map[string]string{
-		"email": "known@example.com",
-	}), http.StatusAccepted)
-	expectStatus(t, server.postJSON("/v1/auth/password/forgot", "", map[string]string{
-		"email": "nobody@example.com",
-	}), http.StatusAccepted)
-
-	// Identical answers, and exactly one message — the difference is in the
-	// mailbox, where the caller cannot see it.
-	if sent := server.mailbox.count() - before; sent != 1 {
-		t.Errorf("sent %d messages, want exactly one", sent)
-	}
-}
-
-// TestResetPasswordConsumesTheLinkOnce walks the recovery the way a person
-// does: ask, follow the link from the mail, set a password, sign in.
-func TestResetPasswordConsumesTheLinkOnce(t *testing.T) {
-	server := newTestServer(t, defaultServerOptions())
-	const email = "forgot@example.com"
-	const newPassword = "outra-senha-bem-comprida"
-
-	session := server.registerAndLogin(email)
-
-	expectStatus(t, server.postJSON("/v1/auth/password/forgot", "", map[string]string{
-		"email": email,
-	}), http.StatusAccepted)
-
-	secret := resetTokenFrom(t, server.mailbox.last(t).body)
-
-	// A JWT issue time is carried in whole seconds, so the rule that retires a
-	// token minted before a password change can only resolve to the second.
-	// Crossing one here is what makes the assertion below mean anything:
-	// without it the old token shares a second with the change and survives,
-	// which is the one-second window the design accepts.
-	time.Sleep(1100 * time.Millisecond)
-
-	expectStatus(t, server.postJSON("/v1/auth/password/reset", "", map[string]string{
-		"token":        secret,
-		"new_password": newPassword,
-	}), http.StatusNoContent)
-
-	// A reset assumes the account may already be in someone else's hands, so
-	// nobody stays signed in — including whoever asked.
-	expectStatus(t, server.get("/v1/me", session.AccessToken), http.StatusUnauthorized)
-
-	// The new password works.
-	expectStatus(t, server.postJSON("/v1/auth/login", "", map[string]string{
-		"email": email, "password": newPassword,
-	}), http.StatusOK)
-
-	// And the link is spent: a second use is refused, so a forwarded or
-	// intercepted mail is worth nothing after the fact.
-	expectStatus(t, server.postJSON("/v1/auth/password/reset", "", map[string]string{
-		"token":        secret,
-		"new_password": "mais-uma-senha-bem-comprida",
-	}), http.StatusUnauthorized)
-}
-
-// TestResetPasswordRejectsAnUnknownToken covers the shape of a guessed link.
-func TestResetPasswordRejectsAnUnknownToken(t *testing.T) {
-	server := newTestServer(t, defaultServerOptions())
-
-	expectStatus(t, server.postJSON("/v1/auth/password/reset", "", map[string]string{
-		"token":        "not-a-real-token",
-		"new_password": "uma-senha-bem-comprida-mesmo",
-	}), http.StatusUnauthorized)
-}
-
-// resetTokenFrom pulls the secret out of the link a reset mail carries.
-func resetTokenFrom(t *testing.T, body string) string {
-	t.Helper()
-
-	const marker = "token="
-	at := strings.Index(body, marker)
-	if at < 0 {
-		t.Fatalf("no reset link in the message:\n%s", body)
-	}
-	secret := body[at+len(marker):]
-	if end := strings.IndexAny(secret, "\r\n "); end >= 0 {
-		secret = secret[:end]
-	}
-	if secret == "" {
-		t.Fatalf("empty reset token in the message:\n%s", body)
-	}
-	return secret
-}
-
-// TestRegisterDoesNotRevealATakenEmail covers the enumeration guard on the one
-// endpoint that had none: registering an address that already has an account
-// must look, from outside, exactly like registering a new one.
-func TestRegisterDoesNotRevealATakenEmail(t *testing.T) {
-	server := newTestServer(t, defaultServerOptions())
-	server.registerAndLogin("taken@example.com")
-
-	register := func(email string) (int, string) {
-		t.Helper()
-		resp := server.postJSON("/v1/auth/register", "", map[string]string{
-			"email":         email,
-			"name":          "Outra Pessoa",
-			"password":      "outra-senha-bem-comprida",
-			"terms_version": "1.0",
-		})
-		defer resp.Body.Close()
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatalf("read body: %v", err)
-		}
-		return resp.StatusCode, string(body)
-	}
-
-	before := server.mailbox.count()
-	takenStatus, takenBody := register("taken@example.com")
-	freeStatus, freeBody := register("free@example.com")
-
-	if takenStatus != freeStatus || takenBody != freeBody {
-		t.Errorf("taken address answered %d %q, free one %d %q; they must be identical",
-			takenStatus, takenBody, freeStatus, freeBody)
-	}
-
-	// The difference lives in the mailbox, where only the owner can see it.
-	if sent := server.mailbox.count() - before; sent != 1 {
-		t.Errorf("sent %d messages, want exactly the notice to the owner", sent)
-	}
-
-	// And the original account still opens with its own password only.
-	expectStatus(t, server.postJSON("/v1/auth/login", "", map[string]string{
-		"email": "taken@example.com", "password": "a-sufficiently-long-password",
-	}), http.StatusOK)
-	expectStatus(t, server.postJSON("/v1/auth/login", "", map[string]string{
-		"email": "taken@example.com", "password": "outra-senha-bem-comprida",
-	}), http.StatusUnauthorized)
 }

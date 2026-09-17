@@ -76,10 +76,15 @@ type GenerateRequest struct {
 	// BatchID joins the document to a batch of the same account, template and
 	// version.
 	BatchID *uuid.UUID
+	// Reference ties the document to a record elsewhere; see domain.Document.
+	Reference string
 }
 
 // Generate renders a document and stores it.
 func (s *Documents) Generate(ctx context.Context, req GenerateRequest) (*domain.Document, error) {
+	if err := domain.ValidateReference(req.Reference); err != nil {
+		return nil, err
+	}
 	if req.BatchID != nil {
 		pinned, err := s.batchVersion(ctx, req)
 		if err != nil {
@@ -134,6 +139,7 @@ func (s *Documents) Generate(ctx context.Context, req GenerateRequest) (*domain.
 		Data:              req.Data,
 		CreatedAt:         s.now().UTC(),
 		BatchID:           req.BatchID,
+		Reference:         req.Reference,
 	}
 	if err := s.documents.Create(ctx, doc); err != nil {
 		return nil, err

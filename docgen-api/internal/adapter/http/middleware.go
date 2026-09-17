@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"docgen/internal/domain"
 	"docgen/internal/platform/ratelimit"
+	"docgen/internal/usecase"
 )
 
 // middleware wraps a handler with behaviour applied around every request.
@@ -29,17 +29,17 @@ func chain(h http.Handler, middlewares ...middleware) http.Handler {
 // contextKey is unexported so no other package can collide with these keys.
 type contextKey int
 
-const userContextKey contextKey = iota
+const callerContextKey contextKey = iota
 
-// userFrom returns the authenticated account attached by requireAuth. It panics
-// if called on an unauthenticated route, which would be a wiring mistake rather
-// than a runtime condition worth handling.
-func userFrom(ctx context.Context) *domain.User {
-	user, ok := ctx.Value(userContextKey).(*domain.User)
+// callerFrom returns the caller attached by requireAuth. It panics if called on
+// an unauthenticated route, which would be a wiring mistake rather than a
+// runtime condition worth handling.
+func callerFrom(ctx context.Context) *usecase.Caller {
+	caller, ok := ctx.Value(callerContextKey).(*usecase.Caller)
 	if !ok {
 		panic("http: handler requires authentication but is not behind requireAuth")
 	}
-	return user
+	return caller
 }
 
 // statusRecorder remembers what a handler wrote, for the access log.
@@ -130,14 +130,14 @@ func limitPerIP(limiter *ratelimit.Limiter, trustProxy bool, logger *slog.Logger
 	}
 }
 
-// limitPerUser applies a token bucket keyed by account. It sits behind
+// limitPerUser applies a token bucket keyed by office. It sits behind
 // requireAuth, where the caller is already known, and bounds the operations
 // that cost real work regardless of how many addresses a client comes from.
 func limitPerUser(limiter *ratelimit.Limiter, logger *slog.Logger) middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			user := userFrom(r.Context())
-			if allowed, retryAfter := limiter.Allow(user.ID.String()); !allowed {
+			caller := callerFrom(r.Context())
+			if allowed, retryAfter := limiter.Allow(caller.OwnerID.String()); !allowed {
 				rejectRateLimited(w, logger, retryAfter)
 				return
 			}
@@ -157,8 +157,8 @@ func rejectRateLimited(w http.ResponseWriter, logger *slog.Logger, retryAfter ti
 	writeFailure(w, logger, http.StatusTooManyRequests, codeRateLimited, "too many requests")
 }
 
-// requireAuth rejects a request that carries no valid access token, and puts
-// the resolved account in the request context.
+// requireAuth rejects a request that carries no valid token from the
+// Imobiliary platform, and puts the resolved caller in the request context.
 func (s *Server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		raw, ok := bearerToken(r)
@@ -169,14 +169,14 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		user, err := s.identity.Authenticate(r.Context(), raw)
+		caller, err := s.access.Authenticate(r.Context(), raw)
 		if err != nil {
 			w.Header().Set("WWW-Authenticate", "Bearer")
 			writeError(w, s.logger, err)
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), userContextKey, user)
+		ctx := context.WithValue(r.Context(), callerContextKey, caller)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

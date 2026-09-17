@@ -25,19 +25,16 @@ const uploadOverhead = 1 << 20
 type Limiters struct {
 	// Global is keyed by client IP and covers every request.
 	Global *ratelimit.Limiter
-	// Auth is keyed by client IP and guards the credential endpoints.
-	Auth *ratelimit.Limiter
 	// Write is keyed by account and covers uploading and generating.
 	Write *ratelimit.Limiter
 }
 
 // Options collects everything the server needs.
 type Options struct {
-	Identity  *usecase.Identity
+	Access    *usecase.Access
 	Templates *usecase.Templates
 	Documents *usecase.Documents
 	Privacy   *usecase.Privacy
-	Passwords *usecase.Passwords
 	Stats     *usecase.Stats
 	Batches   *usecase.Batches
 	Limiters  Limiters
@@ -52,11 +49,10 @@ type Options struct {
 
 // Server turns the use cases into HTTP endpoints.
 type Server struct {
-	identity  *usecase.Identity
+	access    *usecase.Access
 	templates *usecase.Templates
 	documents *usecase.Documents
 	privacy   *usecase.Privacy
-	passwords *usecase.Passwords
 	stats     *usecase.Stats
 	batches   *usecase.Batches
 	limiters  Limiters
@@ -71,11 +67,10 @@ type Server struct {
 // NewServer builds a server from its dependencies.
 func NewServer(opts Options) *Server {
 	return &Server{
-		identity:          opts.Identity,
+		access:            opts.Access,
 		templates:         opts.Templates,
 		documents:         opts.Documents,
 		privacy:           opts.Privacy,
-		passwords:         opts.Passwords,
 		stats:             opts.Stats,
 		batches:           opts.Batches,
 		limiters:          opts.Limiters,
@@ -94,20 +89,12 @@ func NewServer(opts Options) *Server {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
-	// credentials adds the strict per-IP limit that makes password and token
-	// guessing impractical.
-	credentials := func(h http.HandlerFunc) http.Handler {
-		return chain(h,
-			limitBody(s.maxRequestBytes),
-			limitPerIP(s.limiters.Auth, s.trustProxyHeaders, s.logger),
-		)
-	}
 	// read is authenticated but cheap, so it carries only the global limit.
 	read := func(h http.HandlerFunc) http.Handler {
 		return s.requireAuth(h)
 	}
 	// write is authenticated and expensive: rendering a document or parsing an
-	// uploaded archive. It is additionally limited per account.
+	// uploaded archive. It is additionally limited per office.
 	write := func(h http.HandlerFunc, maxBytes int64) http.Handler {
 		return s.requireAuth(chain(h,
 			limitBody(maxBytes),
@@ -115,34 +102,23 @@ func (s *Server) Handler() http.Handler {
 		))
 	}
 
-	// credentialed is authenticated, like read, but charged to the strict
-	// per-IP budget rather than the write one. Guessing a password is guessing
-	// a password whether or not the guesser already holds a session, and no
-	// existing wrapper does both.
-	credentialed := func(h http.HandlerFunc) http.Handler {
-		return s.requireAuth(chain(h,
-			limitBody(s.maxRequestBytes),
-			limitPerIP(s.limiters.Auth, s.trustProxyHeaders, s.logger),
-		))
-	}
-
 	mux.Handle("GET /healthz", http.HandlerFunc(s.handleHealth))
 
-	mux.Handle("POST /v1/auth/register", credentials(s.handleRegister))
-	mux.Handle("POST /v1/auth/login", credentials(s.handleLogin))
-	mux.Handle("POST /v1/auth/refresh", credentials(s.handleRefresh))
-	mux.Handle("POST /v1/auth/logout", credentials(s.handleLogout))
-	mux.Handle("POST /v1/auth/password/forgot", credentials(s.handleForgotPassword))
-	mux.Handle("POST /v1/auth/password/reset", credentials(s.handleResetPassword))
+	// Accounts, sessions, passwords and account erasure moved to the Imobiliary
+	// platform with identity. The old routes say so rather than answering 404.
+	for _, route := range []string{
+		"POST /v1/auth/register", "POST /v1/auth/login", "POST /v1/auth/refresh", "POST /v1/auth/logout",
+		"POST /v1/auth/password/forgot", "POST /v1/auth/password/reset",
+		"POST /v1/me/password", "DELETE /v1/me",
+	} {
+		mux.Handle(route, http.HandlerFunc(s.handleGone))
+	}
 
 	mux.Handle("GET /v1/me", read(s.handleMe))
 	mux.Handle("GET /v1/me/stats", read(s.handleStats))
-	mux.Handle("POST /v1/me/password", credentialed(s.handleChangePassword))
-	// The data-subject rights of article 18. Erasure is a mutation and is
-	// charged to the write budget; the export is a read, but an expensive one,
-	// so it is charged too.
+	// The office's portable copy. A read, but an expensive one, so it is
+	// charged to the write budget.
 	mux.Handle("GET /v1/me/export", write(s.handleExportAccount, s.maxRequestBytes))
-	mux.Handle("DELETE /v1/me", write(s.handleDeleteAccount, s.maxRequestBytes))
 
 	uploadLimit := s.maxUploadBytes + uploadOverhead
 	mux.Handle("POST /v1/templates", write(s.handleCreateTemplate, uploadLimit))

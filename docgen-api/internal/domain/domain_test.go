@@ -22,65 +22,6 @@ func TestNormalizeEmail(t *testing.T) {
 	}
 }
 
-func TestValidateRegistration(t *testing.T) {
-	const (
-		goodEmail    = "ada@example.com"
-		goodName     = "Ada Lovelace"
-		goodPassword = "a-sufficiently-long-password"
-	)
-
-	t.Run("accepts valid input", func(t *testing.T) {
-		if err := ValidateRegistration(goodEmail, goodName, goodPassword); err != nil {
-			t.Errorf("ValidateRegistration on valid input = %v", err)
-		}
-	})
-
-	tests := []struct {
-		name, email, fullName, password string
-		wantField                       string
-	}{
-		{"empty email", "", goodName, goodPassword, "email"},
-		{"malformed email", "not-an-address", goodName, goodPassword, "email"},
-		{"overlong email", strings.Repeat("a", 250) + "@example.com", goodName, goodPassword, "email"},
-		{"empty name", goodEmail, "   ", goodPassword, "name"},
-		{"overlong name", goodEmail, strings.Repeat("n", MaxNameLength+1), goodPassword, "name"},
-		{"empty password", goodEmail, goodName, "", "password"},
-		{"short password", goodEmail, goodName, strings.Repeat("x", MinPasswordLength-1), "password"},
-		{"overlong password", goodEmail, goodName, strings.Repeat("x", MaxPasswordLength+1), "password"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			err := ValidateRegistration(tc.email, tc.fullName, tc.password)
-			if !errors.Is(err, ErrValidation) {
-				t.Fatalf("error = %v, want a validation error", err)
-			}
-
-			var invalid *ValidationError
-			if !errors.As(err, &invalid) {
-				t.Fatalf("error %v is not a *ValidationError", err)
-			}
-			if !mentionsField(invalid, tc.wantField) {
-				t.Errorf("error blames %v, want a problem on %q", invalid.Fields, tc.wantField)
-			}
-		})
-	}
-}
-
-// TestValidateRegistrationReportsEveryProblem checks that a caller learns about
-// all the mistakes at once rather than one round trip at a time.
-func TestValidateRegistrationReportsEveryProblem(t *testing.T) {
-	err := ValidateRegistration("", "", "")
-
-	var invalid *ValidationError
-	if !errors.As(err, &invalid) {
-		t.Fatalf("error %v is not a *ValidationError", err)
-	}
-	if len(invalid.Fields) != 3 {
-		t.Errorf("reported %d problems, want 3: %v", len(invalid.Fields), invalid.Fields)
-	}
-}
-
 func TestIsValidPlaceholderName(t *testing.T) {
 	valid := []string{"name", "customer_name", "line_1", "a"}
 	for _, name := range valid {

@@ -5,8 +5,10 @@ package sqlite
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"testing"
 	"time"
 	"uuid"
@@ -28,22 +30,14 @@ func openTestDB(t *testing.T) *DB {
 	return db
 }
 
-func newTestUser(t *testing.T, ctx context.Context, db *DB) *domain.User {
+func newTestUser(t *testing.T, ctx context.Context, db *DB) *domain.Owner {
 	t.Helper()
 
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	u := &domain.User{
-		ID:           uuid.NewV7(),
-		Email:        "ada+" + uuid.NewV4().String() + "@example.com",
-		Name:         "Ada Lovelace",
-		PasswordHash: "$argon2id$stub",
-		CreatedAt:    now,
-		UpdatedAt:    now,
+	id := uuid.NewV7()
+	if err := NewOwnerRepository(db).EnsureOrganization(ctx, id, "Escritório "+id.String()[:8], time.Now()); err != nil {
+		t.Fatalf("create owner: %v", err)
 	}
-	if err := NewUserRepository(db).Create(ctx, u); err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-	return u
+	return &domain.Owner{ID: id}
 }
 
 func TestMigrationsAreIdempotent(t *testing.T) {
@@ -62,150 +56,44 @@ func TestMigrationsAreIdempotent(t *testing.T) {
 	second.Close()
 }
 
-func TestUserRepositoryRoundTrip(t *testing.T) {
+// A legacy account keeps its rows until an office claims it by e-mail, once.
+func TestClaimLegacyMovesEverythingOnce(t *testing.T) {
 	ctx := t.Context()
 	db := openTestDB(t)
-	repo := NewUserRepository(db)
-
-	want := newTestUser(t, ctx, db)
-
-	got, err := repo.ByEmail(ctx, want.Email)
-	if err != nil {
-		t.Fatalf("ByEmail: %v", err)
-	}
-	if got.ID != want.ID || got.Name != want.Name || got.PasswordHash != want.PasswordHash {
-		t.Errorf("ByEmail returned %+v, want %+v", got, want)
-	}
-	if !got.CreatedAt.Equal(want.CreatedAt) {
-		t.Errorf("CreatedAt = %v, want %v", got.CreatedAt, want.CreatedAt)
-	}
-
-	if _, err := repo.ByID(ctx, want.ID); err != nil {
-		t.Errorf("ByID: %v", err)
-	}
-	if _, err := repo.ByEmail(ctx, "nobody@example.com"); !errors.Is(err, domain.ErrNotFound) {
-		t.Errorf("ByEmail on a missing account = %v, want ErrNotFound", err)
-	}
-}
-
-func TestUserRepositoryRejectsDuplicateEmail(t *testing.T) {
-	ctx := t.Context()
-	db := openTestDB(t)
-	repo := NewUserRepository(db)
-
-	first := newTestUser(t, ctx, db)
-	duplicate := &domain.User{
-		ID:           uuid.NewV7(),
-		Email:        first.Email,
-		Name:         "Impostor",
-		PasswordHash: "$argon2id$stub",
-		CreatedAt:    time.Now().UTC(),
-		UpdatedAt:    time.Now().UTC(),
-	}
-
-	if err := repo.Create(ctx, duplicate); !errors.Is(err, domain.ErrAlreadyExists) {
-		t.Errorf("Create with a taken email = %v, want ErrAlreadyExists", err)
-	}
-}
-
-// TestSessionRotationDetectsReuse is the security-critical case: a refresh
-// token may be exchanged exactly once, and a second attempt must be reported as
-// a replay rather than silently issuing another session.
-func TestSessionRotationDetectsReuse(t *testing.T) {
-	ctx := t.Context()
-	db := openTestDB(t)
-	sessions := NewSessionRepository(db)
-	user := newTestUser(t, ctx, db)
+	owners := NewOwnerRepository(db)
 	now := time.Now().UTC()
 
-	original := &domain.RefreshToken{
-		ID:        uuid.NewV7(),
-		UserID:    user.ID,
-		TokenHash: []byte("hash-of-the-first-secret-000000000"),
-		ExpiresAt: now.Add(time.Hour),
-		CreatedAt: now,
+	legacy := uuid.NewV7()
+	if _, err := db.write.ExecContext(ctx,
+		`INSERT INTO owners (id, kind, name, email, created_at) VALUES (?, 'legacy_account', 'Ada', 'ada@example.com', ?)`,
+		idOf(legacy), formatTime(now)); err != nil {
+		t.Fatal(err)
 	}
-	if err := sessions.Create(ctx, original); err != nil {
-		t.Fatalf("create refresh token: %v", err)
-	}
-
-	stored, err := sessions.ByHash(ctx, original.TokenHash)
-	if err != nil {
-		t.Fatalf("ByHash: %v", err)
-	}
-	if !stored.IsUsable(now) {
-		t.Fatal("freshly created token is not usable")
+	templates := NewTemplateRepository(db)
+	template := &domain.Template{ID: uuid.NewV7(), OwnerID: legacy, Name: "Contrato", CreatedAt: now, UpdatedAt: now, LatestVersion: 1}
+	version := &domain.TemplateVersion{ID: uuid.NewV7(), TemplateID: template.ID, Version: 1, BlobHash: "h", Size: 1, CreatedAt: now}
+	if err := templates.Create(ctx, template, version); err != nil {
+		t.Fatal(err)
 	}
 
-	successor := &domain.RefreshToken{
-		ID:        uuid.NewV7(),
-		UserID:    user.ID,
-		TokenHash: []byte("hash-of-the-second-secret-00000000"),
-		ParentID:  &original.ID,
-		ExpiresAt: now.Add(time.Hour),
-		CreatedAt: now,
+	office := newTestUser(t, ctx, db)
+	other := newTestUser(t, ctx, db)
+	moved, err := owners.ClaimLegacy(ctx, " ADA@example.com ", office.ID, now)
+	if err != nil || !moved {
+		t.Fatalf("claim = %v, %v", moved, err)
 	}
-	if err := sessions.Rotate(ctx, original.ID, now, successor); err != nil {
-		t.Fatalf("first rotation: %v", err)
+	if _, err := templates.ByID(ctx, office.ID, template.ID); err != nil {
+		t.Errorf("the office does not own the template: %v", err)
 	}
-
-	// Replaying the original must fail, whatever successor is offered.
-	replay := &domain.RefreshToken{
-		ID:        uuid.NewV7(),
-		UserID:    user.ID,
-		TokenHash: []byte("hash-of-a-third-secret-00000000000"),
-		ParentID:  &original.ID,
-		ExpiresAt: now.Add(time.Hour),
-		CreatedAt: now,
+	if moved, _ := owners.ClaimLegacy(ctx, "ada@example.com", other.ID, now); moved {
+		t.Error("the same account moved twice")
 	}
-	if err := sessions.Rotate(ctx, original.ID, now, replay); !errors.Is(err, domain.ErrSessionReused) {
-		t.Errorf("replaying a consumed token = %v, want ErrSessionReused", err)
+	if moved, _ := owners.ClaimLegacy(ctx, "nobody@example.com", other.ID, now); moved {
+		t.Error("an unknown e-mail moved something")
 	}
-
-	// The successor stays usable until the chain is revoked.
-	if _, err := sessions.ByHash(ctx, successor.TokenHash); err != nil {
-		t.Fatalf("successor lookup: %v", err)
-	}
-	if err := sessions.RevokeAllForUser(ctx, user.ID, now); err != nil {
-		t.Fatalf("revoke chain: %v", err)
-	}
-
-	after, err := sessions.ByHash(ctx, successor.TokenHash)
-	if err != nil {
-		t.Fatalf("successor lookup after revocation: %v", err)
-	}
-	if after.IsUsable(now) {
-		t.Error("successor is still usable after the chain was revoked")
-	}
-}
-
-func TestSessionDeleteExpired(t *testing.T) {
-	ctx := t.Context()
-	db := openTestDB(t)
-	sessions := NewSessionRepository(db)
-	user := newTestUser(t, ctx, db)
-	now := time.Now().UTC()
-
-	expired := &domain.RefreshToken{
-		ID:        uuid.NewV7(),
-		UserID:    user.ID,
-		TokenHash: []byte("expired-token-hash-0000000000000000"),
-		ExpiresAt: now.Add(-time.Hour),
-		CreatedAt: now.Add(-2 * time.Hour),
-	}
-	if err := sessions.Create(ctx, expired); err != nil {
-		t.Fatalf("create expired token: %v", err)
-	}
-
-	removed, err := sessions.DeleteExpired(ctx, now)
-	if err != nil {
-		t.Fatalf("DeleteExpired: %v", err)
-	}
-	if removed != 1 {
-		t.Errorf("DeleteExpired removed %d rows, want 1", removed)
-	}
-	if _, err := sessions.ByHash(ctx, expired.TokenHash); !errors.Is(err, domain.ErrNotFound) {
-		t.Errorf("expired token still present: %v", err)
+	stored, err := owners.ByID(ctx, legacy)
+	if err != nil || stored.MergedInto == nil || *stored.MergedInto != office.ID || stored.Kind != domain.OwnerLegacyAccount {
+		t.Errorf("legacy owner %+v, %v", stored, err)
 	}
 }
 
@@ -379,5 +267,70 @@ func TestDocumentRepositoryIsolatesOwners(t *testing.T) {
 	}
 	if len(list) != 0 {
 		t.Errorf("stranger's listing returned %d documents, want 0", len(list))
+	}
+}
+
+// A database from before identity moved keeps its rows: accounts become legacy
+// owners, and templates and documents still point at them.
+func TestOrganizationsMigrationKeepsExistingRows(t *testing.T) {
+	ctx := t.Context()
+	path := filepath.Join(t.TempDir(), "old.db")
+
+	old, err := openPool(path, "immediate")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 4; i++ {
+		names, _ := fs.Glob(migrationFS, "migrations/000"+strconv.Itoa(i)+"_*.sql")
+		sqlText, err := migrationFS.ReadFile(names[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := old.ExecContext(ctx, string(sqlText)); err != nil {
+			t.Fatalf("migration %d: %v", i, err)
+		}
+	}
+	now := formatTime(time.Now())
+	user, template, version, document := idOf(uuid.NewV7()), idOf(uuid.NewV7()), idOf(uuid.NewV7()), idOf(uuid.NewV7())
+	for _, stmt := range []struct {
+		q    string
+		args []any
+	}{
+		{`INSERT INTO users (id, email, name, password_hash, created_at, updated_at) VALUES (?, 'ada@example.com', 'Ada', 'x', ?, ?)`, []any{user, now, now}},
+		{`INSERT INTO templates (id, owner_id, name, description, latest_version, created_at, updated_at) VALUES (?, ?, 'Contrato', '', 1, ?, ?)`, []any{template, user, now, now}},
+		{`INSERT INTO template_versions (id, template_id, version, blob_hash, size, placeholders, created_at) VALUES (?, ?, 1, 'h', 1, '[]', ?)`, []any{version, template, now}},
+		{`INSERT INTO documents (id, owner_id, template_id, template_version_id, template_version, filename, blob_hash, size, data, created_at) VALUES (?, ?, ?, ?, 1, 'a.docx', 'h', 1, '{}', ?)`, []any{document, user, template, version, now}},
+		{`PRAGMA user_version = 4`, nil},
+	} {
+		if _, err := old.ExecContext(ctx, stmt.q, stmt.args...); err != nil {
+			t.Fatalf("%s: %v", stmt.q, err)
+		}
+	}
+	old.Close()
+
+	db, err := Open(ctx, path)
+	if err != nil {
+		t.Fatalf("migrating an old database: %v", err)
+	}
+	defer db.Close()
+	owner, err := NewOwnerRepository(db).ByID(ctx, uuid.UUID(user))
+	if err != nil || owner.Kind != domain.OwnerLegacyAccount || owner.Email != "ada@example.com" {
+		t.Fatalf("legacy owner %+v, %v", owner, err)
+	}
+	docs, err := NewDocumentRepository(db).List(ctx, owner.ID, domain.DocumentFilter{}, 10, 0)
+	if err != nil || len(docs) != 1 || docs[0].Reference != "" {
+		t.Errorf("documents after the migration %+v, %v", docs, err)
+	}
+	for _, gone := range []string{"users", "refresh_tokens", "password_resets"} {
+		var n int
+		db.read.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, gone).Scan(&n)
+		if n != 0 {
+			t.Errorf("table %s survived", gone)
+		}
+	}
+	var fk int
+	db.write.QueryRowContext(ctx, `PRAGMA foreign_keys`).Scan(&fk)
+	if fk != 1 {
+		t.Error("foreign keys were left off after the migration")
 	}
 }

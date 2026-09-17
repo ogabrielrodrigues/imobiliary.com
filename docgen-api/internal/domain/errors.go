@@ -13,12 +13,9 @@ import (
 // Callers compare them with errors.Is; the transport layer maps each one to an
 // HTTP status code.
 var (
-	ErrNotFound           = errors.New("resource not found")
-	ErrAlreadyExists      = errors.New("resource already exists")
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrSessionExpired     = errors.New("session expired")
-	ErrSessionReused      = errors.New("refresh token reused")
-	ErrValidation         = errors.New("validation failed")
+	ErrNotFound      = errors.New("resource not found")
+	ErrAlreadyExists = errors.New("resource already exists")
+	ErrValidation    = errors.New("validation failed")
 )
 
 // FieldError describes a single validation problem, tied to the input field
