@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Imobiliary API
-  version: "0.7.0"
+  version: "0.7.1"
   summary: Rental property management for brokers, small agencies and owners.
   description: |
     The API behind the Imobiliary platform. It covers identity and the office
@@ -1418,7 +1418,7 @@ paths:
                       type: object
                       required: [name, value]
                       properties:
-                        name: { type: string, enum: [contrato_numero, locador_qualificacao, locador_nome, locador_termo, locador_titulo, locatario_qualificacao, locatario_nome, locatario_termo, locatario_titulo, fiador_qualificacao, fiador_nome, fiador_termo, fiador_titulo, imovel_endereco, imovel_matricula, imovel_cartorio, imovel_iptu, aluguel_valor, aluguel_extenso, garantia_texto, caucao_valor, caucao_extenso, caucao_alugueis, prazo_meses, data_inicio, data_termino, data_primeiro_reajuste, data_assinatura_extenso, indice_reajuste, vencimento_dia, multa_atraso, juros_atraso, taxa_administracao, promissorias_quantidade, promissorias_periodo, foro] }
+                        name: { type: string, enum: [contrato_numero, locador_qualificacao, locador_nome, locador_titulo, locador_termo, locador_termo_inicio, locador_do, locador_ao, locador_no, locador_pelo, locador_o, locatario_qualificacao, locatario_nome, locatario_titulo, locatario_termo, locatario_termo_inicio, locatario_do, locatario_ao, locatario_no, locatario_pelo, locatario_o, fiador_qualificacao, fiador_nome, fiador_titulo, fiador_termo, fiador_termo_inicio, fiador_do, fiador_ao, fiador_no, fiador_pelo, fiador_o, imovel_endereco, imovel_matricula, imovel_cartorio, imovel_iptu, aluguel_valor, aluguel_extenso, garantia_texto, caucao_valor, caucao_extenso, caucao_alugueis, prazo_meses, data_inicio, data_termino, data_primeiro_reajuste, data_assinatura_extenso, indice_reajuste, vencimento_dia, multa_atraso, juros_atraso, taxa_administracao, promissorias_quantidade, promissorias_periodo, foro] }
                         value: { type: string }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }

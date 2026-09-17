@@ -40,9 +40,12 @@ type DocumentField struct {
 // part of the API's contract: templates are marked with these names.
 var DocumentFieldNames = []string{
 	"contrato_numero",
-	"locador_qualificacao", "locador_nome", "locador_termo", "locador_titulo",
-	"locatario_qualificacao", "locatario_nome", "locatario_termo", "locatario_titulo",
-	"fiador_qualificacao", "fiador_nome", "fiador_termo", "fiador_titulo",
+	"locador_qualificacao", "locador_nome", "locador_titulo", "locador_termo", "locador_termo_inicio",
+	"locador_do", "locador_ao", "locador_no", "locador_pelo", "locador_o",
+	"locatario_qualificacao", "locatario_nome", "locatario_titulo", "locatario_termo", "locatario_termo_inicio",
+	"locatario_do", "locatario_ao", "locatario_no", "locatario_pelo", "locatario_o",
+	"fiador_qualificacao", "fiador_nome", "fiador_titulo", "fiador_termo", "fiador_termo_inicio",
+	"fiador_do", "fiador_ao", "fiador_no", "fiador_pelo", "fiador_o",
 	"imovel_endereco", "imovel_matricula", "imovel_cartorio", "imovel_iptu",
 	"aluguel_valor", "aluguel_extenso",
 	"garantia_texto", "caucao_valor", "caucao_extenso", "caucao_alugueis",
@@ -123,7 +126,13 @@ func (d *Documents) ContractFields(ctx context.Context, caller *Caller, contract
 			values[prefix+"_nome"] = names(list)
 			if len(list) > 0 {
 				values[prefix+"_termo"] = noun.Term(list)
+				values[prefix+"_termo_inicio"] = noun.TermStart(list)
 				values[prefix+"_titulo"] = noun.Title(list)
+				values[prefix+"_do"] = noun.Contraction("de", list)
+				values[prefix+"_ao"] = noun.Contraction("a", list)
+				values[prefix+"_no"] = noun.Contraction("em", list)
+				values[prefix+"_pelo"] = noun.Contraction("por", list)
+				values[prefix+"_o"] = noun.Ending(list)
 			}
 		}
 		landlords, tenants := byRole[domain.RoleLandlord], byRole[domain.RoleTenant]

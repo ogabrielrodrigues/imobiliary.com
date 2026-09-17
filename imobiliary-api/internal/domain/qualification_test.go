@@ -49,6 +49,34 @@ func TestRoleTerms(t *testing.T) {
 	}
 }
 
+func TestContractionsAndEndings(t *testing.T) {
+	ana := individualFor("Ana", GenderFemale)
+	caio := individualFor("Caio", GenderMale)
+	sem := individualFor("Sem", "")
+	for _, c := range []struct {
+		got, want string
+	}{
+		{NounLandlord.Contraction("de", []*Person{caio}), "do locador"},
+		{NounLandlord.Contraction("de", []*Person{ana}), "da locadora"},
+		{NounLandlord.Contraction("de", []*Person{sem}), "do(a) locador(a)"},
+		{NounTenant.Contraction("a", []*Person{ana}), "à locatária"},
+		{NounTenant.Contraction("a", []*Person{sem}), "ao(à) locatário(a)"},
+		{NounTenant.Contraction("a", []*Person{caio, sem}), "aos(às) locatários(as)"},
+		{NounTenant.Contraction("em", []*Person{ana, caio}), "nos locatários"},
+		{NounLandlord.Contraction("por", []*Person{sem, ana}), "pelos(as) locadores(as)"},
+		{NounTenant.TermStart([]*Person{ana}), "A locatária"},
+		{NounTenant.TermStart([]*Person{sem}), "O(a) locatário(a)"},
+		{NounTenant.Ending([]*Person{ana}), "a"},
+		{NounTenant.Ending([]*Person{caio, ana}), "os"},
+		{NounTenant.Ending([]*Person{sem}), "o(a)"},
+		{NounTenant.Ending([]*Person{sem, ana}), "os(as)"},
+	} {
+		if c.got != c.want {
+			t.Errorf("got %q, want %q", c.got, c.want)
+		}
+	}
+}
+
 func TestQualify(t *testing.T) {
 	ana := individualFor("ANA SOUZA", GenderFemale)
 	want := "ANA SOUZA, brasileira, casada sob o regime da comunhão parcial de bens, professora, " +

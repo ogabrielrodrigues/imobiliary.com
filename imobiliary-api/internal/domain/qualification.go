@@ -98,6 +98,57 @@ func (n RoleNoun) Term(people []*Person) string {
 	return inflect(a, "o", "a") + " " + inflect(a, n.Singular, n.Feminine)
 }
 
+// Contraction is the role after a preposition that fuses with the article:
+// "de" gives "do locador", "da locadora", "dos(as) locadores(as)"; "a" gives
+// "ao locador", "à locadora"; "em" gives "no"; "por" gives "pelo".
+func (n RoleNoun) Contraction(preposition string, people []*Person) string {
+	forms := map[string][4]string{
+		"de":  {"do", "da", "dos", "das"},
+		"a":   {"ao", "à", "aos", "às"},
+		"em":  {"no", "na", "nos", "nas"},
+		"por": {"pelo", "pela", "pelos", "pelas"},
+	}[preposition]
+	a := GroupAgreement(people)
+	if len(people) > 1 {
+		return articleForm(a, forms[2], forms[3]) + " " + inflect(a, n.Plural, n.FemininePlural)
+	}
+	return articleForm(a, forms[0], forms[1]) + " " + inflect(a, n.Singular, n.Feminine)
+}
+
+// articleForm writes an article or a contraction in the agreement, with a
+// neutral form that keeps both: "o(a)", "do(a)", "ao(à)", "pelos(as)".
+func articleForm(a Agreement, masculine, feminine string) string {
+	switch a {
+	case AgreeMasculine:
+		return masculine
+	case AgreeFeminine:
+		return feminine
+	}
+	if masculine == "ao" || masculine == "aos" {
+		return masculine + "(" + feminine + ")"
+	}
+	return neutralForm(masculine, feminine)
+}
+
+// TermStart is Term for the start of a sentence: "A locatária", "O(a) locatário(a)".
+func (n RoleNoun) TermStart(people []*Person) string {
+	term := n.Term(people)
+	if term == "" {
+		return ""
+	}
+	return strings.ToUpper(term[:1]) + term[1:]
+}
+
+// Ending is the ending a word agreeing with the role takes, so a template can
+// write "obrigad{{.locatario_o}}": "o", "a", "os", "as", "o(a)", "os(as)".
+func (n RoleNoun) Ending(people []*Person) string {
+	a := GroupAgreement(people)
+	if len(people) > 1 {
+		return inflect(a, "os", "as")
+	}
+	return inflect(a, "o", "a")
+}
+
 // Title is the role as a heading: "LOCATÁRIO", "LOCATÁRIAS", "LOCATÁRIO(A)".
 func (n RoleNoun) Title(people []*Person) string {
 	a := GroupAgreement(people)

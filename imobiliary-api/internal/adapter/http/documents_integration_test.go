@@ -45,6 +45,10 @@ func TestContractDocumentFields(t *testing.T) {
 		"locatario_nome":          "Pedro Souza e Joana Lima",
 		"locatario_termo":         "os(as) locatários(as)", // Pedro has no gender registered
 		"locatario_titulo":        "LOCATÁRIOS(AS)",
+		"locador_ao":              "à locadora",
+		"locatario_do":            "dos(as) locatários(as)",
+		"locatario_termo_inicio":  "Os(as) locatários(as)",
+		"locatario_o":             "os(as)",
 		"fiador_qualificacao":     "",
 		"imovel_endereco":         "Rua das Flores, 120, Centro, Bebedouro/SP, CEP 14700-000",
 		"aluguel_valor":           "R$ 1.600,00",
