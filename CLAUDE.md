@@ -1458,14 +1458,46 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       the termination (422 on `terminated_on`). OpenAPI 0.4.2. The web marks
       the prorated rent "proporcional".
 
+45. **Phase 5: rent adjustments** (`b7fed1c` API, web in the commit after it).
+    - **Migration 0010** `amendments`: day, the contract's index at the time,
+      signed rate, previous and agreed rent, and the acknowledgement of the
+      period notice (`period_acknowledged_by/_at`). One per contract per day.
+    - **Domain** (`domain/amendment.go`): `SuggestedRent` (a rate at or below
+      zero keeps the rent), `ValidateAmendment` (after the start, within the
+      term, after the last adjustment, never on a terminated contract),
+      `AmendmentNotices` (`adjustment_period` under twelve months from the
+      start or the last adjustment, Lei 10.192/2001 art. 2º § 1º),
+      `FirstAdjustedSequence` and `PaidFrom`.
+    - **Which instalments change: the unpaid ones whose month
+      (`RentPeriod`) starts on the adjustment day or later**, not "due on or
+      after" as §3.7 first said: with rent paid after each month, a rent due
+      after the day can pay a month before it. A running month keeps its rent.
+      A paid instalment from that month on refuses the adjustment.
+    - **Undo** removes only the last adjustment, while the contract runs and
+      nothing it reached is paid; it puts `previous_rent` back the same way.
+      Adjusting and undoing need the contract's `If-Match` and bump its
+      version. **`PUT /v1/contracts/{id}` is refused on `amendments` once a
+      contract was adjusted**, since regenerating the schedule would erase it.
+    - Routes: `POST /v1/contracts/{id}/amendments/preview`,
+      `POST .../amendments`, `DELETE .../amendments/{amendmentID}`; the
+      contract body has `amendments`. OpenAPI 0.5.0, reference republished.
+    - **Web:** `components/contracts/amendments.tsx` on the contract page
+      (list, "Registrar reajuste" dialog with a live preview of the suggested
+      rent, the instalments reached and the notice, "Desfazer" on the last).
+      "Editar" hides once a contract has adjustments.
+    - **Not yet seen in the browser**: the pane lost its session and signing
+      in is the user's. Typecheck, 66 web tests and every Go suite pass.
+    - The development database showed migration 0010 applied at 21:35 before
+      `pnpm imobiliary:migrate` ran; neither `serve` nor the tests migrate
+      it, so it was run outside the session.
+
 ### Next step
 
-Phase 5 of `PLANO.md` §3.7: amendments. The suggested value (previous rent
-times the index rate, never lower with a negative rate), `amended_on`, and in
-one transaction `contracts.current_rent` plus the pending rents due on or after
-that day. The `adjustment_period` notice (less than 12 months since the start
-or the last adjustment) belongs here. Contract editing already refuses after a
-payment, so amendments are how the rent changes from then on.
+Phase 6 of `PLANO.md` §3.8 and §7: rents and the dashboard. Recording a
+payment (`UPDATE ... WHERE paid_on IS NULL`, a concurrent second one 409),
+the suggested late fee (penalty plus pro rata daily interest on rent and
+charges, editable), `rent_charges`, reversal, `/alugueis`, and
+`GET /v1/dashboard` with its screen.
 
 Not in the editor on purpose, for now: fonts, colours, highlight, tables,
 images, headers and footers. Tables are the costly one: the block model,

@@ -3,6 +3,7 @@ import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-r
 import { IconArrowLeft, IconBan, IconPencil, IconTrash } from "@tabler/icons-react";
 
 import { messageFor, summaryOf, type Failure } from "@/application/result";
+import { ContractAmendments } from "@/components/contracts/amendments";
 import { ContractStatusBadge } from "@/components/contracts/status-badge";
 import { FormField } from "@/components/form-field";
 import {
@@ -85,7 +86,7 @@ function ContractPage() {
             </Link>
           </div>
           <div className="ml-auto flex flex-wrap gap-2">
-            {!terminated && !paid && (
+            {!terminated && !paid && contract.amendments.length === 0 && (
               <Button
                 variant="secondary"
                 size="sm"
@@ -163,6 +164,8 @@ function ContractPage() {
           </ul>
         </Section>
       )}
+
+      <ContractAmendments contract={contract} />
 
       <Section title={`Aluguéis (${contract.rents.length})`}>
         {contract.rents.length === 0 ? (

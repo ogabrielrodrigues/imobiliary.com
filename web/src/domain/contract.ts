@@ -14,7 +14,7 @@ import { parseShare, shareForApi, shareFromApi, type PropertyAddress } from "./p
 export type GuaranteeKind = "none" | "deposit" | "surety" | "surety_insurance" | "fund_assignment";
 export type PartyRole = "landlord" | "tenant" | "guarantor" | "guarantor_spouse";
 export type AdjustmentIndex = "igpm" | "ipca" | "inpc" | "ivar" | "igpdi";
-export type NoticeCode = "advance_rent" | "guarantor_spouse_consent" | "deposit_limit";
+export type NoticeCode = "advance_rent" | "guarantor_spouse_consent" | "deposit_limit" | "adjustment_period";
 export type ContractStatus = "upcoming" | "active" | "expired" | "terminated";
 export type RentStatus = "paid" | "overdue" | "pending";
 
@@ -86,6 +86,13 @@ export const NOTICES: Readonly<Record<NoticeCode, { readonly title: string; read
   deposit_limit: {
     title: "Caução acima de três aluguéis",
     text: "A caução em dinheiro não pode passar de três meses de aluguel (Lei 8.245/91, art. 38, § 2º).",
+  },
+  adjustment_period: {
+    title: "Reajuste antes de doze meses",
+    text:
+      "Faltam menos de doze meses desde o início do contrato ou o último reajuste. A Lei 10.192/2001 " +
+      "(art. 2º, § 1º) torna nula a correção por índice em período menor que um ano, então este reajuste só vale " +
+      "como acordo entre as partes.",
   },
 };
 
@@ -221,12 +228,25 @@ export interface ContractTerms {
   readonly status: ContractStatus;
 }
 
+export interface Amendment {
+  readonly id: string;
+  readonly amendedOn: string;
+  readonly adjustmentIndex: AdjustmentIndex | "";
+  /** As the API writes it: "4.50", "-2.00". */
+  readonly indexRate: string;
+  readonly previousRent: string;
+  readonly indexedRent: string;
+  readonly periodAcknowledgedAt: string | null;
+}
+
 export interface Contract extends ContractTerms {
   readonly id: string;
   readonly address: PropertyAddress;
   readonly parties: readonly ContractParty[];
   readonly acknowledgments: readonly { readonly code: NoticeCode; readonly acknowledgedAt: string }[];
   readonly rents: readonly Rent[];
+  /** Rent adjustments, oldest first. */
+  readonly amendments: readonly Amendment[];
   readonly version: number;
 }
 
@@ -449,6 +469,89 @@ export function translateContractProblem(problem: FieldError): FieldError {
     "a person cannot be landlord and tenant of the same lease": "A mesma pessoa não pode ser locadora e locatária.",
     "must name a guarantor with a surety guarantee": "A fiança precisa de ao menos um fiador.",
     "may have guarantors only with a surety guarantee": "Fiadores só entram quando a garantia é fiança.",
+  };
+  return { field, message: known[problem.message] ?? "Valor não aceito. Confira este campo." };
+}
+
+// --- adjustments ----------------------------------------------------------------
+
+/** What the office types to adjust a rent. An empty rent takes the suggestion. */
+export interface AmendmentInput {
+  readonly amendedOn: string;
+  /** As typed, signed: "4,5", "-2". */
+  readonly indexRate: string;
+  readonly indexedRent: string;
+  readonly acknowledgments: readonly NoticeCode[];
+}
+
+export interface AmendmentPreview {
+  readonly previousRent: string;
+  readonly suggestedRent: string;
+  readonly indexedRent: string;
+  readonly firstSequence: number;
+  readonly affectedRents: number;
+  readonly firstDueOn: string | null;
+  readonly notices: readonly NoticeCode[];
+}
+
+/** A signed percentage above -100 and at most 100, in millionths, or null. */
+export function parseSignedPercent(value: string): number | null {
+  const text = value.trim();
+  const negative = text.startsWith("-");
+  const millionths = parsePercent(negative ? text.slice(1) : text);
+  if (millionths === null) return null;
+  if (negative && millionths >= 1_000_000) return null;
+  return negative ? -millionths : millionths;
+}
+
+/** Millionths as the API reads a signed rate: "-3.1812". */
+export function signedPercentForApi(millionths: number): string {
+  return millionths < 0 ? `-${shareForApi(-millionths)}` : shareForApi(millionths);
+}
+
+/** The API's "-3.18" as a person reads it: "-3,18". */
+export function formatSignedPercent(value: string): string {
+  return value.startsWith("-") ? `-${shareFromApi(value.slice(1))}` : shareFromApi(value);
+}
+
+export function validateAmendment(a: AmendmentInput, c: Pick<ContractTerms, "startsOn" | "expiresOn">): FieldError[] {
+  const problems: FieldError[] = [];
+  const add = (field: string, message: string) => problems.push({ field, message });
+  if (!DATE.test(a.amendedOn)) add("amendedOn", "Informe a partir de quando vale o reajuste.");
+  else if (a.amendedOn <= c.startsOn) add("amendedOn", "O reajuste vale depois do início do contrato.");
+  else if (a.amendedOn > c.expiresOn) add("amendedOn", "O reajuste precisa valer antes do fim do contrato.");
+  if (a.indexRate.trim() === "") add("indexRate", "Informe a variação do índice no período.");
+  else if (parseSignedPercent(a.indexRate) === null) add("indexRate", "Use um percentual como 4,5 ou -1,2.");
+  if (a.indexedRent.trim() !== "") {
+    const rent = parseMoney(a.indexedRent);
+    if (rent === null) add("indexedRent", "Use um valor como 1.567,50.");
+    else if (rent === 0) add("indexedRent", "O aluguel precisa ser maior que zero.");
+  }
+  return problems;
+}
+
+/** The API's messages about an adjustment, in Portuguese and on the dialog's fields. */
+export function translateAmendmentProblem(problem: FieldError): FieldError {
+  const fields: Record<string, string> = {
+    amended_on: "amendedOn",
+    index_rate: "indexRate",
+    indexed_rent: "indexedRent",
+  };
+  const field = fields[problem.field] ?? problem.field;
+  if (problem.field === "acknowledgments" && isNoticeCode(problem.message)) {
+    return { field, message: `Confirme a ciência do aviso "${NOTICES[problem.message].title}".` };
+  }
+  const known: Record<string, string> = {
+    "must be after the start": "O reajuste vale depois do início do contrato.",
+    "must not be after the expiry": "O reajuste precisa valer antes do fim do contrato.",
+    "must be after the last adjustment": "O reajuste precisa valer depois do último registrado.",
+    "a terminated contract cannot be adjusted": "Um contrato rescindido não recebe reajuste.",
+    "a rent from this day on is already paid": "Já há aluguel pago a partir desta data.",
+    "must be above -100 and at most 100": "Use um percentual entre -100 e 100.",
+    "makes a rent out of range": "O aluguel reajustado ficaria alto demais.",
+    "only the last adjustment can be undone": "Só o último reajuste pode ser desfeito.",
+    "a terminated contract keeps its adjustments": "Um contrato rescindido mantém seus reajustes.",
+    "a rent it reached is already paid": "Já há aluguel pago com o valor deste reajuste.",
   };
   return { field, message: known[problem.message] ?? "Valor não aceito. Confira este campo." };
 }

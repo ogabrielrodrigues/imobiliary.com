@@ -18,6 +18,12 @@ import {
   translateContractProblem,
   validateContract,
   validateTermination,
+  formatSignedPercent,
+  parseSignedPercent,
+  signedPercentForApi,
+  translateAmendmentProblem,
+  validateAmendment,
+  type AmendmentInput,
   type ContractInput,
 } from "./contract.ts";
 
@@ -147,6 +153,42 @@ describe("the API's answers", () => {
     assert.notEqual(validateTermination(terms, "2026-09-30"), null);
     assert.notEqual(validateTermination(terms, "2027-10-01"), null);
     assert.notEqual(validateTermination(terms, ""), null);
+  });
+});
+
+describe("adjustments", () => {
+  const terms = { startsOn: "2026-10-01", expiresOn: "2029-09-30" };
+  const good: AmendmentInput = { amendedOn: "2027-10-01", indexRate: "4,5", indexedRent: "", acknowledgments: [] };
+  const fieldsOf = (a: AmendmentInput) => validateAmendment(a, terms).map((p) => p.field);
+
+  it("reads signed rates", () => {
+    assert.equal(parseSignedPercent("4,5"), 45_000);
+    assert.equal(parseSignedPercent("-3,1812"), -31_812);
+    assert.equal(parseSignedPercent("-100"), null);
+    assert.equal(signedPercentForApi(-31_812), "-3.1812");
+    assert.equal(signedPercentForApi(45_000), "4.5");
+    assert.equal(formatSignedPercent("-2.00"), "-2");
+    assert.equal(formatSignedPercent("4.50"), "4,5");
+  });
+
+  it("checks the day, the rate and a typed rent", () => {
+    assert.deepEqual(fieldsOf(good), []);
+    assert.deepEqual(fieldsOf({ ...good, amendedOn: "2026-10-01" }), ["amendedOn"]);
+    assert.deepEqual(fieldsOf({ ...good, amendedOn: "2029-10-01" }), ["amendedOn"]);
+    assert.deepEqual(fieldsOf({ ...good, indexRate: "" }), ["indexRate"]);
+    assert.deepEqual(fieldsOf({ ...good, indexedRent: "0" }), ["indexedRent"]);
+    assert.deepEqual(fieldsOf({ ...good, indexedRent: "1.600,00" }), []);
+  });
+
+  it("translates the API's refusals", () => {
+    assert.deepEqual(translateAmendmentProblem({ field: "acknowledgments", message: "adjustment_period" }), {
+      field: "acknowledgments",
+      message: 'Confirme a ciência do aviso "Reajuste antes de doze meses".',
+    });
+    assert.deepEqual(translateAmendmentProblem({ field: "amended_on", message: "a rent from this day on is already paid" }), {
+      field: "amendedOn",
+      message: "Já há aluguel pago a partir desta data.",
+    });
   });
 });
 

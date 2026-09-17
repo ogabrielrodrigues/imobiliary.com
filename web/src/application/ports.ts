@@ -27,6 +27,8 @@ import type {
 } from "../domain/person.ts";
 import type { PropertiesPage, Property, PropertyInput } from "../domain/property.ts";
 import type {
+  AmendmentInput,
+  AmendmentPreview,
   Contract,
   ContractInput,
   ContractPreview,
@@ -145,6 +147,10 @@ export interface ContractsGateway {
   terminate(ctx: CallContext, id: string, version: number, on: string): Promise<Contract>;
   /** A contract with a paid rent is an InUseError. */
   remove(ctx: CallContext, id: string): Promise<void>;
+  /** What a rent adjustment would do, recording nothing. */
+  previewAmendment(ctx: CallContext, id: string, input: AmendmentInput): Promise<AmendmentPreview>;
+  amend(ctx: CallContext, id: string, version: number, input: AmendmentInput): Promise<Contract>;
+  undoAmendment(ctx: CallContext, id: string, amendmentId: string, version: number): Promise<Contract>;
 }
 
 /** What the LGPD lets a person ask about their own account. */

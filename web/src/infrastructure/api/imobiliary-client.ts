@@ -63,7 +63,11 @@ import {
   parsePercent,
   partiesOf,
   percentForApi,
+  parseSignedPercent,
+  signedPercentForApi,
   type AdjustmentIndex,
+  type AmendmentInput,
+  type AmendmentPreview,
   type Contract,
   type ContractInput,
   type ContractPreview,
@@ -612,7 +616,38 @@ interface ContractBody extends ContractTermsBody {
     paid_on: string | null;
     status: RentStatus;
   }[];
+  amendments: {
+    id: string;
+    amended_on: string;
+    adjustment_index: AdjustmentIndex | "";
+    index_rate: string;
+    previous_rent: string;
+    indexed_rent: string;
+    period_acknowledged_at: string | null;
+  }[];
   version: number;
+}
+
+interface AmendmentPreviewBody {
+  previous_rent: string;
+  suggested_rent: string;
+  indexed_rent: string;
+  first_sequence: number;
+  affected_rents: number;
+  first_due_on: string | null;
+  notices: NoticeCode[];
+}
+
+/** A rate or a rent that does not parse is sent as typed, so the API names the field. */
+function amendmentPayload(a: AmendmentInput): string {
+  const rate = parseSignedPercent(a.indexRate);
+  const rent = parseMoney(a.indexedRent);
+  return JSON.stringify({
+    amended_on: a.amendedOn,
+    index_rate: rate === null ? a.indexRate : signedPercentForApi(rate),
+    ...(a.indexedRent.trim() === "" ? {} : { indexed_rent: rent === null ? a.indexedRent : moneyForApi(rent) }),
+    acknowledgments: a.acknowledgments,
+  });
 }
 
 interface ContractsPageBody {
@@ -664,6 +699,15 @@ function toContract(b: ContractBody): Contract {
       amountPaid: r.amount_paid,
       paidOn: r.paid_on,
       status: r.status,
+    })),
+    amendments: b.amendments.map((a) => ({
+      id: a.id,
+      amendedOn: a.amended_on,
+      adjustmentIndex: a.adjustment_index,
+      indexRate: a.index_rate,
+      previousRent: a.previous_rent,
+      indexedRent: a.indexed_rent,
+      periodAcknowledgedAt: a.period_acknowledged_at,
     })),
     version: b.version,
   };
@@ -775,6 +819,42 @@ class ContractsClient implements ContractsGateway {
 
   async remove(ctx: CallContext, id: string): Promise<void> {
     await this.transport.send(ctx, "DELETE", `/v1/contracts/${encodeURIComponent(id)}`);
+  }
+
+  async previewAmendment(ctx: CallContext, id: string, input: AmendmentInput): Promise<AmendmentPreview> {
+    const response = await this.transport.send(ctx, "POST", `/v1/contracts/${encodeURIComponent(id)}/amendments/preview`, {
+      body: amendmentPayload(input),
+      contentType: "application/json",
+    });
+    const b = (await response.json()) as AmendmentPreviewBody;
+    return {
+      previousRent: b.previous_rent,
+      suggestedRent: b.suggested_rent,
+      indexedRent: b.indexed_rent,
+      firstSequence: b.first_sequence,
+      affectedRents: b.affected_rents,
+      firstDueOn: b.first_due_on,
+      notices: b.notices,
+    };
+  }
+
+  async amend(ctx: CallContext, id: string, version: number, input: AmendmentInput): Promise<Contract> {
+    const response = await this.transport.send(ctx, "POST", `/v1/contracts/${encodeURIComponent(id)}/amendments`, {
+      body: amendmentPayload(input),
+      contentType: "application/json",
+      ifMatch: `"${version}"`,
+    });
+    return toContract((await response.json()) as ContractBody);
+  }
+
+  async undoAmendment(ctx: CallContext, id: string, amendmentId: string, version: number): Promise<Contract> {
+    const response = await this.transport.send(
+      ctx,
+      "DELETE",
+      `/v1/contracts/${encodeURIComponent(id)}/amendments/${encodeURIComponent(amendmentId)}`,
+      { ifMatch: `"${version}"` },
+    );
+    return toContract((await response.json()) as ContractBody);
   }
 }
 

@@ -7,10 +7,14 @@ import { createServerFn } from "@tanstack/react-start";
 
 import { attempt, type Result } from "../application/result.ts";
 import {
+  translateAmendmentProblem,
   translateContractProblem,
   translateTerminationProblem,
   validateContract,
+  validateAmendment,
   validateTermination,
+  type AmendmentInput,
+  type AmendmentPreview,
   type Contract,
   type ContractInput,
   type ContractPreview,
@@ -131,6 +135,65 @@ export const terminateContract = createServerFn({ method: "POST" })
             error.fields.map((f) => ({ field: "terminated_on", message: translateTerminationProblem(f.message) })),
           );
         }
+        throw error;
+      }
+    }),
+  );
+
+export interface AmendmentRequest {
+  readonly id: string;
+  readonly version: number;
+  readonly startsOn: string;
+  readonly expiresOn: string;
+  readonly amendment: AmendmentInput;
+}
+
+/** Local rules first, in Portuguese; the API's answer after, translated. */
+async function checkedAmendment<T>(data: AmendmentRequest, run: () => Promise<T>): Promise<T> {
+  const problems = validateAmendment(data.amendment, data);
+  if (problems.length > 0) throw new ValidationError(problems);
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof ValidationError) throw new ValidationError(error.fields.map(translateAmendmentProblem));
+    throw error;
+  }
+}
+
+/** Writes nothing, but the API charges it as a write: a POST with the origin check. */
+export const previewAmendment = createServerFn({ method: "POST" })
+  .validator((input: AmendmentRequest) => input)
+  .handler(async ({ data }): Promise<Result<AmendmentPreview>> =>
+    attempt(async () => {
+      assertSameOrigin();
+      return checkedAmendment(data, () =>
+        sessions().authorize(callContext(), (ctx) => api().contracts.previewAmendment(ctx, data.id, data.amendment)),
+      );
+    }),
+  );
+
+export const createAmendment = createServerFn({ method: "POST" })
+  .validator((input: AmendmentRequest) => input)
+  .handler(async ({ data }): Promise<Result<Contract>> =>
+    attempt(async () => {
+      assertSameOrigin();
+      return checkedAmendment(data, () =>
+        sessions().authorize(callContext(), (ctx) => api().contracts.amend(ctx, data.id, data.version, data.amendment)),
+      );
+    }),
+  );
+
+export const undoAmendment = createServerFn({ method: "POST" })
+  .validator((input: { readonly id: string; readonly amendmentId: string; readonly version: number }) => input)
+  .handler(async ({ data }): Promise<Result<Contract>> =>
+    attempt(async () => {
+      assertSameOrigin();
+      try {
+        return await sessions().authorize(callContext(), (ctx) =>
+          api().contracts.undoAmendment(ctx, data.id, data.amendmentId, data.version),
+        );
+      } catch (error) {
+        if (error instanceof ValidationError) throw new ValidationError(error.fields.map(translateAmendmentProblem));
         throw error;
       }
     }),
