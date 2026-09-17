@@ -337,7 +337,7 @@ func (r *contractRepository) HasPayments(ctx context.Context, id uuid.UUID) (boo
 	return paid, nil
 }
 
-func (r *contractRepository) Terminate(ctx context.Context, id uuid.UUID, on domain.Date, version int, at time.Time) error {
+func (r *contractRepository) Terminate(ctx context.Context, id uuid.UUID, on domain.Date, version int, at time.Time, plan *domain.TerminationPlan) error {
 	tag, err := r.q.Exec(ctx,
 		`UPDATE contracts SET terminated_on = $2, version = version + 1, updated_at = $3
 		  WHERE id = $1 AND version = $4 AND terminated_on IS NULL`,
@@ -349,9 +349,16 @@ func (r *contractRepository) Terminate(ctx context.Context, id uuid.UUID, on dom
 		return fmt.Errorf("postgres: terminate contract: %w", domain.ErrPreconditionFailed)
 	}
 	if _, err := r.q.Exec(ctx,
-		`DELETE FROM rents WHERE contract_id = $1 AND paid_on IS NULL AND due_on > $2`,
-		pgUUID(id), pgDate(on)); err != nil {
+		`DELETE FROM rents WHERE contract_id = $1 AND paid_on IS NULL AND sequence > $2`,
+		pgUUID(id), plan.LastSequence); err != nil {
 		return fmt.Errorf("postgres: remove rents after termination: %w", err)
+	}
+	if plan.ProratedAmount != nil {
+		if _, err := r.q.Exec(ctx,
+			`UPDATE rents SET rent_amount = $3 WHERE contract_id = $1 AND sequence = $2 AND paid_on IS NULL`,
+			pgUUID(id), plan.LastSequence, int64(*plan.ProratedAmount)); err != nil {
+			return fmt.Errorf("postgres: prorate the last rent: %w", err)
+		}
 	}
 	return nil
 }

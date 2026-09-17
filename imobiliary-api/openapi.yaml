@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Imobiliary API
-  version: "0.4.1"
+  version: "0.4.2"
   summary: Rental property management for brokers, small agencies and owners.
   description: |
     The API behind the Imobiliary platform. It covers identity and the office
@@ -1313,8 +1313,13 @@ paths:
       summary: Terminate a contract
       description: |
         Ends the contract on `terminated_on`, which must fall within its term,
-        freeing the property from the next day. Unpaid rents due after that
-        day are removed in the same transaction. A contract is terminated once.
+        freeing the property from the next day. Each instalment pays a month
+        counted from the start date. The months after the one holding the
+        termination are removed; that month, unless the termination falls on
+        its last day or it is already paid, is charged for the days the lease
+        ran, rounded half up to the centavo. A payment for a later month
+        refuses the termination on `terminated_on`. A contract is terminated
+        once.
       operationId: terminateContract
       parameters:
         - name: If-Match

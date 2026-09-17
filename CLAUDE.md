@@ -1447,6 +1447,16 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       advance: instalment k on the due day of the kth month after the start,
       and no notice. Existing contracts became `true`. The choice sits beside
       the guarantee in the Partes step.
+    - **Termination prorates the last month** (user's rule, 2026-09-16).
+      `RentPeriod(c, n)` is the month instalment n pays, counted from the
+      start date's monthly anniversaries whatever the due day.
+      `PlanTermination` keeps instalments up to the one whose month holds the
+      termination day, removes the rest, and charges that month
+      `amount × days run / days in month` (termination day included, half up
+      to the centavo, `Prorate`) unless the termination is the month's last
+      day. Paid instalments are never changed, and a paid later month refuses
+      the termination (422 on `terminated_on`). OpenAPI 0.4.2. The web marks
+      the prorated rent "proporcional".
 
 ### Next step
 

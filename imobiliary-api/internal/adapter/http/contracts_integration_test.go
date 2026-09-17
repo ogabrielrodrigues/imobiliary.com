@@ -131,13 +131,14 @@ func TestContractLifecycle(t *testing.T) {
 		t.Errorf("a stale edit = %d", stale.status)
 	}
 
-	// Terminating removes what would have come due afterwards: the sixth
-	// instalment falls on 2027-03-31, after the termination.
+	// Terminating on 15 March removes the months after March and charges
+	// March, the sixth month, for 15 of its 31 days.
 	terminated := a.withHeader(http.MethodPost, "/v1/contracts/"+c.ID+"/termination", f.admin.access, "If-Match", `"2"`,
 		map[string]any{"terminated_on": "2027-03-15"})
 	var ended contractBody
 	terminated.decode(t, &ended)
-	if terminated.status != http.StatusOK || ended.Status != "terminated" || len(ended.Rents) != 5 {
+	if terminated.status != http.StatusOK || ended.Status != "terminated" || len(ended.Rents) != 6 ||
+		ended.Rents[5].Amount != "725.81" || ended.Rents[4].Amount != "1500.00" {
 		t.Fatalf("termination = %d, status %s, %d instalments", terminated.status, ended.Status, len(ended.Rents))
 	}
 	again := a.withHeader(http.MethodPost, "/v1/contracts/"+c.ID+"/termination", f.admin.access, "If-Match", `"3"`,
@@ -259,10 +260,20 @@ func TestAdvanceRentIsTheOfficesChoice(t *testing.T) {
 		t.Errorf("stored first rent due %s", c.Rents[0].DueOn)
 	}
 
+	// Ending on 20 January keeps January, paid on 10 February, for 20 of its
+	// 31 days, and removes every month after it.
+	var ended contractBody
+	a.withHeader(http.MethodPost, "/v1/contracts/"+c.ID+"/termination", f.admin.access, "If-Match", `"1"`,
+		map[string]any{"terminated_on": "2027-01-20"}).decode(t, &ended)
+	if len(ended.Rents) != 4 || ended.Rents[3].DueOn != "2027-02-10" || ended.Rents[3].Amount != "967.74" {
+		t.Errorf("after termination %+v", ended.Rents)
+	}
+
 	// With it, the same guarantee asks for the acknowledgement.
 	body["advance_rent"] = true
+	body["starts_on"], body["expires_on"] = "2027-02-01", "2028-01-31"
 	a.expect(http.StatusOK, http.MethodPost, "/v1/contracts/preview", f.admin.access, body).decode(t, &preview)
-	if !slices.Equal(preview.Notices, []string{"advance_rent"}) || preview.Schedule[0].DueOn != "2026-10-01" {
+	if !slices.Equal(preview.Notices, []string{"advance_rent"}) || preview.Schedule[0].DueOn != "2027-02-01" {
 		t.Errorf("with advance rent: notices %v, schedule %v", preview.Notices, preview.Schedule)
 	}
 

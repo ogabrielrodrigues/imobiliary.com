@@ -112,7 +112,7 @@
 <div class="shell">
   <nav class="rail" aria-label="Sections">
     <div class="brand">imobiliary <span>api</span></div>
-    <div class="ver">v0.4.1 · phase 4</div>
+    <div class="ver">v0.4.2 · phase 4</div>
     <h3>Guide</h3>
     <ul>
       <li><a href="#auth">Authentication</a></li>
@@ -528,7 +528,7 @@ If-Match: "3"
 
       <article class="op-card">
         <div class="sig"><span class="m post">POST</span><span class="path">/v1/contracts/{contractID}/termination</span><span class="access">session · writes</span></div>
-        <p>Ends the contract on a day within its term and removes the unpaid rents due after it. The property is free from the next day.</p>
+        <p>Ends the contract on a day within its term; the property is free from the next day. Each instalment pays a month counted from the start date: the months after the termination are removed, and the month it falls in is charged for the days the lease ran, unless the termination is its last day or it is already paid. A payment for a later month refuses the termination.</p>
         <dl class="io"><dt>Headers</dt><dd><code>If-Match: "&lt;version&gt;"</code></dd><dt>Body</dt><dd><code>{ terminated_on }</code></dd><dt>Answers</dt><dd><code>200</code> · <code>404</code> · <code>412</code> · <code>422</code> · <code>428</code></dd></dl>
       </article>
 

@@ -96,6 +96,74 @@ func TestScheduleWithoutAdvanceRent(t *testing.T) {
 	}
 }
 
+func TestRentPeriods(t *testing.T) {
+	c := validContract(t)
+	c.StartsOn = date(t, "2027-01-31")
+	for n, want := range map[int][2]string{
+		1: {"2027-01-31", "2027-02-27"},
+		2: {"2027-02-28", "2027-03-30"},
+		3: {"2027-03-31", "2027-04-29"},
+	} {
+		from, to := RentPeriod(c, n)
+		if from.String() != want[0] || to.String() != want[1] {
+			t.Errorf("period %d = %s to %s, want %s to %s", n, from, to, want[0], want[1])
+		}
+	}
+}
+
+func TestPlanTermination(t *testing.T) {
+	c := validContract(t)
+	rents := []TerminationRent{{1, 150000, true}, {2, 150000, false}, {3, 150000, false}, {4, 150000, false}}
+
+	// 15 March in a lease from 1 October: the sixth month, 15 of its 31 days.
+	plan, err := PlanTermination(c, date(t, "2027-03-15"), []TerminationRent{{6, 150000, false}, {7, 150000, false}})
+	if err != nil || plan.LastSequence != 6 || plan.ProratedAmount == nil || *plan.ProratedAmount != 72581 {
+		t.Fatalf("mid-month plan %+v, %v", plan, err)
+	}
+
+	// The last day of a month keeps it whole.
+	plan, err = PlanTermination(c, date(t, "2026-11-30"), rents)
+	if err != nil || plan.LastSequence != 2 || plan.ProratedAmount != nil {
+		t.Errorf("month-end plan %+v, %v", plan, err)
+	}
+
+	// The first day of a month is one day of it.
+	plan, _ = PlanTermination(c, date(t, "2026-11-01"), rents)
+	if plan.LastSequence != 2 || plan.ProratedAmount == nil || *plan.ProratedAmount != 5000 {
+		t.Errorf("first-day plan %+v", plan)
+	}
+
+	// A paid month is left as paid.
+	plan, _ = PlanTermination(c, date(t, "2026-10-10"), rents)
+	if plan.LastSequence != 1 || plan.ProratedAmount != nil {
+		t.Errorf("paid month plan %+v", plan)
+	}
+
+	// A payment for a later month refuses the termination.
+	rents[2].Paid = true
+	if _, err := PlanTermination(c, date(t, "2026-11-15"), rents); err == nil {
+		t.Error("a paid later month did not refuse the termination")
+	}
+}
+
+func TestProrate(t *testing.T) {
+	for _, c := range []struct {
+		amount      Money
+		days, total int
+		want        Money
+	}{
+		{150000, 15, 31, 72581},
+		{150000, 30, 30, 150000},
+		{100, 1, 3, 33},
+		{200, 1, 3, 67},
+		{150000, 0, 30, 0},
+	} {
+		if got := Prorate(c.amount, c.days, c.total); got != c.want {
+			t.Errorf("Prorate(%d, %d, %d) = %d, want %d", c.amount, c.days, c.total, got, c.want)
+		}
+	}
+}
+
 func TestValidContractIsNormalised(t *testing.T) {
 	c := validContract(t)
 	NormalizeContract(c)

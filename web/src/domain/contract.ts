@@ -465,6 +465,7 @@ export function translateTerminationProblem(message: string): string {
     "the contract is already terminated": "Este contrato já foi rescindido.",
     "must not be before the start": "A rescisão não pode ser antes do início.",
     "must not be after the expiry": "A rescisão não pode ser depois do fim.",
+    "a rent for a month after this day is already paid": "Já há aluguel pago de um mês depois desta data.",
   };
   return known[message] ?? "Data não aceita.";
 }

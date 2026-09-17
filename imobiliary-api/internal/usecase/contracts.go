@@ -359,7 +359,7 @@ func (c *Contracts) Terminate(ctx context.Context, caller *Caller, id uuid.UUID,
 		return nil, fmt.Errorf("terminate contract: %w", domain.ErrPreconditionRequired)
 	}
 	err := c.scope.InOrganization(ctx, caller.Organization.ID, func(repos ScopedRepositories) error {
-		contract, _, _, err := repos.Contracts.Get(ctx, id)
+		contract, _, rents, err := repos.Contracts.Get(ctx, id)
 		if err != nil {
 			return err
 		}
@@ -369,7 +369,15 @@ func (c *Contracts) Terminate(ctx context.Context, caller *Caller, id uuid.UUID,
 		if err := domain.ValidateTermination(contract, on); err != nil {
 			return err
 		}
-		if err := repos.Contracts.Terminate(ctx, id, on, version, c.now().UTC()); err != nil {
+		stored := make([]domain.TerminationRent, len(rents))
+		for i, r := range rents {
+			stored[i] = domain.TerminationRent{Sequence: r.Sequence, Amount: r.Amount, Paid: r.PaidOn != nil}
+		}
+		plan, err := domain.PlanTermination(contract, on, stored)
+		if err != nil {
+			return err
+		}
+		if err := repos.Contracts.Terminate(ctx, id, on, version, c.now().UTC(), plan); err != nil {
 			return err
 		}
 		return c.audit.recordWith(ctx, repos.Audit, AuditEntry{

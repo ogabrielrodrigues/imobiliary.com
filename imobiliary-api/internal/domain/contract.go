@@ -379,6 +379,77 @@ func (c *Contract) StatusOn(today Date) ContractStatus {
 	}
 }
 
+// RentPeriod is the month of lease instalment n pays for, both days included:
+// from the nth monthly anniversary of the start to the day before the next.
+// A start on the 31st keeps the 31st where the month has it.
+func RentPeriod(c *Contract, n int) (from, to Date) {
+	return c.StartsOn.AddMonths(n - 1), c.StartsOn.AddMonths(n).AddDays(-1)
+}
+
+// TerminationRent is what a termination needs to know of a stored instalment.
+type TerminationRent struct {
+	Sequence int
+	Amount   Money
+	Paid     bool
+}
+
+// TerminationPlan is what a termination does to the instalments.
+type TerminationPlan struct {
+	// LastSequence is the instalment whose month holds the termination day.
+	// Every instalment after it is removed.
+	LastSequence int
+	// ProratedAmount replaces the last instalment's amount when the lease ends
+	// before its month does. Nil when the month runs whole or is already paid.
+	ProratedAmount *Money
+}
+
+// PlanTermination applies the rule the user set (2026-09-16): the months after
+// the one the termination falls in are removed, and that month is owed only
+// for the days the lease ran, rent being due for the time the property was
+// let (Lei 8.245/91). The day of termination counts as a day of the lease. A
+// paid instalment is never changed, and a payment for a month after the
+// termination refuses it: that money is a record, not a row to drop.
+func PlanTermination(c *Contract, on Date, rents []TerminationRent) (*TerminationPlan, error) {
+	plan := &TerminationPlan{LastSequence: 1}
+	for n := 1; ; n++ {
+		from, to := RentPeriod(c, n)
+		if !on.Before(from) && !on.After(to) {
+			plan.LastSequence = n
+			break
+		}
+		if on.Before(from) {
+			break
+		}
+	}
+	for _, r := range rents {
+		switch {
+		case r.Sequence > plan.LastSequence && r.Paid:
+			v := &ValidationError{}
+			v.Add("terminated_on", "a rent for a month after this day is already paid")
+			return nil, v
+		case r.Sequence == plan.LastSequence && !r.Paid:
+			from, to := RentPeriod(c, r.Sequence)
+			if on != to {
+				amount := Prorate(r.Amount, from.DaysUntil(on)+1, from.DaysUntil(to)+1)
+				plan.ProratedAmount = &amount
+			}
+		}
+	}
+	return plan, nil
+}
+
+// Prorate is amount times days over total, rounded half up to the centavo in
+// integer arithmetic.
+func Prorate(amount Money, days, total int) Money {
+	if total <= 0 || days >= total {
+		return amount
+	}
+	if days <= 0 {
+		return 0
+	}
+	return Money((2*int64(amount)*int64(days) + int64(total)) / (2 * int64(total)))
+}
+
 // ValidateTermination checks a termination date against the contract.
 func ValidateTermination(c *Contract, on Date) error {
 	v := &ValidationError{}

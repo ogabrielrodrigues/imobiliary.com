@@ -351,9 +351,10 @@ type ContractRepository interface {
 	List(ctx context.Context, q ContractQuery) ([]ContractSummary, error)
 	// HasPayments reports whether any instalment was paid.
 	HasPayments(ctx context.Context, id uuid.UUID) (bool, error)
-	// Terminate records the termination day and removes the unpaid
-	// instalments due after it, as of version.
-	Terminate(ctx context.Context, id uuid.UUID, on domain.Date, version int, at time.Time) error
+	// Terminate records the termination day, as of version, and applies the
+	// plan: instalments after its last one go, and the last one takes the
+	// prorated amount when there is one.
+	Terminate(ctx context.Context, id uuid.UUID, on domain.Date, version int, at time.Time, plan *domain.TerminationPlan) error
 	Delete(ctx context.Context, id uuid.UUID) error
 }
 

@@ -183,7 +183,14 @@ function ContractPage() {
                   <tr key={rent.id} className="border-t border-border">
                     <td className="py-1.5 pr-4">{rent.sequence}</td>
                     <td className="py-1.5 pr-4">{formatDate(rent.dueOn)}</td>
-                    <td className="py-1.5 pr-4 text-right">{formatMoney(rent.amount)}</td>
+                    <td className="py-1.5 pr-4 text-right">
+                      {formatMoney(rent.amount)}
+                      {contract.terminatedOn !== null &&
+                        rent.sequence === contract.rents.length &&
+                        rent.amount !== contract.currentRent && (
+                          <span className="block text-caption text-muted-foreground">proporcional</span>
+                        )}
+                    </td>
                     <td
                       className={cn(
                         "py-1.5",
@@ -276,8 +283,9 @@ function TerminateContract({ contract }: { readonly contract: Contract }) {
             <AlertDialogHeader>
               <AlertDialogTitle>Rescindir o contrato {contract.registry}?</AlertDialogTitle>
               <AlertDialogDescription>
-                O contrato termina na data informada e o imóvel fica livre a partir do dia seguinte. Os aluguéis não pagos
-                que venceriam depois dessa data são removidos. A rescisão não pode ser desfeita.
+                O contrato termina na data informada e o imóvel fica livre a partir do dia seguinte. Os aluguéis dos meses
+                seguintes são removidos, e o mês da rescisão é cobrado proporcionalmente aos dias de locação. A rescisão
+                não pode ser desfeita.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <FormField
