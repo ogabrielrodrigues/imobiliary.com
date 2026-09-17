@@ -4,7 +4,7 @@ Documento interno, mantido em cumprimento ao art. 37 da Lei n.º 13.709/2018
 (LGPD), para a `imobiliary-api`. Descreve o que o serviço faz de fato: foi
 escrito a partir do código e deve ser corrigido sempre que o código mudar.
 
-**Última revisão:** 2026-09-16 (fase 3: imóveis)
+**Última revisão:** 2026-09-17 (fase 7: documentos do contrato)
 
 O que os titulares leem está em `web/src/routes/privacidade.tsx` e
 `web/src/routes/termos.tsx`. Este registro e esses textos precisam continuar
@@ -121,15 +121,39 @@ tabelas; por isso uma política ausente derruba um teste
 Qualquer membro do escritório, administrador ou não, lê e altera as pessoas e os
 imóveis.
 
+## Documentos gerados a partir de um contrato
+
+`GET /v1/contracts/{id}/document-fields` monta, a partir do que já está
+cadastrado, o texto com que um modelo de locação é preenchido: a qualificação
+de cada parte (nome, nacionalidade, estado civil, profissão, CPF — repetido
+como CIN — e endereço), os valores por extenso, a garantia, as datas e o foro.
+**Nada é gravado**: é leitura do contrato, das pessoas e do imóvel, montada na
+resposta. O gênero registrado em cada pessoa serve só para a concordância do
+texto; sem ele, a redação fica neutra ("locatário(a)").
+
+Quem gera o documento é o serviço de documentos (`docgen-api`), e é para lá que
+esses valores vão, por ordem do escritório. Ele tem registro próprio, em
+`docgen-api/PRIVACIDADE.md`, onde constam a retenção e a ausência de cifragem em
+repouso.
+
+`POST /v1/sessions/docgen-token` emite, para a sessão, um token Ed25519 de cinco
+minutos com público `docgen`. Ele carrega o identificador do usuário, o do
+escritório, o nome do escritório, o e-mail, o nome e o papel, para que o serviço
+de documentos saiba a quem pertence o que recebe. Não é gravado aqui, e esta API
+recusa o próprio token, cujo público não é o dela.
+
 ## Compartilhamento e transferência internacional
 
 | Destinatário | O que recebe | Quando |
 |---|---|---|
 | Resend (EUA) | e-mail e primeiro nome **da conta** | avisos de segurança, links de redefinição e convites |
+| Serviço de documentos (mesmo controlador, servidor próprio) | os valores do documento e a identificação do escritório | quando o escritório gera um documento a partir de um contrato |
 
-Nenhum dado de pessoa cadastrada pelo escritório sai da plataforma. O envio ao
+Nenhum dado de pessoa cadastrada pelo escritório sai para terceiro. O envio ao
 Resend é transferência internacional (art. 33) e ainda **não tem contrato de
-tratamento assinado** (ver lacunas).
+tratamento assinado** (ver lacunas). O serviço de documentos é da mesma
+controladora e fica na mesma infraestrutura, então não há transferência
+internacional nesse caminho.
 
 ## Direitos do titular (art. 18)
 

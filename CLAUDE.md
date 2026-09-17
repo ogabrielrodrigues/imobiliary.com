@@ -21,6 +21,8 @@ platform, being built:
 | `imobiliary-api/` | rental management API, Go + PostgreSQL | a private subdomain |
 | `web/` | rental management platform, TypeScript | `imobiliary.com` |
 | `packages/ui/` | design tokens, themes, accessibility, shared by both platforms | — |
+| `packages/docx/` | the .docx reader and writer, the block model and the preview | — |
+| `modelos/` | marked copies of real models, for end-to-end tests | — |
 
 **The main platform follows `PLANO.md`** (in Portuguese, decided with the user
 over five rounds on 2026-09-15). Read it before touching `imobiliary-api/`,
@@ -366,7 +368,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-17: phase 6 complete (rents, payments, charges and the dashboard, API and web, verified in the browser); phase 7 (docgen integration) needs its plan with the user
+**Last updated:** 2026-09-17: phase 7 complete (the docgen integration: identity moved to the platform, documents generated from a contract, verified in the browser); phase 8 (docs on packages/ui) is next
 
 ### Done
 
@@ -1549,12 +1551,75 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       rotation that consumed it for `ROTATION_GRACE_MS` (10 s), kept in memory
       and swept; a failed rotation is not remembered. Tested in both.
 
+47. **Phase 7: the docgen integration**, planned in `PLANO-FASE-7.md` with the
+    user (migration by e-mail, templates owned by the office, review before
+    generating, documents in both the contract and the Docs history, the CIN
+    repeating the CPF, a `{{.foro}}` of its own, gender from each person's
+    register, and Docs keeping its own sign-in screen).
+    - **The fields a lease is filled with** (`234e3d3`, `bfd7443`):
+      `domain/words.go` (numbers, money and rates in Portuguese words, with
+      gender agreement) and `domain/qualification.go` (each party's
+      qualification, `Term`, `Title`, and the contractions `_do`, `_ao`, `_no`,
+      `_pelo`, the sentence start `_termo_inicio` and the agreement ending
+      `_o`, so a clause can read "obrigad{{.locatario_o}}").
+      `GET /v1/contracts/{id}/document-fields` answers them; nothing is stored.
+      OpenAPI 0.7.1.
+    - **The token** (`5054e99`): `POST /v1/sessions/docgen-token` mints a
+      five-minute Ed25519 token, audience `docgen`, carrying the user, the
+      office, its name, the e-mail and the role. `imobiliary public-keys`
+      prints what verifies it; this API refuses it, since the audience is not
+      its own.
+    - **docgen stopped holding identity** (`24de6ad`, `611ede6`): migration
+      0005 rebuilds the tables around an `owners` row per office, verifies the
+      platform's tokens with public keys only, and claims a legacy account the
+      first time a member signs in with its e-mail. The old auth routes answer
+      `410`; documents gained `reference` and a filter on it. docgen's OpenAPI
+      is 2.0.0 and its reference page is now published at
+      **https://claude.ai/artifact/V9NL1MbyiRPCvXpYCSxDky**.
+    - **docgen reads a `.env` beside the command** (`2adf2e6`). It never did,
+      so `DOCGEN_IDENTITY_PUBLIC_KEYS` had to be exported by hand; the loader
+      is the one this API uses. Local `.env` holds the platform's public key.
+    - **The marked test model** (`cdc9779`): `modelos/`, a copy of the model
+      the user gave, with every value replaced by a field name. The original is
+      untouched; the README says what changed, including the forum clause the
+      model did not have.
+    - **`packages/docx`** (`6ce9931`): the block model, the .docx reader and
+      writer, the placeholder rules and the preview moved out of `docs`, so
+      both platforms read a file the same way. `docs` imports them and is
+      otherwise unchanged; `cn` comes from `packages/ui`.
+    - **Docs signs in with the Imobiliary account** (`c76db7b`). Its cookie now
+      holds the platform's session plus the office and role, and every call to
+      the document service carries a token minted from it (`DocgenTokenCache`,
+      per account and office, dropped on refusal; a refusal that survives a
+      refresh clears the session). Sign-up, recovery and the second factor link
+      to the platform; `/criar-conta`, `/esqueci-senha` and `/redefinir-senha`
+      are gone, as are the password and deletion panels. Privacy policy 2.0.
+    - **The contract generates its own documents** (`f5d7763`): "Gerar
+      documento" picks a template, shows it filled with `document-fields` and
+      editable in place, and generates with `reference contract:<id>`; the
+      contract's Documents section reads a document inside the platform,
+      downloads it and deletes it. A field the template asks for and the
+      contract cannot answer is named and left to be filled.
+    - **Verified in the browser (2026-09-17)** on the user's own contract
+      2026/001, with the API on :8081, docgen on :8080, web on :3001 and docs
+      on :3000: the office's templates appeared (the legacy docgen account had
+      migrated by e-mail), the review flagged the three fields the contract
+      does not answer, the document generated, listed, opened in the viewer
+      with the values in place, and Word read it back through COM
+      ("Olá Marilia Roberta de Sá…", "Colina/SP, 17 de setembro de 2026.").
+      The test document was deleted and the user's records were left as they
+      were. On Docs, the new sign-in screen refused a wrong password against
+      the platform and its links point at imobiliary.com.
+    - **Not verified here:** the signed-in half of Docs against the new
+      service (templates, generation, history), which needs the user's own
+      password, and the marked model uploaded as a template, which is an
+      upload on Docs.
+
 ### Next step
 
-Phase 7 of `PLANO.md`
-§7: the docgen integration, which needs its own plan with the user first
-(docgen accepting `aud=docgen` tokens, account migration by e-mail, "Gerar
-contrato" through the BFF with the qualification text).
+Phase 8 of `PLANO.md` §7: `docs` consumes `packages/ui`, in a commit of its
+own, proved with the computed-style hash of the public pages at 1280px in the
+three themes, before and after.
 
 Not in the editor on purpose, for now: fonts, colours, highlight, tables,
 images, headers and footers. Tables are the costly one: the block model,
@@ -1584,9 +1649,13 @@ pnpm docs:dev     # the docs platform on :3000
 ```
 
 `docs/.env` needs `SESSION_SECRET` (32+ chars) or the platform refuses to
-start. `DOCGEN_API_URL` defaults to `http://127.0.0.1:8080`, where the API
-now binds. `docgen-api/.env` needs `DOCGEN_MAIL_LOG=true` in development, or
-a Resend key — the API refuses to start with neither.
+start. `DOCGEN_API_URL` defaults to `http://127.0.0.1:8080` and
+`IMOBILIARY_API_URL` to `http://127.0.0.1:8081`, where each API binds;
+`IMOBILIARY_APP_URL` (default `http://localhost:3001`) is where the sign-up and
+recovery links point. `docgen-api/.env` needs `DOCGEN_IDENTITY_PUBLIC_KEYS`,
+the output of `go run ./cmd/imobiliary public-keys` in `imobiliary-api`, or the
+service refuses to start. It reads that file itself since phase 7; the old
+`DOCGEN_JWT_SECRET` and `DOCGEN_MAIL_LOG` are gone.
 
 ### Open items
 
@@ -1653,8 +1722,9 @@ a Resend key — the API refuses to start with neither.
   for WOFF2) by instancing the Fontsource variable font at wght=600. If the
   font changes again, the same route applies: instance, draw the glyph with
   `SVGPathPen`, scale to 20px and centre the bounding box.
-- The published API reference (republished 2026-09-11, with `/v1/me/stats`,
-  the versions endpoint and registration's 202) lives at
-  `https://claude.ai/code/artifact/e3eaf9ee-95d7-46a0-bd7f-d596a95345ee`.
-  Update it by republishing `docgen-api/docs/api-reference.html` **with that
-  URL**, or a second artifact is created instead.
+- The published docgen API reference lives at
+  `https://claude.ai/artifact/V9NL1MbyiRPCvXpYCSxDky` since the phase 7
+  rewrite (version 2.0.0, office-owned, no auth routes). Update it by
+  republishing `docgen-api/docs/api-reference.html` **with that URL**, or a
+  second artifact is created instead. The old
+  `e3eaf9ee-95d7-46a0-bd7f-d596a95345ee` address is the pre-phase-7 copy.
