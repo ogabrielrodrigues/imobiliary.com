@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: docgen API
-  version: "1.0.0"
+  version: "2.0.0"
   summary: Generates standardised DOCX documents from user-uploaded templates.
   description: |
     Upload a `.docx` containing `{{.placeholder}}` markers. The service discovers
@@ -11,29 +11,25 @@ info:
 
     ## Authentication
 
-    Two credentials make up a session.
+    Identity lives on the Imobiliary platform. Every request carries, as
+    `Authorization: Bearer <token>`, a short token the platform issues for this
+    service (`POST /v1/sessions/docgen-token` there): Ed25519, issuer
+    `imobiliary`, audience `docgen`, the key named by `kid`. This service holds
+    only the platform's public keys and signs nothing.
 
-    The **access token** is a short-lived JWT sent as `Authorization: Bearer
-    <token>`. It is validated without touching the database, so it cannot be
-    revoked before it expires — hence the short lifetime, 15 minutes by default.
+    Templates, documents and batches belong to the **office** in the token, and
+    every member of the office works with them. An account from before the
+    platform owned identity keeps its rows until a member of an office signs in
+    with its e-mail; they then move to that office, once.
 
-    The **refresh token** is an opaque secret, stored only as a digest, and
-    **rotated on every use**: each call to `/v1/auth/refresh` consumes the
-    secret and returns a new one. Presenting a secret that was already consumed
-    means two parties hold it, and there is no way to tell the owner from a
-    thief, so every session of that account is revoked. Always replace the
-    stored secret with the one the response returns.
+    Sign-up, sign-in, refresh, logout, password change and reset, and account
+    erasure moved to the platform, and their old routes answer `410`.
 
     ## Rate limiting
 
-    Three layers, all answering `429` with a `Retry-After` header in seconds:
-
-    - a global limit per client IP, applied to every request;
-    - a strict limit per client IP on `/v1/auth/*`, which is what makes password
-      guessing impractical;
-    - a limit per account on uploading a template and generating a document.
-
-    Because the global layer covers everything, any endpoint may answer `429`.
+    Two layers, both answering `429` with a `Retry-After` header in seconds: a
+    global limit per client IP, applied to every request, and a limit per office
+    on uploading a template and generating a document.
 
     ## Errors
 
@@ -41,10 +37,8 @@ info:
     `code` field is stable and safe to branch on; `message` is prose and may be
     reworded. Only validation failures carry `fields`.
 
-    Note that `401` deliberately collapses several causes — bad password,
-    expired token, revoked session, replayed refresh secret — into one response.
-    Distinguishing them would tell an attacker whether a stolen credential had
-    been genuine.
+    Note that `401` deliberately does not say why a token was refused: expired
+    and badly signed read the same.
   license:
     name: Unlicensed
 
@@ -55,8 +49,8 @@ servers:
 tags:
   - name: Health
     description: Liveness.
-  - name: Authentication
-    description: Accounts and sessions.
+  - name: Office
+    description: Who the token speaks for.
   - name: Templates
     description: Uploaded DOCX models and their immutable versions.
   - name: Documents
@@ -67,12 +61,11 @@ tags:
       per row of a spreadsheet, shown as one entry in the history and
       downloaded as one archive.
   - name: Dashboard
-    description: Aggregate figures about the account's own activity.
+    description: Aggregate figures about the office's own activity.
   - name: Privacy
     description: |
-      The rights a data subject has over their own data under the LGPD
-      (Lei 13.709/2018): access and portability through the export, erasure
-      through the deletes.
+      The office's portable copy of what it holds here. Access and erasure of
+      a person's account are exercised on the Imobiliary platform.
 
 security:
   - bearerAuth: []
@@ -104,261 +97,42 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
-  /v1/auth/register:
-    post:
-      tags: [Authentication]
-      summary: Create an account
-      description: |
-        Creates an account. It does **not** start a session: call
-        `/v1/auth/login` afterwards.
-
-        The email is lowercased and trimmed before the uniqueness check, so
-        `Ada@Example.com` and `ada@example.com` are the same account.
-      operationId: register
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/RegisterRequest" }
-      responses:
-        "202":
-          description: |
-            Accepted. The same answer is given whether or not the address
-            already had an account; in that case nothing is created and the
-            owner is told by email. Anything that differed would reveal who
-            is registered.
-        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
-        "422": { $ref: "#/components/responses/ValidationFailed" }
-        "429": { $ref: "#/components/responses/RateLimited" }
-
-  /v1/auth/login:
-    post:
-      tags: [Authentication]
-      summary: Exchange credentials for a session
-      description: |
-        An unknown address and a wrong password fail identically, in the same
-        response and in the same amount of time, so the endpoint cannot be used
-        to discover which addresses are registered.
-      operationId: login
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/LoginRequest" }
-      responses:
-        "200":
-          description: A new session.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Session" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
-        "422": { $ref: "#/components/responses/ValidationFailed" }
-        "429": { $ref: "#/components/responses/RateLimited" }
-
-  /v1/auth/refresh:
-    post:
-      tags: [Authentication]
-      summary: Rotate the token pair
-      description: |
-        Consumes the refresh secret and returns a fresh pair. **Replace both
-        stored tokens with the ones returned**: the secret just sent is now
-        spent.
-
-        Sending a spent secret is treated as evidence that it leaked, and
-        revokes every session of the account — including the successor a
-        legitimate client is holding. That collateral damage is deliberate.
-      operationId: refreshSession
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/RefreshRequest" }
-      responses:
-        "200":
-          description: A rotated session.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Session" }
-        "401":
-          description: |
-            The secret is unknown, expired, revoked, or was already consumed.
-            The response is identical in every case.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Error" }
-        "422": { $ref: "#/components/responses/ValidationFailed" }
-        "429": { $ref: "#/components/responses/RateLimited" }
-
-  /v1/auth/logout:
-    post:
-      tags: [Authentication]
-      summary: End a session
-      description: |
-        Revokes the session the secret belongs to. Answers `204` whether or not
-        the secret matched a live session: the caller's intent is satisfied
-        either way, and a different answer for an unknown secret would let the
-        endpoint be used to probe for valid ones.
-      operationId: logout
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/RefreshRequest" }
-      responses:
-        "204":
-          description: The session is gone.
-        "422": { $ref: "#/components/responses/ValidationFailed" }
-        "429": { $ref: "#/components/responses/RateLimited" }
-
-  /v1/auth/password/forgot:
-    post:
-      tags: [Authentication]
-      summary: Ask for a password-reset link
-      description: |
-        Mails a one-time link to the address, if it belongs to an account.
-
-        Always answers 202, and always the same. Reporting whether the
-        address was found would turn an endpoint anyone can reach into a way
-        to ask which addresses are registered here.
-      operationId: requestPasswordReset
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                email: { type: string, format: email }
-              required: [email]
-      responses:
-        "202":
-          description: |
-            The request was accepted. This says nothing about whether a
-            message was sent.
-        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
-        "429": { $ref: "#/components/responses/RateLimited" }
-
-  /v1/auth/password/reset:
-    post:
-      tags: [Authentication]
-      summary: Set a password from a reset link
-      description: |
-        Consumes the token from the mail and sets a new password.
-
-        The token works once and expires. Every session of the account ends,
-        including any the caller holds: whoever presents this proved control
-        of the mailbox and nothing more, and the premise of the flow is that
-        the account may already be in someone else's hands.
-      operationId: resetPassword
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                token: { type: string }
-                new_password: { type: string, minLength: 12, maxLength: 256 }
-              required: [token, new_password]
-      responses:
-        "204":
-          description: The password was set.
-        "401":
-          description: |
-            The token is unknown, expired or already used. The three are not
-            told apart.
-        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
-        "422": { $ref: "#/components/responses/ValidationFailed" }
-        "429": { $ref: "#/components/responses/RateLimited" }
-
   /v1/me:
     get:
-      tags: [Authentication]
-      summary: Current account
-      operationId: getCurrentUser
+      tags: [Office]
+      summary: Who the token speaks for
+      description: |
+        The member, the office that owns what the request touches, and the
+        member's role there. The office's name follows the platform.
+      operationId: getCurrentCaller
       responses:
         "200":
-          description: The authenticated account.
+          description: The caller.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/User" }
+              schema:
+                type: object
+                properties:
+                  user:
+                    type: object
+                    properties:
+                      id: { type: string, format: uuid }
+                      email: { type: string }
+                      name: { type: string }
+                    required: [id, email, name]
+                  office: { $ref: "#/components/schemas/Office" }
+                  role: { type: string, examples: [admin, member] }
+                required: [user, office, role]
         "401": { $ref: "#/components/responses/Unauthorized" }
-
-    delete:
-      tags: [Privacy]
-      summary: Erase the account
-      description: |
-        Erases the account and everything belonging to it — templates, every
-        version, generated documents with the values that were filled into
-        them, sessions, and the stored files behind all of it.
-
-        Unlike the delete on a template, this one is not a flag. Nothing
-        survives except a stored file whose exact bytes another account also
-        holds, which content addressing makes one file rather than two.
-
-        This is the erasure right of article 18, VI of the LGPD. It cannot be
-        undone and asks for no confirmation beyond the request itself.
-      operationId: deleteAccount
-      responses:
-        "204":
-          description: The account and its data were erased.
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "429": { $ref: "#/components/responses/RateLimited" }
-
-  /v1/me/password:
-    post:
-      tags: [Authentication]
-      summary: Change the password
-      description: |
-        Replaces the password of the authenticated account, and answers with a
-        **new session**.
-
-        Every other session of the account ends immediately — not when its
-        access token would have lapsed. A change that left a second party
-        signed in would be decorative, and that party is the reason anyone
-        changes a password. The session returned is what keeps the caller
-        working through its own request.
-
-        Charged to the strict per-IP credential budget rather than the write
-        one: guessing a password is guessing a password whether or not the
-        guesser already holds a session.
-      operationId: changePassword
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                current_password: { type: string }
-                new_password: { type: string, minLength: 12, maxLength: 256 }
-              required: [current_password, new_password]
-      responses:
-        "200":
-          description: The password changed, and a fresh session was issued.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Session" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
-        "422": { $ref: "#/components/responses/ValidationFailed" }
-        "429": { $ref: "#/components/responses/RateLimited" }
 
   /v1/me/export:
     get:
       tags: [Privacy]
-      summary: Export everything held about the account
+      summary: Export everything the office holds
       description: |
-        Returns a single JSON document with the account, every template and
-        version, and every generated document including the values that were
-        filled into it.
+        Returns a single JSON document with the office, every template and
+        version, every batch, and every generated document including the values
+        that were filled into it.
 
         Templates hidden by a soft delete are listed, marked `deleted`: the
         question an access request asks is what is still held, not what is
@@ -367,7 +141,8 @@ paths:
         The uploaded and rendered `.docx` files are not inlined. Download them
         individually; the export says so in its own `notes` field.
 
-        This serves the access and portability rights of article 18, II and V.
+        It is the office's portable copy; a person's own access and erasure
+        rights are exercised on the Imobiliary platform.
       operationId: exportAccount
       responses:
         "200":
@@ -382,10 +157,10 @@ paths:
   /v1/me/stats:
     get:
       tags: [Dashboard]
-      summary: Figures behind the account's dashboard
+      summary: Figures behind the office's dashboard
       description: |
         Counts of templates and documents, documents per day across a window,
-        and the templates used most in it. Everything is scoped to the caller.
+        and the templates used most in it. Everything is scoped to the office.
 
         The window ends today and covers `days` calendar days, counted in the
         time zone `tz`: a document generated at 22:30 in São Paulo belongs to
@@ -395,7 +170,7 @@ paths:
 
         Deleted templates are left out of the template count but still ranked,
         marked `deleted`: the documents made from them are still the
-        account's.
+        office's.
       operationId: getStats
       parameters:
         - name: days
@@ -654,14 +429,19 @@ paths:
       summary: List documents
       description: |
         Newest first, including the documents inside batches. Narrow it with
-        `template_id` or `batch_id`. For the history that shows a batch as one
-        entry, see `GET /v1/history`.
+        `template_id`, `batch_id` or `reference`. For the history that shows a
+        batch as one entry, see `GET /v1/history`.
       operationId: listDocuments
       parameters:
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Offset"
         - $ref: "#/components/parameters/TemplateFilter"
         - $ref: "#/components/parameters/BatchFilter"
+        - name: reference
+          in: query
+          required: false
+          description: Only the documents generated with this reference, such as `contract:<id>`.
+          schema: { type: string, maxLength: 100 }
         - $ref: "#/components/parameters/DocumentOrder"
       responses:
         "200":
@@ -694,10 +474,14 @@ paths:
         Values are XML-escaped before substitution, so `&`, `<` and `>` are safe
         to send and appear literally in the finished document.
 
-        With `batch_id` the document joins a batch of the same account and
+        With `batch_id` the document joins a batch of the same office and
         template, and is rendered from the batch's version. A batch of another
         template or version, or one that does not exist, is a `422` on
         `batch_id`.
+
+        `reference` ties the document to a record elsewhere, such as
+        `contract:<id>` on the Imobiliary platform, for listing with
+        `?reference=`.
       operationId: generateDocument
       requestBody:
         required: true
@@ -896,7 +680,7 @@ paths:
         a filename, entries of one archive may not: a repeated name gets a
         suffix, `contrato (2).docx`.
 
-        It is charged to the per-account write budget, like the account export,
+        It is charged to the per-office write budget, like the office export,
         because one request may gather hundreds of files.
       operationId: downloadBatch
       responses:
@@ -923,7 +707,7 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: The `access_token` returned by login or refresh.
+      description: A token the Imobiliary platform issued for this service (audience `docgen`).
 
   parameters:
     Limit:
@@ -1025,7 +809,7 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
     NotFound:
       description: |
-        No such resource **for this account**. A resource owned by someone else
+        No such resource **for this office**. A resource owned by someone else
         is reported as missing rather than forbidden, so the API never confirms
         that an identifier exists.
       content:
@@ -1068,88 +852,13 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
 
   schemas:
-    RegisterRequest:
-      type: object
-      properties:
-        email:
-          type: string
-          format: email
-          maxLength: 254
-        name:
-          type: string
-          minLength: 1
-          maxLength: 120
-        password:
-          type: string
-          minLength: 12
-          maxLength: 256
-          description: |
-            Length is the only rule. Composition requirements are deliberately
-            absent, following current NIST guidance.
-        terms_version:
-          type: string
-          description: |
-            The version of the terms of use the account accepted. Required:
-            the acceptance is recorded with its version and instant, because
-            consent to one version is not consent to the next.
-      required: [email, name, password, terms_version]
-      examples:
-        - email: someone@example.com
-          name: Ada Lovelace
-          password: a-sufficiently-long-password
-          terms_version: "1.0"
-
-    LoginRequest:
-      type: object
-      properties:
-        email: { type: string, format: email }
-        password: { type: string }
-      required: [email, password]
-
-    RefreshRequest:
-      type: object
-      properties:
-        refresh_token:
-          type: string
-          description: The most recent refresh secret. It is consumed by this call.
-      required: [refresh_token]
-
-    User:
+    Office:
       type: object
       properties:
         id: { type: string, format: uuid }
-        email: { type: string, format: email }
         name: { type: string }
         created_at: { type: string, format: date-time }
-      required: [id, email, name, created_at]
-      examples:
-        - id: 01a08374-3567-79e9-83a1-ab0c71a3f88e
-          email: someone@example.com
-          name: Ada Lovelace
-          created_at: "2026-09-08T23:57:06.279Z"
-
-    Session:
-      type: object
-      properties:
-        access_token:
-          type: string
-          description: "Send as the header `Authorization: Bearer <token>`."
-        token_type:
-          type: string
-          const: Bearer
-        expires_at:
-          type: string
-          format: date-time
-          description: When the access token stops being accepted.
-        refresh_token:
-          type: string
-          description: |
-            Opaque secret. Store it, and replace it on every refresh — it is
-            single-use.
-        refresh_expires_at: { type: string, format: date-time }
-        user: { $ref: "#/components/schemas/User" }
-      required:
-        [access_token, token_type, expires_at, refresh_token, refresh_expires_at, user]
+      required: [id, name, created_at]
 
     Template:
       type: object
@@ -1224,6 +933,10 @@ components:
           description: |
             Joins the document to a batch of the same template. The batch's
             version is used; a different `version` is a `422`.
+        reference:
+          type: string
+          maxLength: 100
+          description: A record elsewhere this document belongs to, such as `contract:<id>`.
         data:
           type: object
           description: |
@@ -1244,10 +957,10 @@ components:
     AccountExport:
       type: object
       description: |
-        Everything the service holds about one account, at one instant.
+        Everything the service holds for one office, at one instant.
       properties:
         exported_at: { type: string, format: date-time }
-        account: { $ref: "#/components/schemas/User" }
+        office: { $ref: "#/components/schemas/Office" }
         templates:
           type: array
           items:
@@ -1273,7 +986,7 @@ components:
         batches:
           type: array
           description: |
-            Every batch. A batch's name is text the account holder typed, and
+            Every batch. A batch's name is text someone in the office typed, and
             often names the people its documents are about.
           items:
             type: object
@@ -1290,7 +1003,7 @@ components:
           description: |
             What the export does not contain, stated in the export itself so
             a reader is not left to assume it is everything.
-      required: [exported_at, account, templates, documents, batches, notes]
+      required: [exported_at, office, templates, documents, batches, notes]
 
     Document:
       type: object
@@ -1315,8 +1028,11 @@ components:
           anyOf:
             - { type: string, format: uuid }
             - type: "null"
+        reference:
+          type: string
+          description: The record elsewhere the document belongs to; empty when none.
       required:
-        [id, template_id, template_version, filename, size, data, created_at, download_url, batch_id]
+        [id, template_id, template_version, filename, size, data, created_at, download_url, batch_id, reference]
 
     CreateBatchRequest:
       type: object
@@ -1384,7 +1100,7 @@ components:
           description: Templates not deleted.
         documents:
           type: integer
-          description: Every document the account holds.
+          description: Every document the office holds.
         documents_in_period:
           type: integer
           description: Documents generated in the window, today included.

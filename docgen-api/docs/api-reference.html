@@ -500,7 +500,7 @@
   <nav class="rail">
     <div>
       <div class="mark">docgen<span>.</span></div>
-      <div class="mark-sub">DOCX generation API<br>v1.0.0</div>
+      <div class="mark-sub">DOCX generation API<br>v2.0.0</div>
     </div>
 
     <div class="nav-group">
@@ -512,11 +512,7 @@
     </div>
 
     <div class="nav-group">
-      <div class="nav-title">Authentication</div>
-      <a href="#register"><span class="verb verb-post">POST</span><code>/auth/register</code></a>
-      <a href="#login"><span class="verb verb-post">POST</span><code>/auth/login</code></a>
-      <a href="#refresh"><span class="verb verb-post">POST</span><code>/auth/refresh</code></a>
-      <a href="#logout"><span class="verb verb-post">POST</span><code>/auth/logout</code></a>
+      <div class="nav-title">Office</div>
       <a href="#me"><span class="verb verb-get">GET</span><code>/me</code></a>
       <a href="#stats"><span class="verb verb-get">GET</span><code>/me/stats</code></a>
     </div>
@@ -572,7 +568,7 @@
         </div>
         <div class="fact">
           <dt>Auth</dt>
-          <dd>Bearer JWT</dd>
+          <dd>Bearer, Imobiliary token</dd>
         </div>
         <div class="fact">
           <dt>Content type</dt>
@@ -589,16 +585,15 @@
       <h2>Quickstart</h2>
       <p>Four calls take you from nothing to a finished document.</p>
       <ol class="steps">
-        <li>Create an account, then log in to get a token pair.</li>
+        <li>Get a token for this service from a signed-in session on the Imobiliary platform.</li>
         <li>Upload a <code>.docx</code>. The response tells you which placeholders it found.</li>
         <li>Generate a document by supplying a value for each of those placeholders.</li>
         <li>Download the result.</li>
       </ol>
 
-      <pre><code><span class="cmt"># 1. Log in.</span>
-curl -X POST localhost:8080/v1/auth/login \
-  -H <span class="str">'Content-Type: application/json'</span> \
-  -d <span class="str">'{"email":"someone@example.com","password":"a-sufficiently-long-password"}'</span>
+      <pre><code><span class="cmt"># 1. A five-minute token for this service, from the platform.</span>
+curl -X POST localhost:8081/v1/sessions/docgen-token \
+  -H <span class="str">"Authorization: Bearer $PLATFORM_ACCESS_TOKEN"</span>
 
 <span class="cmt"># 2. Upload a template. Attach the .docx as the "file" part.</span>
 curl -X POST localhost:8080/v1/templates \
@@ -620,47 +615,33 @@ curl -OJ localhost:8080/v1/documents/$ID/download \
     <section id="auth">
       <h2>Authentication</h2>
       <p>
-        A session is two credentials with different jobs. The <strong>access token</strong>
-        is a short-lived JWT you send on every authenticated request. The
-        <strong>refresh token</strong> is an opaque secret whose only purpose is to obtain
-        the next access token.
+        Identity lives on the Imobiliary platform: accounts, passwords, second factors and
+        sessions. Every request here carries a short token the platform issues for this
+        service, and this service verifies it with the platform's <strong>public keys</strong>.
+        It holds nothing that could mint a token.
       </p>
 
-      <pre><code>Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...</code></pre>
+      <pre><code>Authorization: Bearer eyJhbGciOiJFZERTQSIsImtpZCI6IjEiLCJ0eXAiOiJKV1QifQ...</code></pre>
 
       <p>
-        The access token is verified without touching the database, which is what keeps
-        it fast — and also why it cannot be revoked before it expires. That is the reason
-        its life is short: 15 minutes by default.
+        The token is Ed25519 (<code>EdDSA</code>), issuer <code>imobiliary</code>, audience
+        <code>docgen</code>, with the key named by <code>kid</code>, and lasts five minutes.
+        HS256, <code>none</code>, another audience or an unknown key are refused, with a single
+        <code>401 unauthorized</code> that does not say why.
       </p>
 
       <div class="note">
-        <div class="note-title">The refresh token is single-use</div>
+        <div class="note-title">Everything belongs to the office</div>
         <p>
-          Every call to <code>/v1/auth/refresh</code> consumes the secret you sent and
-          returns a new one. Store the new pair immediately.
+          Templates, documents and batches belong to the office in the token, and every member
+          works with them. An account from before identity moved keeps its rows until a member
+          of an office signs in with its e-mail; they then move to that office, once.
         </p>
         <p>
-          If a spent secret is presented again, two parties are holding it and there is no
-          way to tell the owner from a thief — so <strong>every session of that account is
-          revoked</strong>, including the successor a legitimate client holds. Losing your
-          session and having to log in again is the intended outcome of that situation.
+          The old account routes (<code>/v1/auth/*</code>, <code>POST /v1/me/password</code>,
+          <code>DELETE /v1/me</code>) answer <span class="status">410</span>.
         </p>
       </div>
-
-      <p>
-        Passwords are hashed with argon2id. The only rule is length — at least 12
-        characters — with no composition requirements, following current NIST guidance.
-      </p>
-
-      <h3>Why a failed login is vague</h3>
-      <p>
-        An unknown address and a wrong password produce the same response, in the same
-        amount of time. Nor does the API distinguish an expired token from a revoked one:
-        all of it is a single <code>401 unauthorized</code>. Telling those cases apart
-        would confirm to an attacker which addresses are registered and whether a stolen
-        credential was genuine.
-      </p>
     </section>
 
     <section id="placeholders">
@@ -742,110 +723,20 @@ Your plan is {{.plan}} at {{.amount}} per month.</code></pre>
     </section>
 
     <section id="endpoints-auth">
-      <h2>Authentication endpoints</h2>
-
-      <div class="endpoint" id="register">
-        <div class="sig">
-          <span class="chip chip-post">POST</span>
-          <span class="path">/v1/auth/register</span>
-          <span class="lock">Public</span>
-        </div>
-        <p>
-          Creates an account and returns it. This does <strong>not</strong> start a session —
-          call <code>/v1/auth/login</code> next. Email is lowercased and trimmed before the
-          uniqueness check.
-        </p>
-        <div class="fields">
-          <div class="field">
-            <div><span class="field-name">email</span><br><span class="field-type">string · <span class="req">required</span></span></div>
-            <div class="field-desc">A valid address, at most 254 characters.</div>
-          </div>
-          <div class="field">
-            <div><span class="field-name">name</span><br><span class="field-type">string · <span class="req">required</span></span></div>
-            <div class="field-desc">At most 120 characters.</div>
-          </div>
-          <div class="field">
-            <div><span class="field-name">password</span><br><span class="field-type">string · <span class="req">required</span></span></div>
-            <div class="field-desc">Between 12 and 256 characters.</div>
-          </div>
-          <div class="field">
-            <div><span class="field-name">terms_version</span><br><span class="field-type">string · <span class="req">required</span></span></div>
-            <div class="field-desc">The version of the terms of use accepted. Recorded with the instant, because consent to one version is not consent to the next.</div>
-          </div>
-        </div>
-        <div class="pair">
-          <div>
-            <div class="pair-label">Request</div>
-            <pre><code>{
-  <span class="key">"email"</span>: <span class="str">"someone@example.com"</span>,
-  <span class="key">"name"</span>: <span class="str">"Ada Lovelace"</span>,
-  <span class="key">"password"</span>: <span class="str">"a-sufficiently-long-password"</span>,
-  <span class="key">"terms_version"</span>: <span class="str">"1.0"</span>
-}</code></pre>
-          </div>
-          <div>
-            <div class="pair-label">202 Accepted</div>
-            <pre><code>(no body)</code></pre>
-          </div>
-        </div>
-        <p>The answer is the same whether or not the address already had an account. In that case nothing is created and the owner is told by email; anything that differed would reveal who is registered. It does not start a session: log in afterwards.</p>
-      </div>
-
-      <div class="endpoint" id="login">
-        <div class="sig">
-          <span class="chip chip-post">POST</span>
-          <span class="path">/v1/auth/login</span>
-          <span class="lock">Public</span>
-        </div>
-        <p>Exchanges <code>email</code> and <code>password</code> for a session.</p>
-        <div class="pair-label">200 OK</div>
-        <pre><code>{
-  <span class="key">"access_token"</span>: <span class="str">"eyJhbGciOiJIUzI1NiIs…"</span>,
-  <span class="key">"token_type"</span>: <span class="str">"Bearer"</span>,
-  <span class="key">"expires_at"</span>: <span class="str">"2026-09-08T21:12:06Z"</span>,
-  <span class="key">"refresh_token"</span>: <span class="str">"PXhrICkLRqbVYB3KNBaa9YKZX813itfz6a_1ZNgVjVo"</span>,
-  <span class="key">"refresh_expires_at"</span>: <span class="str">"2026-10-08T23:57:06Z"</span>,
-  <span class="key">"user"</span>: { <span class="key">"id"</span>: <span class="str">"01a08374-…"</span>, <span class="key">"email"</span>: <span class="str">"someone@example.com"</span>, … }
-}</code></pre>
-        <p><span class="status">401</span> for both a wrong password and an unknown address.</p>
-      </div>
-
-      <div class="endpoint" id="refresh">
-        <div class="sig">
-          <span class="chip chip-post">POST</span>
-          <span class="path">/v1/auth/refresh</span>
-          <span class="lock">Public</span>
-        </div>
-        <p>
-          Send <code>refresh_token</code>; receive a complete new session in the same shape
-          as login. The secret you sent is now spent — replace both stored tokens.
-        </p>
-        <p>
-          <span class="status">401</span> if the secret is unknown, expired, revoked, or
-          already consumed. In the last case every session of the account is revoked as well.
-        </p>
-      </div>
-
-      <div class="endpoint" id="logout">
-        <div class="sig">
-          <span class="chip chip-post">POST</span>
-          <span class="path">/v1/auth/logout</span>
-          <span class="lock">Public</span>
-        </div>
-        <p>
-          Send <code>refresh_token</code> to end that session. Always answers
-          <span class="status">204</span>, whether or not the secret matched a live session:
-          your intent is satisfied either way, and a different answer for an unknown secret
-          would let this endpoint be used to probe for valid ones.
-        </p>
-      </div>
+      <h2>Office</h2>
 
       <div class="endpoint" id="me">
         <div class="sig">
           <span class="chip chip-get">GET</span>
           <span class="path">/v1/me</span>
         </div>
-        <p>Returns the authenticated account. Useful for checking that a token is being sent correctly.</p>
+        <p>The member, the office that owns what a request touches, and the member's role. Useful for checking that a token is being sent correctly.</p>
+        <div class="pair-label">200 OK</div>
+        <pre><code>{
+  <span class="key">"user"</span>: { <span class="key">"id"</span>: <span class="str">"01a0…"</span>, <span class="key">"email"</span>: <span class="str">"ana@example.com"</span>, <span class="key">"name"</span>: <span class="str">"Ana"</span> },
+  <span class="key">"office"</span>: { <span class="key">"id"</span>: <span class="str">"01a0…"</span>, <span class="key">"name"</span>: <span class="str">"Central Imóveis"</span>, <span class="key">"created_at"</span>: <span class="str">"2026-09-17T12:00:00Z"</span> },
+  <span class="key">"role"</span>: <span class="str">"admin"</span>
+}</code></pre>
       </div>
 
       <div class="endpoint" id="stats">
@@ -854,10 +745,10 @@ Your plan is {{.plan}} at {{.amount}} per month.</code></pre>
           <span class="path">/v1/me/stats</span>
         </div>
         <p>
-          The figures behind the account's dashboard: templates in use, documents held, documents
+          The figures behind the office's dashboard: templates in use, documents held, documents
           generated in a window and in the window of the same length before it, one count per day,
           and the five templates used most. Deleted templates still rank, marked <code>deleted</code>,
-          because the documents made from them are still the account's.
+          because the documents made from them are still the office's.
         </p>
         <div class="fields">
           <div class="field">
@@ -1046,6 +937,10 @@ Your plan is {{.plan}} at {{.amount}} per month.</code></pre>
             <div><span class="field-name">batch_id</span><br><span class="field-type">uuid</span></div>
             <div class="field-desc">Joins the document to a <a href="#create-batch">batch</a> of the same template. The batch's version is used; another template or version is a 422 on <code>batch_id</code>.</div>
           </div>
+          <div class="field">
+            <div><span class="field-name">reference</span><br><span class="field-type">string</span></div>
+            <div class="field-desc">A record elsewhere the document belongs to, such as <code>contract:&lt;id&gt;</code> on the platform, for listing with <code>?reference=</code>. At most 100 characters.</div>
+          </div>
         </div>
         <div class="pair">
           <div>
@@ -1071,7 +966,8 @@ Your plan is {{.plan}} at {{.amount}} per month.</code></pre>
   <span class="key">"data"</span>: { … },
   <span class="key">"created_at"</span>: <span class="str">"2026-09-08T23:57:32Z"</span>,
   <span class="key">"download_url"</span>: <span class="str">"/v1/documents/01a08374-…/download"</span>,
-  <span class="key">"batch_id"</span>: null
+  <span class="key">"batch_id"</span>: null,
+  <span class="key">"reference"</span>: <span class="str">""</span>
 }</code></pre>
           </div>
         </div>
@@ -1097,6 +993,10 @@ Your plan is {{.plan}} at {{.amount}} per month.</code></pre>
           <div class="field">
             <div><span class="field-name">template_id</span><br><span class="field-type">query · uuid</span></div>
             <div class="field-desc">Only the documents generated from this template.</div>
+          </div>
+          <div class="field">
+            <div><span class="field-name">reference</span><br><span class="field-type">query · string</span></div>
+            <div class="field-desc">Only the documents generated with this reference.</div>
           </div>
           <div class="field">
             <div><span class="field-name">batch_id</span><br><span class="field-type">query · uuid</span></div>
@@ -1232,7 +1132,7 @@ Cache-Control: private, max-age=31536000, immutable</code></pre>
 Content-Disposition: attachment; filename="Aditamentos de setembro.zip"
 Cache-Control: no-store</code></pre>
         <p>
-          It is charged to the per-account write budget, like the account export: one request may
+          It is charged to the per-office write budget, like the office export: one request may
           gather hundreds of files.
         </p>
       </div>
@@ -1274,9 +1174,10 @@ Cache-Control: no-store</code></pre>
           </thead>
           <tbody>
             <tr><td class="status">400</td><td><code>bad_request</code></td><td>A path identifier is not a valid UUID.</td></tr>
-            <tr><td class="status">401</td><td><code>unauthorized</code></td><td>No credential, or one that was not accepted. Carries <code>WWW-Authenticate: Bearer</code>.</td></tr>
-            <tr><td class="status">404</td><td><code>not_found</code></td><td>No such resource <em>for this account</em>.</td></tr>
-            <tr><td class="status">409</td><td><code>conflict</code></td><td>The resource already exists. No endpoint currently answers with it — registration deliberately does not.</td></tr>
+            <tr><td class="status">401</td><td><code>unauthorized</code></td><td>No token, or one that was not accepted. Carries <code>WWW-Authenticate: Bearer</code>.</td></tr>
+            <tr><td class="status">410</td><td><code>gone</code></td><td>An account or session route that moved to the Imobiliary platform.</td></tr>
+            <tr><td class="status">404</td><td><code>not_found</code></td><td>No such resource <em>for this office</em>.</td></tr>
+            <tr><td class="status">409</td><td><code>conflict</code></td><td>The resource already exists. No endpoint currently answers with it.</td></tr>
             <tr><td class="status">415</td><td><code>unsupported_media_type</code></td><td>The body was sent under an unexpected <code>Content-Type</code>.</td></tr>
             <tr><td class="status">422</td><td><code>validation_failed</code></td><td>Well formed, but not acceptable. The only code that carries <code>fields</code>.</td></tr>
             <tr><td class="status">429</td><td><code>rate_limited</code></td><td>Too many requests. Carries <code>Retry-After</code> in seconds.</td></tr>
@@ -1288,7 +1189,7 @@ Cache-Control: no-store</code></pre>
       <div class="note">
         <div class="note-title">404 rather than 403</div>
         <p>
-          A resource belonging to another account is reported as missing, not forbidden. A
+          A resource belonging to another office is reported as missing, not forbidden. A
           <code>403</code> would confirm that the identifier exists, which is information the
           caller has no right to.
         </p>
@@ -1298,7 +1199,7 @@ Cache-Control: no-store</code></pre>
     <section id="limits">
       <h2>Rate limits</h2>
       <p>
-        Three layers, each a token bucket. Refusals answer <span class="status">429</span> with
+        Two layers, each a token bucket. Refusals answer <span class="status">429</span> with
         a <code>Retry-After</code> header in whole seconds, rounded up.
       </p>
 
@@ -1309,16 +1210,14 @@ Cache-Control: no-store</code></pre>
           </thead>
           <tbody>
             <tr><td>Global</td><td>Client IP</td><td>Every request</td><td>10/s, burst 60</td></tr>
-            <tr><td>Credentials</td><td>Client IP</td><td><code>/v1/auth/*</code></td><td>0.2/s, burst 10</td></tr>
-            <tr><td>Write</td><td>Account</td><td>Uploading, generating, deleting, creating and downloading batches, and the account export</td><td>2/s, burst 20</td></tr>
+            <tr><td>Write</td><td>Office</td><td>Uploading, generating, deleting, creating and downloading batches, and the office export</td><td>2/s, burst 20</td></tr>
           </tbody>
         </table>
       </div>
 
       <p>
         Because the global layer covers everything, any endpoint can answer <code>429</code>.
-        The strict limit on the credential routes is what makes password guessing impractical:
-        after ten attempts you are waiting five seconds per try.
+        Password guessing is the platform's to limit, since sign-in lives there.
       </p>
       <p>
         The client IP is taken from the connection. <code>X-Forwarded-For</code> is honoured

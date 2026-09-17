@@ -1,5 +1,18 @@
 # API de Geração de Documentos Padronizados
 
+> **Atualização de 2026-09-17 (fase 7 da plataforma Imobiliary).** A identidade
+> saiu deste serviço. Cadastro, login, refresh, logout, senhas e exclusão de
+> conta agora ficam na plataforma Imobiliary, e as rotas antigas respondem
+> `410`. O serviço verifica tokens Ed25519 de cinco minutos emitidos pela
+> plataforma (emissor `imobiliary`, audiência `docgen`) com as chaves públicas
+> de `DOCGEN_IDENTITY_PUBLIC_KEYS`, e não assina nada. Modelos, documentos e
+> lotes pertencem ao **escritório** do token; uma conta antiga é levada ao
+> escritório do primeiro membro que entrar com o mesmo e-mail, uma única vez
+> (migração `0005_organizations.sql`). Documentos podem levar `reference`
+> (`contract:<id>`). As seções abaixo sobre usuário, senha e refresh descrevem o
+> desenho original e ficam como histórico; o contrato atual está em
+> `openapi.yaml` e o plano em `PLANO-FASE-7.md`, na raiz do repositório.
+
 ## Contexto
 
 Uma API que gera documentos padronizados a partir de modelos DOCX enviados pelo
@@ -357,7 +370,8 @@ de atualizar este.
 ### Subir o serviço
 
 ```sh
-export DOCGEN_JWT_SECRET="at-least-32-bytes-of-secret-material"
+# As chaves públicas da plataforma: `imobiliary public-keys` as imprime.
+export DOCGEN_IDENTITY_PUBLIC_KEYS="1:BASE64_DE_32_BYTES"
 go run ./cmd/docgen
 ```
 

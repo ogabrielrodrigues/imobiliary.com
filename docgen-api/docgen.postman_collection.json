@@ -22,22 +22,7 @@
       "type": "string"
     },
     {
-      "key": "email",
-      "value": "someone@example.com",
-      "type": "string"
-    },
-    {
-      "key": "password",
-      "value": "a-sufficiently-long-password",
-      "type": "string"
-    },
-    {
       "key": "access_token",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "refresh_token",
       "value": "",
       "type": "string"
     },
@@ -90,156 +75,9 @@
       ]
     },
     {
-      "name": "Authentication",
+      "name": "Office",
+      "description": "Identity lives on the Imobiliary platform. Set `access_token` to the `token` answered by POST /v1/sessions/docgen-token there; it lasts five minutes.",
       "item": [
-        {
-          "name": "Register",
-          "request": {
-            "auth": {
-              "type": "noauth"
-            },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{email}}\",\n  \"name\": \"Test Account\",\n  \"password\": \"{{password}}\",\n  \"terms_version\": \"1.0\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{base_url}}/v1/auth/register",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "v1",
-                "auth",
-                "register"
-              ]
-            },
-            "description": "Creates an account. The password must be at least 12 characters. Requires terms_version, the version of the terms accepted. Always returns 202 with no body, whether or not the address was taken, so the endpoint cannot reveal who is registered."
-          },
-          "response": []
-        },
-        {
-          "name": "Log in",
-          "request": {
-            "auth": {
-              "type": "noauth"
-            },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{base_url}}/v1/auth/login",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "v1",
-                "auth",
-                "login"
-              ]
-            },
-            "description": "Copy access_token and refresh_token from the response into the collection variables of the same name."
-          },
-          "response": []
-        },
-        {
-          "name": "Refresh session",
-          "request": {
-            "auth": {
-              "type": "noauth"
-            },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{base_url}}/v1/auth/refresh",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "v1",
-                "auth",
-                "refresh"
-              ]
-            },
-            "description": "Rotates the pair. The old refresh token is consumed: update both variables from the response. Replaying a consumed token revokes every session of the account."
-          },
-          "response": []
-        },
-        {
-          "name": "Log out",
-          "request": {
-            "auth": {
-              "type": "noauth"
-            },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{base_url}}/v1/auth/logout",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "v1",
-                "auth",
-                "logout"
-              ]
-            },
-            "description": "Always answers 204, whether or not the secret matched a live session."
-          },
-          "response": []
-        },
         {
           "name": "Current account",
           "request": {
@@ -873,43 +711,6 @@
               ]
             },
             "description": "Answers 401 with a WWW-Authenticate: Bearer header."
-          },
-          "response": []
-        },
-        {
-          "name": "Brute force the login (429)",
-          "request": {
-            "auth": {
-              "type": "noauth"
-            },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"the-wrong-password\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{base_url}}/v1/auth/login",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "v1",
-                "auth",
-                "login"
-              ]
-            },
-            "description": "Send this about ten times in a row. Once the burst is spent the endpoint answers 429 with a Retry-After header."
           },
           "response": []
         }
