@@ -27,6 +27,14 @@ import type {
 } from "../domain/person.ts";
 import type { PropertiesPage, Property, PropertyInput } from "../domain/property.ts";
 import type {
+  ChargeInput,
+  Dashboard,
+  PaymentInput,
+  PaymentPreview,
+  RentDetail,
+  RentsPage,
+} from "../domain/rent.ts";
+import type {
   AmendmentInput,
   AmendmentPreview,
   Contract,
@@ -151,6 +159,30 @@ export interface ContractsGateway {
   previewAmendment(ctx: CallContext, id: string, input: AmendmentInput): Promise<AmendmentPreview>;
   amend(ctx: CallContext, id: string, version: number, input: AmendmentInput): Promise<Contract>;
   undoAmendment(ctx: CallContext, id: string, amendmentId: string, version: number): Promise<Contract>;
+}
+
+/** The office's instalments across contracts, and the dashboard. */
+export interface RentsGateway {
+  list(
+    ctx: CallContext,
+    query: {
+      q?: string;
+      status?: "overdue" | "pending" | "open" | "paid";
+      dueFrom?: string;
+      dueTo?: string;
+      contractId?: string;
+      cursor?: string;
+      limit?: number;
+    },
+  ): Promise<RentsPage>;
+  get(ctx: CallContext, id: string): Promise<RentDetail>;
+  previewPayment(ctx: CallContext, id: string, paidOn: string): Promise<PaymentPreview>;
+  /** One already paid, even by a simultaneous request, is a ConflictError. */
+  pay(ctx: CallContext, id: string, input: PaymentInput): Promise<RentDetail>;
+  reverse(ctx: CallContext, id: string): Promise<RentDetail>;
+  addCharge(ctx: CallContext, id: string, input: ChargeInput): Promise<RentDetail>;
+  removeCharge(ctx: CallContext, id: string, chargeId: string): Promise<RentDetail>;
+  dashboard(ctx: CallContext): Promise<Dashboard>;
 }
 
 /** What the LGPD lets a person ask about their own account. */

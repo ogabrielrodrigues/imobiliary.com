@@ -48,7 +48,7 @@ export const Route = createFileRoute("/_app")({
 });
 
 interface NavItem {
-  readonly to: "/dashboard" | "/imoveis" | "/pessoas" | "/contratos" | "/ajustes";
+  readonly to: "/dashboard" | "/imoveis" | "/pessoas" | "/contratos" | "/alugueis" | "/ajustes";
   readonly label: string;
   readonly icon: typeof IconLayoutDashboard;
 }
@@ -56,20 +56,13 @@ interface NavItem {
 /**
  * The navigation, in the order the work happens: the day's figures, then what
  * the office manages, then the account.
- *
- * The entries beyond the dashboard and the settings lead nowhere yet. They are
- * here so the shape of the product is visible from the first screen, and each
- * gains its own route in the phase that builds it.
  */
 const PRIMARY: readonly NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: IconLayoutDashboard },
   { to: "/imoveis", label: "Imóveis", icon: IconBuildingEstate },
   { to: "/pessoas", label: "Pessoas", icon: IconUsers },
   { to: "/contratos", label: "Contratos", icon: IconFileDescription },
-];
-
-const SOON: readonly { label: string; icon: typeof IconLayoutDashboard }[] = [
-  { label: "Aluguéis", icon: IconReceipt2 },
+  { to: "/alugueis", label: "Aluguéis", icon: IconReceipt2 },
 ];
 
 function AppLayout() {
@@ -152,17 +145,6 @@ function SidebarContent({
           </Link>
         ))}
 
-        {SOON.map((item) => (
-          <span
-            key={item.label}
-            aria-disabled="true"
-            className="flex items-center gap-2.5 rounded-md px-3 py-2 text-small font-medium text-disabled-foreground"
-          >
-            <item.icon aria-hidden="true" className="size-4.5" />
-            {item.label}
-            <span className="ml-auto font-mono text-micro tracking-[0.1em] uppercase">em breve</span>
-          </span>
-        ))}
       </nav>
 
       <nav aria-label="Conta" className="mt-auto flex flex-col gap-1">

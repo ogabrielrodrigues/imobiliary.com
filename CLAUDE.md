@@ -1495,13 +1495,51 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       `pnpm imobiliary:migrate` ran; neither `serve` nor the tests migrate
       it, so it was run outside the session.
 
+46. **Phase 6: rents and the dashboard** (`561b5d5` API, web in the commit after it).
+    - **Migration 0011** `rent_charges` (condominium, IPTU, water, energy,
+      other with a description), plus indexes for rents paid by day and rents
+      by due day; `rents` gained `UNIQUE (organization_id, id)` for the FK.
+    - **Late fee** (`domain.ComputeLateFee`): the penalty rate on the rent with
+      its charges, plus the monthly interest rate prorated over a **thirty-day
+      month** per day after the due day, each part half away from zero to the
+      centavo; nothing on or before the due day. The office can type over it.
+    - **Payment in full only**: `late_fee` and `amount_paid` default to the
+      computation; `paid_on` not after today (São Paulo). `UPDATE ... WHERE
+      paid_on IS NULL`, so the second of two simultaneous payments is 409
+      (tested with two goroutines). Reversal clears the payment. Charges change
+      only while unpaid. **A contract with charges can no longer have its
+      terms replaced** (`rents`), since regenerating the schedule would drop
+      them. All audited (`rent.*`).
+    - **`GET /v1/dashboard`** as of today: month expected/received/open and
+      the administration fee (`round(rent_amount × admin_fee)`, on rents
+      received this month, rent only), overdue totals, portfolio (properties,
+      leased, running contracts, rent roll), contracts ending within 60 days,
+      adjustments due within 30 days (index set, twelve months from start or
+      last amendment), up to 20 rents due today and overdue.
+    - Integration tests build leases starting three months before today, since
+      "today" is the real clock there.
+    - **Web:** `domain/rent.ts` (types, labels, `todayInSaoPaulo`, month
+      helpers, validation, translations), `RentsGateway`, `server/rents.ts`,
+      `components/rents/payment-dialog.tsx` (status badge, the payment dialog
+      with the late fee previewed for the typed day), routes `/alugueis`
+      (month or all overdue, search, pay inline) and `/alugueis/$rentId`
+      (values, charges add/remove, pay or reverse), the dashboard with cards,
+      "Vencem hoje", "Em atraso" and the two deadline lists. Aluguéis is live in
+      the sidebar ("em breve" is gone); contract rents link to their page and
+      show charges.
+    - **Not yet seen in the browser**: the pane's session was revoked by the
+      refresh race below before the check. Typecheck, 71 web tests and every
+      Go suite pass.
+    - **Found: two tabs reloading together can revoke the session.** A request
+      with the old refresh token arriving just after single-flight released
+      the rotation is taken by the API as a replay. Spun off as a separate task.
+
 ### Next step
 
-Phase 6 of `PLANO.md` §3.8 and §7: rents and the dashboard. Recording a
-payment (`UPDATE ... WHERE paid_on IS NULL`, a concurrent second one 409),
-the suggested late fee (penalty plus pro rata daily interest on rent and
-charges, editable), `rent_charges`, reversal, `/alugueis`, and
-`GET /v1/dashboard` with its screen.
+Verify phase 6 in the browser once signed in again. Then phase 7 of `PLANO.md`
+§7: the docgen integration, which needs its own plan with the user first
+(docgen accepting `aud=docgen` tokens, account migration by e-mail, "Gerar
+contrato" through the BFF with the qualification text).
 
 Not in the editor on purpose, for now: fonts, colours, highlight, tables,
 images, headers and footers. Tables are the costly one: the block model,

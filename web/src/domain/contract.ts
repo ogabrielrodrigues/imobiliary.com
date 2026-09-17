@@ -202,6 +202,7 @@ export interface Rent {
   readonly sequence: number;
   readonly dueOn: string;
   readonly amount: string;
+  readonly chargesTotal: string;
   readonly lateFee: string;
   readonly amountPaid: string | null;
   readonly paidOn: string | null;

@@ -23,6 +23,7 @@ import type {
   PeopleGateway,
   PrivacyGateway,
   PropertiesGateway,
+  RentsGateway,
   SecondFactorGateway,
 } from "../../application/ports.ts";
 import type {
@@ -79,6 +80,19 @@ import {
   type PartyRole,
   type RentStatus,
 } from "../../domain/contract.ts";
+import type {
+  ChargeInput,
+  ChargeKind,
+  ContractDeadline,
+  Dashboard,
+  LateFee,
+  PaymentInput,
+  PaymentPreview,
+  RentDetail,
+  RentStatus as RentViewStatus,
+  RentSummary,
+  RentsPage,
+} from "../../domain/rent.ts";
 import { Transport } from "./transport.ts";
 
 // --- the shapes the API answers with ----------------------------------------
@@ -192,6 +206,7 @@ export function createGateways(transport: Transport): {
   people: PeopleGateway;
   properties: PropertiesGateway;
   contracts: ContractsGateway;
+  rents: RentsGateway;
 } {
   return {
     identity: new IdentityClient(transport),
@@ -202,6 +217,7 @@ export function createGateways(transport: Transport): {
     people: new PeopleClient(transport),
     properties: new PropertiesClient(transport),
     contracts: new ContractsClient(transport),
+    rents: new RentsClient(transport),
   };
 }
 
@@ -611,6 +627,7 @@ interface ContractBody extends ContractTermsBody {
     sequence: number;
     due_on: string;
     amount: string;
+    charges_total: string;
     late_fee: string;
     amount_paid: string | null;
     paid_on: string | null;
@@ -695,6 +712,7 @@ function toContract(b: ContractBody): Contract {
       sequence: r.sequence,
       dueOn: r.due_on,
       amount: r.amount,
+      chargesTotal: r.charges_total,
       lateFee: r.late_fee,
       amountPaid: r.amount_paid,
       paidOn: r.paid_on,
@@ -855,6 +873,216 @@ class ContractsClient implements ContractsGateway {
       { ifMatch: `"${version}"` },
     );
     return toContract((await response.json()) as ContractBody);
+  }
+}
+
+interface RentSummaryBody {
+  id: string;
+  contract: { id: string; registry: string; address: PropertyAddressBody; tenant_names: string[] };
+  sequence: number;
+  due_on: string;
+  amount: string;
+  charges_total: string;
+  due: string;
+  late_fee: string;
+  amount_paid: string | null;
+  paid_on: string | null;
+  status: RentViewStatus;
+}
+
+interface LateFeeBody {
+  days_late: number;
+  penalty: string;
+  interest: string;
+  total: string;
+}
+
+interface RentDetailBody extends RentSummaryBody {
+  charges: { id: string; kind: ChargeKind; description: string; amount: string }[];
+  suggested_late_fee: LateFeeBody;
+}
+
+interface DeadlineBody {
+  contract_id: string;
+  registry: string;
+  address: PropertyAddressBody;
+  on: string;
+}
+
+interface DashboardBody {
+  today: string;
+  month_start: string;
+  month_end: string;
+  month: {
+    expected: string;
+    expected_count: number;
+    received: string;
+    received_count: number;
+    open: string;
+    open_count: number;
+    office_fee: string;
+  };
+  overdue: { count: number; amount: string };
+  portfolio: { properties: number; leased_properties: number; active_contracts: number; rent_roll: string };
+  expiring: DeadlineBody[];
+  adjustments: DeadlineBody[];
+  due_today: RentSummaryBody[];
+  overdue_rents: RentSummaryBody[];
+}
+
+function toRentSummary(b: RentSummaryBody): RentSummary {
+  return {
+    id: b.id,
+    contract: {
+      id: b.contract.id,
+      registry: b.contract.registry,
+      address: toPropertyAddress(b.contract.address),
+      tenantNames: b.contract.tenant_names,
+    },
+    sequence: b.sequence,
+    dueOn: b.due_on,
+    amount: b.amount,
+    chargesTotal: b.charges_total,
+    due: b.due,
+    lateFee: b.late_fee,
+    amountPaid: b.amount_paid,
+    paidOn: b.paid_on,
+    status: b.status,
+  };
+}
+
+function toLateFee(b: LateFeeBody): LateFee {
+  return { daysLate: b.days_late, penalty: b.penalty, interest: b.interest, total: b.total };
+}
+
+function toRentDetail(b: RentDetailBody): RentDetail {
+  return {
+    ...toRentSummary(b),
+    charges: b.charges.map((c) => ({ id: c.id, kind: c.kind, description: c.description, amount: c.amount })),
+    suggestedLateFee: toLateFee(b.suggested_late_fee),
+  };
+}
+
+function toDeadline(b: DeadlineBody): ContractDeadline {
+  return { contractId: b.contract_id, registry: b.registry, address: toPropertyAddress(b.address), on: b.on };
+}
+
+/** Typed amounts leave as the API reads money; empty ones are left out for the computation. */
+function paymentPayload(p: PaymentInput): string {
+  const money = (value: string) => {
+    const cents = parseMoney(value);
+    return cents === null ? value : moneyForApi(cents);
+  };
+  return JSON.stringify({
+    paid_on: p.paidOn,
+    ...(p.lateFee.trim() === "" ? {} : { late_fee: money(p.lateFee) }),
+    ...(p.amountPaid.trim() === "" ? {} : { amount_paid: money(p.amountPaid) }),
+  });
+}
+
+class RentsClient implements RentsGateway {
+  constructor(private readonly transport: Transport) {}
+
+  private path(id: string, rest = ""): string {
+    return `/v1/rents/${encodeURIComponent(id)}${rest}`;
+  }
+
+  async list(
+    ctx: CallContext,
+    query: {
+      q?: string;
+      status?: "overdue" | "pending" | "open" | "paid";
+      dueFrom?: string;
+      dueTo?: string;
+      contractId?: string;
+      cursor?: string;
+      limit?: number;
+    },
+  ): Promise<RentsPage> {
+    const params = new URLSearchParams();
+    if (query.q) params.set("q", query.q);
+    if (query.status) params.set("status", query.status);
+    if (query.dueFrom) params.set("due_from", query.dueFrom);
+    if (query.dueTo) params.set("due_to", query.dueTo);
+    if (query.contractId) params.set("contract_id", query.contractId);
+    if (query.cursor) params.set("cursor", query.cursor);
+    if (query.limit !== undefined) params.set("limit", String(query.limit));
+    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const body = await this.transport.json<{ rents: RentSummaryBody[]; next_cursor?: string }>(ctx, "GET", `/v1/rents${suffix}`);
+    return { rents: body.rents.map(toRentSummary), nextCursor: body.next_cursor ?? null };
+  }
+
+  async get(ctx: CallContext, id: string): Promise<RentDetail> {
+    return toRentDetail(await this.transport.json<RentDetailBody>(ctx, "GET", this.path(id)));
+  }
+
+  async previewPayment(ctx: CallContext, id: string, paidOn: string): Promise<PaymentPreview> {
+    const response = await this.transport.send(ctx, "POST", this.path(id, "/payment/preview"), {
+      body: JSON.stringify({ paid_on: paidOn }),
+      contentType: "application/json",
+    });
+    const b = (await response.json()) as { late_fee: LateFeeBody; total: string };
+    return { lateFee: toLateFee(b.late_fee), total: b.total };
+  }
+
+  async pay(ctx: CallContext, id: string, input: PaymentInput): Promise<RentDetail> {
+    const response = await this.transport.send(ctx, "POST", this.path(id, "/payment"), {
+      body: paymentPayload(input),
+      contentType: "application/json",
+    });
+    return toRentDetail((await response.json()) as RentDetailBody);
+  }
+
+  async reverse(ctx: CallContext, id: string): Promise<RentDetail> {
+    const response = await this.transport.send(ctx, "DELETE", this.path(id, "/payment"));
+    return toRentDetail((await response.json()) as RentDetailBody);
+  }
+
+  async addCharge(ctx: CallContext, id: string, input: ChargeInput): Promise<RentDetail> {
+    const cents = parseMoney(input.amount);
+    const response = await this.transport.send(ctx, "POST", this.path(id, "/charges"), {
+      body: JSON.stringify({
+        kind: input.kind,
+        description: input.description.trim(),
+        amount: cents === null ? input.amount : moneyForApi(cents),
+      }),
+      contentType: "application/json",
+    });
+    return toRentDetail((await response.json()) as RentDetailBody);
+  }
+
+  async removeCharge(ctx: CallContext, id: string, chargeId: string): Promise<RentDetail> {
+    const response = await this.transport.send(ctx, "DELETE", this.path(id, `/charges/${encodeURIComponent(chargeId)}`));
+    return toRentDetail((await response.json()) as RentDetailBody);
+  }
+
+  async dashboard(ctx: CallContext): Promise<Dashboard> {
+    const b = await this.transport.json<DashboardBody>(ctx, "GET", "/v1/dashboard");
+    return {
+      today: b.today,
+      monthStart: b.month_start,
+      monthEnd: b.month_end,
+      month: {
+        expected: b.month.expected,
+        expectedCount: b.month.expected_count,
+        received: b.month.received,
+        receivedCount: b.month.received_count,
+        open: b.month.open,
+        openCount: b.month.open_count,
+        officeFee: b.month.office_fee,
+      },
+      overdue: b.overdue,
+      portfolio: {
+        properties: b.portfolio.properties,
+        leasedProperties: b.portfolio.leased_properties,
+        activeContracts: b.portfolio.active_contracts,
+        rentRoll: b.portfolio.rent_roll,
+      },
+      expiring: b.expiring.map(toDeadline),
+      adjustments: b.adjustments.map(toDeadline),
+      dueToday: b.due_today.map(toRentSummary),
+      overdueRents: b.overdue_rents.map(toRentSummary),
+    };
   }
 }
 

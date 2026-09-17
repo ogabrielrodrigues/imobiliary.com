@@ -184,10 +184,19 @@ function ContractPage() {
               <tbody className="font-reading">
                 {contract.rents.map((rent) => (
                   <tr key={rent.id} className="border-t border-border">
-                    <td className="py-1.5 pr-4">{rent.sequence}</td>
+                    <td className="py-1.5 pr-4">
+                      <Link to="/alugueis/$rentId" params={{ rentId: rent.id }} className="underline hover:text-foreground">
+                        {rent.sequence}
+                      </Link>
+                    </td>
                     <td className="py-1.5 pr-4">{formatDate(rent.dueOn)}</td>
                     <td className="py-1.5 pr-4 text-right">
                       {formatMoney(rent.amount)}
+                      {rent.chargesTotal !== "0.00" && (
+                        <span className="block text-caption text-muted-foreground">
+                          mais {formatMoney(rent.chargesTotal)} em cobranças
+                        </span>
+                      )}
                       {contract.terminatedOn !== null &&
                         rent.sequence === contract.rents.length &&
                         rent.amount !== contract.currentRent && (
