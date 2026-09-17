@@ -3,8 +3,19 @@ import { beforeEach, describe, it } from "node:test";
 
 import { AuthenticationError, UnexpectedError } from "../domain/errors.ts";
 import type { Organization, Session, User } from "../domain/user.ts";
-import type { CallContext, Clock, CurrentAccount, IdentityGateway, SessionStore } from "./ports.ts";
-import { RefreshCoordinator, SessionManager } from "./session.ts";
+import type {
+  CallContext,
+  Clock,
+  CurrentAccount,
+  DocgenToken,
+  IdentityGateway,
+  SessionStore,
+} from "./ports.ts";
+import {
+  DocgenTokenCache,
+  RefreshCoordinator,
+  SessionManager,
+} from "./session.ts";
 
 const user: User = {
   id: "01a08374-3567-79e9-83a1-ab0c71a3f88e",
@@ -63,8 +74,21 @@ class FakeStore implements SessionStore {
 class FakeIdentity implements IdentityGateway {
   refreshCalls = 0;
   signOutCalls = 0;
+  tokenCalls = 0;
   refreshDelayMs = 0;
   refreshFails: Error | null = null;
+
+  /**
+   * A minted token is named after the access token it was minted from, so a
+   * test can see which session the document service was called for.
+   */
+  docgenToken(ctx: CallContext): Promise<DocgenToken> {
+    this.tokenCalls += 1;
+    return Promise.resolve({
+      token: `docgen-from-${ctx.accessToken}`,
+      expiresAt: new Date(now.getTime() + 5 * 60_000),
+    });
+  }
 
   // Present to satisfy the port. SessionManager reaches for none of them.
   register(): Promise<void> {
@@ -196,11 +220,23 @@ describe("SessionManager", () => {
       identity,
       store,
       coordinator: new RefreshCoordinator(),
+      tokens: new DocgenTokenCache(clock),
       clock,
     });
   }
 
   beforeEach(() => build(sessionExpiring(15)));
+
+  it("mints a document-service token from the session", async () => {
+    const token = await manager.authorizeDocuments({}, async (ctx) => ctx.accessToken);
+
+    assert.equal(token, "docgen-from-access-1");
+    assert.equal(identity.tokenCalls, 1);
+
+    // The second call reuses it: a five-minute token is worth keeping.
+    await manager.authorizeDocuments({}, async () => "again");
+    assert.equal(identity.tokenCalls, 1);
+  });
 
   it("passes the access token to the call", async () => {
     const seen: (string | undefined)[] = [];

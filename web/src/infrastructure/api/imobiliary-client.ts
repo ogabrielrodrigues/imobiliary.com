@@ -14,6 +14,7 @@ import type {
   CallContext,
   ContractsGateway,
   CurrentAccount,
+  DocgenToken,
   IdentityGateway,
   Invitation,
   InvitationStatus,
@@ -93,6 +94,7 @@ import type {
   RentSummary,
   RentsPage,
 } from "../../domain/rent.ts";
+import type { DocumentField } from "../../domain/document.ts";
 import { Transport } from "./transport.ts";
 
 // --- the shapes the API answers with ----------------------------------------
@@ -289,6 +291,15 @@ class IdentityClient implements IdentityGateway {
       organization_id: input.organizationId,
     });
     return toSession(body);
+  }
+
+  async docgenToken(ctx: CallContext): Promise<DocgenToken> {
+    const body = await this.transport.json<{ token: string; expires_at: string }>(
+      ctx,
+      "POST",
+      "/v1/sessions/docgen-token",
+    );
+    return { token: body.token, expiresAt: new Date(body.expires_at) };
   }
 
   async me(ctx: CallContext): Promise<CurrentAccount> {
@@ -863,6 +874,15 @@ class ContractsClient implements ContractsGateway {
       ifMatch: `"${version}"`,
     });
     return toContract((await response.json()) as ContractBody);
+  }
+
+  async documentFields(ctx: CallContext, id: string): Promise<DocumentField[]> {
+    const body = await this.transport.json<{ fields: { name: string; value: string }[] }>(
+      ctx,
+      "GET",
+      `/v1/contracts/${encodeURIComponent(id)}/document-fields`,
+    );
+    return body.fields.map((field) => ({ name: field.name, value: field.value }));
   }
 
   async undoAmendment(ctx: CallContext, id: string, amendmentId: string, version: number): Promise<Contract> {

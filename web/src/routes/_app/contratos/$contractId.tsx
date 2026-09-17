@@ -4,6 +4,7 @@ import { IconArrowLeft, IconBan, IconPencil, IconTrash } from "@tabler/icons-rea
 
 import { messageFor, summaryOf, type Failure } from "@/application/result";
 import { ContractAmendments } from "@/components/contracts/amendments";
+import { ContractDocuments } from "@/components/contracts/documents";
 import { ContractStatusBadge } from "@/components/contracts/status-badge";
 import { FormField } from "@/components/form-field";
 import {
@@ -32,18 +33,31 @@ import {
 import { addressLine, addressPlace } from "@/domain/property";
 import { cn } from "@/lib/utils";
 import { deleteContract, getContract, terminateContract } from "@/server/contracts";
+import { listContractDocuments } from "@/server/documents";
 
 export const Route = createFileRoute("/_app/contratos/$contractId")({
-  loader: ({ params }) => getContract({ data: params.contractId }),
+  loader: async ({ params }) => ({
+    contract: await getContract({ data: params.contractId }),
+    // The documents live in the document service, so a failure there must not
+    // take the contract's page down with it: it is reported in its own
+    // section and everything else still renders.
+    documents: await listContractDocuments({ data: params.contractId }),
+  }),
   head: ({ loaderData }) => ({
-    meta: [{ title: `${loaderData?.ok ? `Contrato ${loaderData.value.registry}` : "Contrato"} | Imobiliary` }],
+    meta: [
+      {
+        title: `${
+          loaderData?.contract.ok ? `Contrato ${loaderData.contract.value.registry}` : "Contrato"
+        } | Imobiliary`,
+      },
+    ],
   }),
   component: ContractPage,
 });
 
 /** One contract: its terms, parties, acknowledged notices and rents. */
 function ContractPage() {
-  const result = Route.useLoaderData();
+  const { contract: result, documents } = Route.useLoaderData();
 
   const back = (
     <Link to="/contratos" className="flex items-center gap-1 self-start text-small text-muted-foreground hover:text-foreground">
@@ -166,6 +180,12 @@ function ContractPage() {
       )}
 
       <ContractAmendments contract={contract} />
+
+      <ContractDocuments
+        contractId={contract.id}
+        documents={documents.ok ? documents.value : []}
+        failure={documents.ok ? null : documents.failure}
+      />
 
       <Section title={`Aluguéis (${contract.rents.length})`}>
         {contract.rents.length === 0 ? (

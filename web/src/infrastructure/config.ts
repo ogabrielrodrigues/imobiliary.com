@@ -11,6 +11,11 @@ const MIN_SESSION_SECRET_LENGTH = 32;
 export interface Config {
   /** Where the Imobiliary API lives. Never exposed to the browser. */
   readonly apiUrl: string;
+  /**
+   * Where the document service lives. Never exposed to the browser: it is
+   * reached from this server only, with a token minted per call.
+   */
+  readonly documentsApiUrl: string;
   /** Key that seals the session cookie. */
   readonly sessionSecret: string;
   /**
@@ -53,6 +58,7 @@ export function getConfig(): Config {
 
   cached = {
     apiUrl: process.env["IMOBILIARY_API_URL"] ?? "http://127.0.0.1:8081",
+    documentsApiUrl: process.env["DOCGEN_API_URL"] ?? "http://127.0.0.1:8080",
     sessionSecret,
     trustProxyHeaders: process.env["TRUST_PROXY_HEADERS"] === "true",
     isProduction: process.env["NODE_ENV"] === "production",

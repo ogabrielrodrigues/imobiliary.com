@@ -35,6 +35,12 @@ import type {
   RentsPage,
 } from "../domain/rent.ts";
 import type {
+  DocumentField,
+  GeneratedDocument,
+  GenerateInput,
+  Template,
+} from "../domain/document.ts";
+import type {
   AmendmentInput,
   AmendmentPreview,
   Contract,
@@ -91,6 +97,18 @@ export interface IdentityGateway {
     input: { refreshToken: string; organizationId: string },
   ): Promise<Session>;
   me(ctx: CallContext): Promise<CurrentAccount>;
+  /**
+   * Mints a token for the document service from the session's own access
+   * token, which `ctx` carries. It lasts five minutes, names the office, and
+   * is the only credential the document service ever sees.
+   */
+  docgenToken(ctx: CallContext): Promise<DocgenToken>;
+}
+
+/** A short token for the document service, and when it stops being accepted. */
+export interface DocgenToken {
+  readonly token: string;
+  readonly expiresAt: Date;
 }
 
 /** What /v1/me answers: the account, where it is working, and what it may do. */
@@ -159,6 +177,37 @@ export interface ContractsGateway {
   previewAmendment(ctx: CallContext, id: string, input: AmendmentInput): Promise<AmendmentPreview>;
   amend(ctx: CallContext, id: string, version: number, input: AmendmentInput): Promise<Contract>;
   undoAmendment(ctx: CallContext, id: string, amendmentId: string, version: number): Promise<Contract>;
+  /**
+   * The values a lease template is filled with: the qualification of each
+   * party, the money in words, the guarantee, the dates and the forum.
+   */
+  documentFields(ctx: CallContext, id: string): Promise<DocumentField[]>;
+}
+
+/** A file on its way to the browser. */
+export interface FileContent {
+  readonly filename: string;
+  readonly contentType: string;
+  readonly bytes: Uint8Array;
+}
+
+/**
+ * The document service, which holds the templates and renders the files.
+ *
+ * Every call carries a token minted for the office, never this API's own
+ * session, so the service knows the office and nothing else about a lease.
+ */
+export interface DocumentsGateway {
+  /** The office's templates, with the latest version's placeholders. */
+  listTemplates(ctx: CallContext): Promise<Template[]>;
+  getTemplate(ctx: CallContext, id: string): Promise<Template>;
+  /** The stored archive, read to draw the preview of a template. */
+  downloadTemplateVersion(ctx: CallContext, id: string, version: number): Promise<Uint8Array>;
+  generate(ctx: CallContext, input: GenerateInput): Promise<GeneratedDocument>;
+  /** Every document generated for one record, such as a contract. */
+  listByReference(ctx: CallContext, reference: string): Promise<GeneratedDocument[]>;
+  download(ctx: CallContext, id: string): Promise<FileContent>;
+  remove(ctx: CallContext, id: string): Promise<void>;
 }
 
 /** The office's instalments across contracts, and the dashboard. */

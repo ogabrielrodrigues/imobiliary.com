@@ -12,11 +12,17 @@ import {
   getRequestIP,
 } from "@tanstack/react-start/server";
 
-import { RefreshCoordinator, SessionManager } from "../application/session.ts";
+import {
+  DocgenTokenCache,
+  RefreshCoordinator,
+  SessionManager,
+} from "../application/session.ts";
 import type { CallContext, Clock } from "../application/ports.ts";
 import { ValidationError } from "../domain/errors.ts";
 import { getConfig } from "../infrastructure/config.ts";
 import { createGateways } from "../infrastructure/api/imobiliary-client.ts";
+import { createDocumentsClient } from "../infrastructure/api/documents-client.ts";
+import type { DocumentsGateway } from "../application/ports.ts";
 import { Transport } from "../infrastructure/api/transport.ts";
 import { createCookieSessionStore } from "../infrastructure/session/cookie-session-store.ts";
 
@@ -33,6 +39,13 @@ const coordinator = new RefreshCoordinator();
 type Gateways = ReturnType<typeof createGateways>;
 
 let gateways: Gateways | null = null;
+let documentsGateway: DocumentsGateway | null = null;
+
+/**
+ * Process-wide, like the coordinator: a five-minute token is worth reusing
+ * across the requests of one session, and it never leaves this process.
+ */
+const docgenTokens = new DocgenTokenCache(systemClock);
 
 /**
  * Built lazily. Reading configuration at module load would throw during the
@@ -43,12 +56,19 @@ export function api(): Gateways {
   return gateways;
 }
 
+/** The document service. Built lazily, as above. */
+export function documents(): DocumentsGateway {
+  documentsGateway ??= createDocumentsClient({ baseUrl: getConfig().documentsApiUrl });
+  return documentsGateway;
+}
+
 /** A session manager bound to the current request's cookie. */
 export function sessions(): SessionManager {
   return new SessionManager({
     identity: api().identity,
     store: createCookieSessionStore(),
     coordinator,
+    tokens: docgenTokens,
     clock: systemClock,
   });
 }

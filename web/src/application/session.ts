@@ -1,6 +1,12 @@
 import { AuthenticationError } from "../domain/errors.ts";
 import type { Session } from "../domain/user.ts";
-import type { CallContext, Clock, IdentityGateway, SessionStore } from "./ports.ts";
+import type {
+  CallContext,
+  Clock,
+  DocgenToken,
+  IdentityGateway,
+  SessionStore,
+} from "./ports.ts";
 
 /**
  * Shares one in-flight refresh between concurrent callers holding the same
@@ -89,10 +95,48 @@ export const ROTATION_GRACE_MS = 10_000;
  */
 const EXPIRY_SKEW_MS = 30_000;
 
+/**
+ * Keeps the short document-service tokens in memory while they last.
+ *
+ * A token is minted per session and lasts five minutes, so without a cache
+ * every screen that touches a document would spend a round trip on this API
+ * first. It holds credentials, so it lives only in memory, is keyed by account
+ * and office, and is dropped the moment the service refuses it.
+ */
+export class DocgenTokenCache {
+  readonly #tokens = new Map<string, DocgenToken>();
+  readonly #clock: Clock;
+  readonly #skewMs: number;
+
+  constructor(clock: Clock, options: { skewMs?: number } = {}) {
+    this.#clock = clock;
+    this.#skewMs = options.skewMs ?? EXPIRY_SKEW_MS;
+  }
+
+  async token(key: string, mint: () => Promise<DocgenToken>): Promise<string> {
+    const held = this.#tokens.get(key);
+    if (held !== undefined && !this.#isSpent(held)) return held.token;
+
+    const minted = await mint();
+    this.#tokens.set(key, minted);
+    return minted.token;
+  }
+
+  /** Forgets a token, so the next call mints one. */
+  forget(key: string): void {
+    this.#tokens.delete(key);
+  }
+
+  #isSpent(token: DocgenToken): boolean {
+    return token.expiresAt.getTime() - this.#skewMs <= this.#clock.now().getTime();
+  }
+}
+
 export interface SessionManagerDeps {
   readonly identity: IdentityGateway;
   readonly store: SessionStore;
   readonly coordinator: RefreshCoordinator;
+  readonly tokens: DocgenTokenCache;
   readonly clock: Clock;
 }
 
@@ -108,12 +152,14 @@ export class SessionManager {
   readonly #identity: IdentityGateway;
   readonly #store: SessionStore;
   readonly #coordinator: RefreshCoordinator;
+  readonly #tokens: DocgenTokenCache;
   readonly #clock: Clock;
 
   constructor(deps: SessionManagerDeps) {
     this.#identity = deps.identity;
     this.#store = deps.store;
     this.#coordinator = deps.coordinator;
+    this.#tokens = deps.tokens;
     this.#clock = deps.clock;
   }
 
@@ -154,7 +200,46 @@ export class SessionManager {
     }
   }
 
+  /**
+   * Runs a call to the document service with a token minted for this session.
+   *
+   * The document service never sees this API's access token: it verifies a
+   * five-minute token of its own audience, so what crosses is minted here and
+   * dropped the moment it is refused.
+   */
+  async authorizeDocuments<T>(
+    ctx: CallContext,
+    run: (ctx: CallContext) => Promise<T>,
+  ): Promise<T> {
+    let session = await this.#store.read();
+    if (session === null) {
+      throw new AuthenticationError("no session");
+    }
+
+    if (this.#isExpired(session)) {
+      session = await this.#rotate(session);
+    }
+
+    try {
+      return await run({ ...ctx, accessToken: await this.#docgenToken(ctx, session) });
+    } catch (error) {
+      if (!(error instanceof AuthenticationError)) throw error;
+
+      this.#tokens.forget(keyOf(session));
+      const rotated = await this.#rotate(session);
+      return run({ ...ctx, accessToken: await this.#docgenToken(ctx, rotated) });
+    }
+  }
+
+  /** A token for the document service, minted from this API's session. */
+  async #docgenToken(ctx: CallContext, session: Session): Promise<string> {
+    return this.#tokens.token(keyOf(session), () =>
+      this.#identity.docgenToken({ ...ctx, accessToken: session.accessToken }),
+    );
+  }
+
   async signIn(session: Session): Promise<void> {
+    this.#tokens.forget(keyOf(session));
     await this.#store.write(session);
   }
 
@@ -168,6 +253,7 @@ export class SessionManager {
 
     try {
       if (session !== null) {
+        this.#tokens.forget(keyOf(session));
         await this.#identity.signOut(ctx, session.refreshToken);
       }
     } finally {
@@ -199,4 +285,13 @@ export class SessionManager {
         : new AuthenticationError("session could not be refreshed");
     }
   }
+}
+
+/**
+ * A minted token belongs to one account in one office: the office decides what
+ * the document service shows, so a session that moved office must not reuse
+ * the token of the previous one.
+ */
+function keyOf(session: Session): string {
+  return `${session.user.id}:${session.organization.id}`;
 }
