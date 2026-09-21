@@ -66,13 +66,24 @@ function PersonPayoutsPage() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex min-w-0 flex-col gap-1">
             <h1 className="text-title-lg font-semibold tracking-[-0.015em]">{ledger.person.name}</h1>
-            <Link
-              to="/pessoas/$personId"
-              params={{ personId: ledger.person.id }}
-              className="text-small text-muted-foreground hover:text-foreground hover:underline"
-            >
-              Ver cadastro
-            </Link>
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              <Link
+                to="/pessoas/$personId"
+                params={{ personId: ledger.person.id }}
+                className="text-small text-muted-foreground hover:text-foreground hover:underline"
+              >
+                Ver cadastro
+              </Link>
+              {ledger.person.kind === "individual" && (
+                <Link
+                  to="/repasses/pessoa/$personId/carne-leao"
+                  params={{ personId: ledger.person.id }}
+                  className="text-small text-muted-foreground hover:text-foreground hover:underline"
+                >
+                  Relatório para carnê-leão
+                </Link>
+              )}
+            </div>
           </div>
           <div className="flex flex-col items-end">
             <span className="text-caption text-muted-foreground">Saldo a repassar</span>

@@ -19,6 +19,7 @@ import type {
   PersonRef,
 } from "../../domain/payout.ts";
 import type { DocumentField } from "../../domain/document.ts";
+import type { IncomeFigures, IncomeMonth, IncomeReport } from "../../domain/income-report.ts";
 import type { ChargeKind } from "../../domain/rent.ts";
 import { toPropertyAddress, type PropertyAddressBody } from "./imobiliary-client.ts";
 import type { Transport } from "./transport.ts";
@@ -169,4 +170,43 @@ export class PayoutsClient implements PayoutsGateway {
     );
     return body.fields.map((field) => ({ name: field.name, value: field.value }));
   }
+
+  async incomeReport(ctx: CallContext, personId: string, year: number): Promise<IncomeReport> {
+    const b = await this.transport.json<{ person: PersonRef; year: number; months: IncomeMonthBody[]; total: IncomeMonthBody }>(
+      ctx,
+      "GET",
+      `/v1/people/${encodeURIComponent(personId)}/income-report?year=${year}`,
+    );
+    return { person: b.person, year: b.year, months: b.months.map(toIncomeMonth), total: toIncomeMonth(b.total) };
+  }
+}
+
+interface IncomeFiguresBody {
+  rent: string;
+  late_fee: string;
+  charges: string;
+  admin_fee: string;
+  income_tax: string;
+}
+
+interface IncomeMonthBody {
+  month?: number;
+  individual: IncomeFiguresBody;
+  company: IncomeFiguresBody;
+  debits: string;
+  credits: string;
+}
+
+function toIncomeFigures(b: IncomeFiguresBody): IncomeFigures {
+  return { rent: b.rent, lateFee: b.late_fee, charges: b.charges, adminFee: b.admin_fee, incomeTax: b.income_tax };
+}
+
+function toIncomeMonth(b: IncomeMonthBody): IncomeMonth {
+  return {
+    month: b.month ?? 0,
+    individual: toIncomeFigures(b.individual),
+    company: toIncomeFigures(b.company),
+    debits: b.debits,
+    credits: b.credits,
+  };
 }

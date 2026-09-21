@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Imobiliary API
-  version: "0.10.0"
+  version: "0.11.0"
   summary: Rental property management for brokers, small agencies and owners.
   description: |
     The API behind the Imobiliary platform. It covers identity and the office
@@ -2028,6 +2028,48 @@ paths:
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /v1/people/{personID}/income-report:
+    parameters:
+      - name: personID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+    get:
+      tags: [Payouts]
+      summary: A year of an individual owner's receipts, for the carnê-leão
+      description: |
+        The person's ledger lines of the year, paid out or not, added up by
+        the month the office received them. Rents paid by an individual tenant
+        and by a company (a contract with any company among its tenants) are
+        kept apart, since only the first goes in the carnê-leão. Typed debits
+        and credits are informative. Nothing is computed beyond the sums: no
+        tax, and no judgement of what is deductible. A company is a `422` on
+        `person_id`.
+      operationId: getIncomeReport
+      parameters:
+        - name: year
+          in: query
+          required: true
+          schema: { type: integer, minimum: 2000, maximum: 9999 }
+      responses:
+        "200":
+          description: The twelve months, January first, and the year's total.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [person, year, months, total]
+                properties:
+                  person: { $ref: "#/components/schemas/PersonRef" }
+                  year: { type: integer }
+                  months: { type: array, minItems: 12, maxItems: 12, items: { $ref: "#/components/schemas/IncomeMonth" } }
+                  total: { $ref: "#/components/schemas/IncomeMonth" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
   /v1/ledger/{entryID}:
     parameters:
       - name: entryID
@@ -2962,6 +3004,26 @@ components:
       description: Reais with two decimal places and an optional minus sign.
       pattern: '^-?[0-9]+\.[0-9]{2}$'
       examples: ["1038.10", "-38.10"]
+
+    IncomeFigures:
+      type: object
+      required: [rent, late_fee, charges, admin_fee, income_tax]
+      properties:
+        rent: { $ref: "#/components/schemas/Money" }
+        late_fee: { $ref: "#/components/schemas/Money", description: Interest and penalty. }
+        charges: { $ref: "#/components/schemas/Money", description: The owner's charges, such as the IPTU. }
+        admin_fee: { $ref: "#/components/schemas/Money", description: The office's fee, deducted. }
+        income_tax: { $ref: "#/components/schemas/Money", description: Withheld by a company tenant. }
+
+    IncomeMonth:
+      type: object
+      required: [individual, company, debits, credits]
+      properties:
+        month: { type: integer, minimum: 1, maximum: 12, description: Left out in the year's total. }
+        individual: { $ref: "#/components/schemas/IncomeFigures" }
+        company: { $ref: "#/components/schemas/IncomeFigures" }
+        debits: { $ref: "#/components/schemas/Money" }
+        credits: { $ref: "#/components/schemas/Money" }
 
     PersonRef:
       type: object

@@ -364,3 +364,64 @@ func (s *Server) handleListPayouts(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, s.logger, http.StatusOK, out)
 }
+
+// --- carnê-leão report -----------------------------------------------------------
+
+type incomeFiguresBody struct {
+	Rent      domain.Money `json:"rent"`
+	LateFee   domain.Money `json:"late_fee"`
+	Charges   domain.Money `json:"charges"`
+	AdminFee  domain.Money `json:"admin_fee"`
+	IncomeTax domain.Money `json:"income_tax"`
+}
+
+type incomeMonthBody struct {
+	Month      int               `json:"month,omitzero"`
+	Individual incomeFiguresBody `json:"individual"`
+	Company    incomeFiguresBody `json:"company"`
+	Debits     domain.Money      `json:"debits"`
+	Credits    domain.Money      `json:"credits"`
+}
+
+func presentIncomeFigures(f usecase.IncomeFigures) incomeFiguresBody {
+	return incomeFiguresBody{Rent: f.Rent, LateFee: f.LateFee, Charges: f.Charges, AdminFee: f.AdminFee, IncomeTax: f.IncomeTax}
+}
+
+func presentIncomeMonth(m usecase.IncomeMonth) incomeMonthBody {
+	return incomeMonthBody{
+		Month: m.Month, Individual: presentIncomeFigures(m.Individual), Company: presentIncomeFigures(m.Company),
+		Debits: m.Debits, Credits: m.Credits,
+	}
+}
+
+func (s *Server) handleIncomeReport(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.personID(w, r)
+	if !ok {
+		return
+	}
+	year, err := strconv.Atoi(r.URL.Query().Get("year"))
+	if err != nil {
+		v := &domain.ValidationError{}
+		v.Add("year", "must be a year such as 2026")
+		writeError(w, s.logger, v)
+		return
+	}
+	report, err := s.payouts.IncomeReport(r.Context(), callerFrom(r.Context()), id, year)
+	if err != nil {
+		writeError(w, s.logger, err)
+		return
+	}
+	out := struct {
+		Person personRefBody     `json:"person"`
+		Year   int               `json:"year"`
+		Months []incomeMonthBody `json:"months"`
+		Total  incomeMonthBody   `json:"total"`
+	}{
+		Person: personRefBody{ID: report.Person.ID.String(), Name: report.Person.Name, Kind: report.Person.Kind},
+		Year:   report.Year, Months: make([]incomeMonthBody, 0, len(report.Months)), Total: presentIncomeMonth(report.Total),
+	}
+	for _, m := range report.Months {
+		out.Months = append(out.Months, presentIncomeMonth(m))
+	}
+	writeJSON(w, s.logger, http.StatusOK, out)
+}

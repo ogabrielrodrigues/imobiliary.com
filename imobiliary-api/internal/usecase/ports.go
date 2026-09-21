@@ -567,6 +567,9 @@ type LedgerRepository interface {
 	Payouts(ctx context.Context, q PayoutQuery) ([]PayoutSummary, error)
 	// DeletePayout undoes a payout; its lines return to pending.
 	DeletePayout(ctx context.Context, id uuid.UUID) error
+	// IncomeByMonth sums a person's lines between two days, paid out or not,
+	// by month, kind and the kind of tenant who paid the rent.
+	IncomeByMonth(ctx context.Context, personID uuid.UUID, from, to domain.Date) ([]IncomeRow, error)
 }
 
 // MonthFigures are the receipts of a month.

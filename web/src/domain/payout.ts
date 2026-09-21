@@ -237,6 +237,8 @@ export function translatePayoutProblem(problem: FieldError): FieldError {
       "Este lançamento vem de um aluguel. Para removê-lo, estorne o pagamento do aluguel.",
     "is in a payout; undo the payout first": "Este lançamento já está num repasse. Desfaça o repasse antes.",
     "is required": "Preencha este campo.",
+    "the carnê-leão report is for individuals": "O relatório para carnê-leão é só de pessoa física.",
+    "must be a year such as 2026": "Informe um ano como 2026.",
   };
   return { field: fields[problem.field] ?? problem.field, message: known[problem.message] ?? "Valor não aceito. Confira este campo." };
 }

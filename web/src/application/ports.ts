@@ -8,6 +8,7 @@
  * fake is a few lines rather than a mock framework.
  */
 
+import type { IncomeReport } from "../domain/income-report.ts";
 import type {
   Balance,
   LedgerEntry,
@@ -322,4 +323,6 @@ export interface PayoutsGateway {
   undo(ctx: CallContext, id: string): Promise<void>;
   /** What a statement template is filled with. */
   documentFields(ctx: CallContext, id: string): Promise<DocumentField[]>;
+  /** A year of an individual owner's receipts, for the carnê-leão. */
+  incomeReport(ctx: CallContext, personId: string, year: number): Promise<IncomeReport>;
 }

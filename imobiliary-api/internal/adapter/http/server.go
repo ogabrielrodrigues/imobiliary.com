@@ -209,6 +209,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /v1/payouts/balances", authenticated(http.HandlerFunc(s.handleBalances)))
 	mux.Handle("GET /v1/people/{personID}/ledger", authenticated(http.HandlerFunc(s.handlePersonLedger)))
 	mux.Handle("POST /v1/people/{personID}/ledger", write(http.HandlerFunc(s.handleAddLedgerEntry)))
+	mux.Handle("GET /v1/people/{personID}/income-report", authenticated(http.HandlerFunc(s.handleIncomeReport)))
 	mux.Handle("DELETE /v1/ledger/{entryID}", write(http.HandlerFunc(s.handleDeleteLedgerEntry)))
 	mux.Handle("GET /v1/payouts", authenticated(http.HandlerFunc(s.handleListPayouts)))
 	mux.Handle("POST /v1/payouts", write(http.HandlerFunc(s.handleCreatePayout)))

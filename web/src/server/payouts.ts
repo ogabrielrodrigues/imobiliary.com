@@ -18,6 +18,7 @@ import {
   type PayoutsPage,
   type PersonLedger,
 } from "../domain/payout.ts";
+import type { IncomeReport } from "../domain/income-report.ts";
 import { maskCNPJ, maskCPF } from "../domain/person.ts";
 import { todayInSaoPaulo } from "../domain/rent.ts";
 import { api, assertSameOrigin, callContext, sessions } from "./runtime.ts";
@@ -135,4 +136,13 @@ export const undoPayout = createServerFn({ method: "POST" })
       await translated(() => sessions().authorize(callContext(), (ctx) => api().payouts.undo(ctx, data)));
       return null;
     }),
+  );
+
+/** A year of an individual owner's receipts, for the carnê-leão report. */
+export const incomeReport = createServerFn({ method: "GET" })
+  .validator((input: { readonly personId: string; readonly year: number }) => input)
+  .handler(async ({ data }): Promise<Result<IncomeReport>> =>
+    attempt(() =>
+      translated(() => sessions().authorize(callContext(), (ctx) => api().payouts.incomeReport(ctx, data.personId, data.year))),
+    ),
   );

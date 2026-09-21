@@ -339,3 +339,34 @@ func (r *ledgerRepository) DeletePayout(ctx context.Context, id uuid.UUID) error
 	tag, err := r.q.Exec(ctx, `DELETE FROM payouts WHERE id = $1`, pgUUID(id))
 	return affected(tag, err, "postgres: undo payout")
 }
+
+func (r *ledgerRepository) IncomeByMonth(ctx context.Context, personID uuid.UUID, from, to domain.Date) ([]usecase.IncomeRow, error) {
+	rows, err := r.q.Query(ctx,
+		`SELECT extract(month FROM e.occurred_on)::int, e.kind,
+		        CASE WHEN e.contract_id IS NULL THEN ''
+		             WHEN EXISTS (SELECT 1 FROM contract_parties cp JOIN people p ON p.id = cp.person_id
+		                           WHERE cp.contract_id = e.contract_id AND cp.role = 'tenant' AND p.kind = 'company')
+		             THEN 'company' ELSE 'individual' END,
+		        sum(abs(e.amount))::bigint
+		   FROM owner_entries e
+		  WHERE e.person_id = $1 AND e.occurred_on BETWEEN $2 AND $3
+		  GROUP BY 1, 2, 3`,
+		pgUUID(personID), pgDate(from), pgDate(to))
+	if err != nil {
+		return nil, fmt.Errorf("postgres: income by month: %w", err)
+	}
+	out, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (usecase.IncomeRow, error) {
+		var (
+			v            usecase.IncomeRow
+			kind, tenant string
+			amount       int64
+		)
+		err := row.Scan(&v.Month, &kind, &tenant, &amount)
+		v.Kind, v.TenantKind, v.Amount = domain.EntryKind(kind), usecase.TenantKind(tenant), domain.Money(amount)
+		return v, err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("postgres: income by month: %w", err)
+	}
+	return out, nil
+}
