@@ -323,6 +323,9 @@ type ContractPartyView struct {
 	Role     domain.PartyRole
 	Name     string
 	Kind     domain.PersonKind
+	// Share is a landlord's recorded share, when the landlords are not the
+	// property's owners.
+	Share *domain.Rate
 }
 
 // RentRecord is one stored instalment.
@@ -368,6 +371,7 @@ type ScopedRepositories struct {
 	Contracts  ContractRepository
 	Amendments AmendmentRepository
 	Rents      RentRepository
+	Ledger     LedgerRepository
 	Dashboard  DashboardRepository
 	Audit      AuditRepository
 }
@@ -388,6 +392,9 @@ type RentView struct {
 	PaidOn           *domain.Date
 	LatePenaltyRate  domain.Rate
 	LateInterestRate domain.Rate
+	// IncomeTaxWithheld is what a company tenant kept, recorded with the
+	// payment; zero otherwise.
+	IncomeTaxWithheld domain.Money
 	// Charges is filled by Get only.
 	Charges []domain.Charge
 }
@@ -437,6 +444,84 @@ type RentRepository interface {
 	RemoveCharge(ctx context.Context, rentID, chargeID uuid.UUID) error
 	// HasCharges reports whether any instalment of a contract carries a charge.
 	HasCharges(ctx context.Context, contractID uuid.UUID) (bool, error)
+	// SetChargeDestination changes where a charge goes, paid rent or not.
+	SetChargeDestination(ctx context.Context, rentID, chargeID uuid.UUID, d domain.ChargeDestination) error
+	// PaidWithoutEntries is every paid instalment whose lines were never
+	// written: the rents received before the ledger existed.
+	PaidWithoutEntries(ctx context.Context) ([]uuid.UUID, error)
+}
+
+// EntryView is a ledger line with what a person needs to recognise it.
+type EntryView struct {
+	domain.LedgerEntry
+	// Address is the property's, when the line names one.
+	Address *domain.Address
+	// Registry, RentSequence and RentDueOn describe the rent a line came from.
+	Registry     string
+	RentSequence int
+	RentDueOn    *domain.Date
+	// ChargeKind and ChargeDescription describe the charge a line came from.
+	ChargeKind        domain.ChargeKind
+	ChargeDescription string
+}
+
+// Balance is a beneficiary's pending lines, summed.
+type Balance struct {
+	PersonID uuid.UUID
+	Name     string
+	Kind     domain.PersonKind
+	// Pending is the signed sum of the lines without a payout; it can be
+	// below zero when debits wait for the next rent.
+	Pending  int64
+	Lines    int
+	OldestOn domain.Date
+}
+
+// PayoutSummary is a row of the payouts list.
+type PayoutSummary struct {
+	domain.Payout
+	PersonName string
+	PersonKind domain.PersonKind
+}
+
+// PayoutQuery pages payouts, newest first, optionally one person's.
+type PayoutQuery struct {
+	PersonID *uuid.UUID
+	After    *PayoutCursor
+	Limit    int
+}
+
+// PayoutCursor pages the payouts list.
+type PayoutCursor struct {
+	PaidOn domain.Date
+	ID     uuid.UUID
+}
+
+// LedgerRepository keeps the owners' ledger and its payouts, bound to an
+// organisation-scoped transaction.
+type LedgerRepository interface {
+	// Insert writes lines, each with its ID and creation time already set.
+	Insert(ctx context.Context, entries []domain.LedgerEntry) error
+	// RentEntries are the lines a rent wrote, locked until the transaction ends.
+	RentEntries(ctx context.Context, rentID uuid.UUID) ([]domain.LedgerEntry, error)
+	// DeleteRentEntries removes a rent's lines; one inside a payout refuses.
+	DeleteRentEntries(ctx context.Context, rentID uuid.UUID) error
+	Entry(ctx context.Context, id uuid.UUID) (*domain.LedgerEntry, error)
+	DeleteEntry(ctx context.Context, id uuid.UUID) error
+	// Entries are lines by ID, locked until the transaction ends. An ID that
+	// names no line is left out.
+	Entries(ctx context.Context, ids []uuid.UUID) ([]domain.LedgerEntry, error)
+	// Pending is a person's lines without a payout, oldest first.
+	Pending(ctx context.Context, personID uuid.UUID) ([]EntryView, error)
+	Balances(ctx context.Context) ([]Balance, error)
+	// CreatePayout numbers and stores a payout and closes the lines in it.
+	// A line closed in the meantime by another payout is ErrConflict.
+	CreatePayout(ctx context.Context, p *domain.Payout, entryIDs []uuid.UUID) error
+	Payout(ctx context.Context, id uuid.UUID) (*PayoutSummary, error)
+	PayoutEntries(ctx context.Context, id uuid.UUID) ([]EntryView, error)
+	Payouts(ctx context.Context, q PayoutQuery) ([]PayoutSummary, error)
+	// DeletePayout undoes a payout; its lines return to pending.
+	DeletePayout(ctx context.Context, id uuid.UUID) error
 }
 
 // MonthFigures are the receipts of a month.
@@ -451,8 +536,20 @@ type MonthFigures struct {
 	Open      domain.Money
 	OpenCount int
 	// OfficeFee is the administration fee on the rents received in the month,
-	// taken on the rent with its charges and not on the late fee.
+	// read from the ledger's fee lines, so it is always what the owners were
+	// charged: the rent and the owner's charges, never the late fee.
 	OfficeFee domain.Money
+	// PaidOut is what the office transferred to owners in the month.
+	PaidOut      domain.Money
+	PaidOutCount int
+}
+
+// PayoutFigures are what the office still owes its owners today.
+type PayoutFigures struct {
+	// Pending is the sum of every balance above zero.
+	Pending domain.Money
+	// Beneficiaries is how many people have a balance above zero.
+	Beneficiaries int
 }
 
 // Portfolio is what the office manages today.
@@ -483,6 +580,7 @@ type DashboardRepository interface {
 	// AdjustmentsDue lists running contracts with an index whose twelve months
 	// since the start or the last adjustment end by until.
 	AdjustmentsDue(ctx context.Context, today, until domain.Date, limit int) ([]ContractDeadline, error)
+	Payouts(ctx context.Context) (PayoutFigures, error)
 }
 
 // AmendmentRepository stores rent adjustments, bound to an organisation-scoped

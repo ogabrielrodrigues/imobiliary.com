@@ -135,12 +135,13 @@ func (u *Rents) Get(ctx context.Context, caller *Caller, id uuid.UUID) (*RentDet
 	return out, err
 }
 
-// PaymentInput is a payment as the office records it. Nil fields take the
-// suggestion: the late fee computed for the day, and the amount due with it.
+// PaymentInput is a payment as the office records it. A nil late fee takes
+// the one computed for the day. The amount received is never given: it is the
+// rent, its charges and the late fee, less the tax a company tenant withheld.
 type PaymentInput struct {
-	PaidOn     domain.Date
-	AmountPaid *domain.Money
-	LateFee    *domain.Money
+	PaidOn    domain.Date
+	LateFee   *domain.Money
+	IncomeTax domain.Money
 }
 
 // PaymentPreview is what a payment on a day would be.
@@ -194,38 +195,50 @@ func (u *Rents) Pay(ctx context.Context, caller *Caller, id uuid.UUID, in Paymen
 		if rent.PaidOn != nil {
 			return fmt.Errorf("pay rent: %w", domain.ErrConflict)
 		}
-		payment := domain.Payment{PaidOn: in.PaidOn}
+		payment := domain.Payment{PaidOn: in.PaidOn, IncomeTax: in.IncomeTax}
 		if !in.PaidOn.IsZero() {
 			totals, err := paymentTotals(rent, in.PaidOn)
 			if err != nil {
 				return err
 			}
-			payment.LateFee, payment.AmountPaid = totals.LateFee.Total, totals.Total
+			payment.LateFee = totals.LateFee.Total
 		}
 		if in.LateFee != nil {
 			payment.LateFee = *in.LateFee
-			if due, err := rent.Due().Add(payment.LateFee); err == nil {
-				payment.AmountPaid = due
-			}
 		}
-		if in.AmountPaid != nil {
-			payment.AmountPaid = *in.AmountPaid
+		v := &domain.ValidationError{}
+		domain.ValidateIncomeTax(v, in.IncomeTax, rent.Amount)
+		if err := v.OrNil(); err != nil {
+			return err
 		}
+		received, err := domain.AmountReceived(rent.Due(), payment.LateFee, payment.IncomeTax)
+		if err != nil {
+			return err
+		}
+		payment.AmountPaid = received
 		if err := domain.ValidatePayment(&payment, today); err != nil {
 			return err
 		}
 		if err := repos.Rents.Pay(ctx, id, payment); err != nil {
 			return err
 		}
+		fields := []string{"paid_on", "amount_paid", "late_fee"}
+		if payment.IncomeTax > 0 {
+			fields = append(fields, "income_tax_withheld")
+		}
 		if err := u.audit.recordWith(ctx, repos.Audit, AuditEntry{
 			OrganizationID: &caller.Organization.ID, ActorID: &caller.User.ID,
 			Action: domain.ActionRentPaid, EntityType: "rent", EntityID: &id,
-			Fields: []string{"paid_on", "amount_paid", "late_fee"},
+			Fields: fields,
 		}); err != nil {
 			return err
 		}
 		rent, err = repos.Rents.Get(ctx, id)
 		if err != nil {
+			return err
+		}
+		// What the owners are owed is written with the payment, or neither is.
+		if err := writeReceipt(ctx, repos, rent, &caller.User.ID, u.now().UTC()); err != nil {
 			return err
 		}
 		out, err = u.detail(rent, today)
@@ -248,13 +261,16 @@ func (u *Rents) Reverse(ctx context.Context, caller *Caller, id uuid.UUID) (*Ren
 			v.Add("payment", "the rent is not paid")
 			return v
 		}
+		if err := clearReceipt(ctx, repos, id, "payment"); err != nil {
+			return err
+		}
 		if err := repos.Rents.Reverse(ctx, id); err != nil {
 			return err
 		}
 		if err := u.audit.recordWith(ctx, repos.Audit, AuditEntry{
 			OrganizationID: &caller.Organization.ID, ActorID: &caller.User.ID,
 			Action: domain.ActionRentPaymentReversed, EntityType: "rent", EntityID: &id,
-			Fields: []string{"paid_on", "amount_paid", "late_fee"},
+			Fields: []string{"paid_on", "amount_paid", "late_fee", "income_tax_withheld"},
 		}); err != nil {
 			return err
 		}
@@ -353,6 +369,60 @@ func (u *Rents) RemoveCharge(ctx context.Context, caller *Caller, rentID, charge
 	return out, err
 }
 
+// SetChargeDestination changes where a charge goes. On a paid rent it is the
+// one change a charge still allows: the rent's lines are written again with
+// the new destination, which is how the charges recorded before the ledger are
+// put right. Refused once the rent is in a payout.
+func (u *Rents) SetChargeDestination(ctx context.Context, caller *Caller, rentID, chargeID uuid.UUID, d domain.ChargeDestination) (*RentDetail, error) {
+	if d != domain.DestinationOwner && d != domain.DestinationThirdParty {
+		v := &domain.ValidationError{}
+		v.Add("destination", "must be owner or third_party")
+		return nil, v
+	}
+	var out *RentDetail
+	err := u.scope.InOrganization(ctx, caller.Organization.ID, func(repos ScopedRepositories) error {
+		rent, err := repos.Rents.Get(ctx, rentID)
+		if err != nil {
+			return err
+		}
+		i := slices.IndexFunc(rent.Charges, func(c domain.Charge) bool { return c.ID == chargeID })
+		if i < 0 {
+			return fmt.Errorf("charge destination: %w", domain.ErrNotFound)
+		}
+		if rent.Charges[i].Destination == d {
+			out, err = u.detail(rent, u.Today())
+			return err
+		}
+		if rent.PaidOn != nil {
+			if err := clearReceipt(ctx, repos, rentID, "destination"); err != nil {
+				return err
+			}
+		}
+		if err := repos.Rents.SetChargeDestination(ctx, rentID, chargeID, d); err != nil {
+			return err
+		}
+		if err := u.audit.recordWith(ctx, repos.Audit, AuditEntry{
+			OrganizationID: &caller.Organization.ID, ActorID: &caller.User.ID,
+			Action: domain.ActionRentChargeDestination, EntityType: "rent", EntityID: &rentID,
+			Fields: []string{string(rent.Charges[i].Kind), string(d)},
+		}); err != nil {
+			return err
+		}
+		rent, err = repos.Rents.Get(ctx, rentID)
+		if err != nil {
+			return err
+		}
+		if rent.PaidOn != nil {
+			if err := writeReceipt(ctx, repos, rent, &caller.User.ID, u.now().UTC()); err != nil {
+				return err
+			}
+		}
+		out, err = u.detail(rent, u.Today())
+		return err
+	})
+	return out, err
+}
+
 // DashboardView is the office's day at a glance.
 type DashboardView struct {
 	Today      domain.Date
@@ -370,6 +440,8 @@ type DashboardView struct {
 	Adjustments []ContractDeadline
 	DueToday    []RentView
 	Overdue     []RentView
+	// Payouts is what the office still owes its owners.
+	Payouts PayoutFigures
 }
 
 const (
@@ -393,6 +465,9 @@ func (u *Rents) Dashboard(ctx context.Context, caller *Caller) (*DashboardView, 
 			return err
 		}
 		if view.Portfolio, err = repos.Dashboard.Portfolio(ctx, today); err != nil {
+			return err
+		}
+		if view.Payouts, err = repos.Dashboard.Payouts(ctx); err != nil {
 			return err
 		}
 		if view.Expiring, err = repos.Dashboard.Expiring(ctx, today, today.AddDays(expiringHorizonDays), dashboardList); err != nil {

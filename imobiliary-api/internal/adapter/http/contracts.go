@@ -20,6 +20,17 @@ type contractPartyBody struct {
 	Role     domain.PartyRole  `json:"role"`
 	Name     string            `json:"name,omitzero"`
 	Kind     domain.PersonKind `json:"kind,omitzero"`
+	// Share is a landlord's part of each rent, sent and returned only when
+	// the landlords are not exactly the property's owners.
+	Share *string `json:"share,omitzero"`
+}
+
+func shareText(r *domain.Rate) *string {
+	if r == nil {
+		return nil
+	}
+	s := r.String()
+	return &s
 }
 
 type instalmentBody struct {
@@ -119,7 +130,7 @@ func presentContract(v *usecase.ContractView) contractBody {
 		Version:           c.Version, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
 	}
 	for _, p := range v.Parties {
-		out.Parties = append(out.Parties, contractPartyBody{PersonID: p.PersonID.String(), Role: p.Role, Name: p.Name, Kind: p.Kind})
+		out.Parties = append(out.Parties, contractPartyBody{PersonID: p.PersonID.String(), Role: p.Role, Name: p.Name, Kind: p.Kind, Share: shareText(p.Share)})
 	}
 	for _, a := range c.Acknowledgements {
 		out.Acknowledgements = append(out.Acknowledgements, acknowledgementBody{Code: a.Code, AcknowledgedAt: a.AcknowledgedAt})
@@ -226,7 +237,16 @@ func (body contractRequest) toContract() (*domain.Contract, []domain.NoticeCode,
 			v.Add("parties["+strconv.Itoa(i)+"].person_id", "is not a valid identifier")
 			continue
 		}
-		c.Parties = append(c.Parties, domain.ContractParty{PersonID: id, Role: p.Role})
+		party := domain.ContractParty{PersonID: id, Role: p.Role}
+		if p.Share != nil {
+			share, err := domain.ParseRate(*p.Share)
+			if err != nil {
+				v.Add("parties["+strconv.Itoa(i)+"].share", "must be a percentage with up to four decimal places, such as 50 or 33.3333")
+				continue
+			}
+			party.Share = &share
+		}
+		c.Parties = append(c.Parties, party)
 	}
 	acknowledged := make([]domain.NoticeCode, 0, len(body.Acknowledgements))
 	for _, code := range body.Acknowledgements {
@@ -350,7 +370,7 @@ func (s *Server) handlePreviewContract(w http.ResponseWriter, r *http.Request) {
 		out.Notices = []domain.NoticeCode{}
 	}
 	for _, p := range preview.Contract.Parties {
-		out.Parties = append(out.Parties, contractPartyBody{PersonID: p.PersonID.String(), Role: p.Role})
+		out.Parties = append(out.Parties, contractPartyBody{PersonID: p.PersonID.String(), Role: p.Role, Share: shareText(p.Share)})
 	}
 	for _, inst := range preview.Schedule {
 		out.Schedule = append(out.Schedule, instalmentBody{Sequence: inst.Sequence, DueOn: inst.DueOn, Amount: inst.Amount})

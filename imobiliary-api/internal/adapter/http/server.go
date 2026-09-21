@@ -38,6 +38,7 @@ type Options struct {
 	Properties    *usecase.Properties
 	Contracts     *usecase.Contracts
 	Rents         *usecase.Rents
+	Payouts       *usecase.Payouts
 	Documents     *usecase.Documents
 	Auditor       *usecase.Auditor
 	// Signer parses the access tokens this service issued.
@@ -64,6 +65,7 @@ type Server struct {
 	properties    *usecase.Properties
 	contracts     *usecase.Contracts
 	rents         *usecase.Rents
+	payouts       *usecase.Payouts
 	documents     *usecase.Documents
 	auditor       *usecase.Auditor
 	signer        *token.Signer
@@ -89,6 +91,7 @@ func NewServer(opts Options) *Server {
 		properties:    opts.Properties,
 		contracts:     opts.Contracts,
 		rents:         opts.Rents,
+		payouts:       opts.Payouts,
 		documents:     opts.Documents,
 		auditor:       opts.Auditor,
 		signer:        opts.Signer,
@@ -196,7 +199,19 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /v1/rents/{rentID}/payment", write(http.HandlerFunc(s.handleReversePayment)))
 	mux.Handle("POST /v1/rents/{rentID}/charges", write(http.HandlerFunc(s.handleAddCharge)))
 	mux.Handle("DELETE /v1/rents/{rentID}/charges/{chargeID}", write(http.HandlerFunc(s.handleRemoveCharge)))
+	mux.Handle("PATCH /v1/rents/{rentID}/charges/{chargeID}", write(http.HandlerFunc(s.handleChargeDestination)))
 	mux.Handle("GET /v1/dashboard", authenticated(http.HandlerFunc(s.handleDashboard)))
+
+	// The owners' ledger and payouts (PLANO-REPASSE.md). Recording a payout
+	// moves no money: it says the office already did.
+	mux.Handle("GET /v1/payouts/balances", authenticated(http.HandlerFunc(s.handleBalances)))
+	mux.Handle("GET /v1/people/{personID}/ledger", authenticated(http.HandlerFunc(s.handlePersonLedger)))
+	mux.Handle("POST /v1/people/{personID}/ledger", write(http.HandlerFunc(s.handleAddLedgerEntry)))
+	mux.Handle("DELETE /v1/ledger/{entryID}", write(http.HandlerFunc(s.handleDeleteLedgerEntry)))
+	mux.Handle("GET /v1/payouts", authenticated(http.HandlerFunc(s.handleListPayouts)))
+	mux.Handle("POST /v1/payouts", write(http.HandlerFunc(s.handleCreatePayout)))
+	mux.Handle("GET /v1/payouts/{payoutID}", authenticated(http.HandlerFunc(s.handleGetPayout)))
+	mux.Handle("DELETE /v1/payouts/{payoutID}", write(http.HandlerFunc(s.handleUndoPayout)))
 
 	// Probes, and the catch-all that answers JSON rather than net/http's text.
 	mux.HandleFunc("GET /healthz", s.handleLive)

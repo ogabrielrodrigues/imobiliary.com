@@ -218,6 +218,12 @@ func serve(logger *slog.Logger) error {
 		Location: saoPaulo,
 		Logger:   logger,
 	})
+	payouts := usecase.NewPayouts(usecase.PayoutsConfig{
+		Scope:    db,
+		Location: saoPaulo,
+		Logger:   logger,
+	})
+	backfillLedger(ctx, db, rents, logger)
 	privacy := usecase.NewPrivacy(usecase.PrivacyConfig{
 		Identity:     identity,
 		Repositories: repos,
@@ -249,6 +255,7 @@ func serve(logger *slog.Logger) error {
 		Properties:        properties,
 		Contracts:         contracts,
 		Rents:             rents,
+		Payouts:           payouts,
 		Documents:         documents,
 		Auditor:           auditor,
 		Signer:            signer,
@@ -342,5 +349,27 @@ func newHTTPServer(addr string, handler http.Handler, logger *slog.Logger) *http
 		IdleTimeout:       idleTimeout,
 		MaxHeaderBytes:    maxHeaderBytes,
 		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelWarn),
+	}
+}
+
+// backfillLedger writes the owners' ledger lines of the rents paid before the
+// ledger existed (migration 0012), each office in its own transaction. It runs
+// at every start and finds nothing after the first, so no operator has to
+// remember it. An office that fails is logged and left for the next start:
+// the service still has every other office to serve.
+func backfillLedger(ctx context.Context, db *postgres.DB, rents *usecase.Rents, logger *slog.Logger) {
+	ids, err := db.OrganizationIDs(ctx)
+	if err != nil {
+		logger.Error("ledger backfill", slog.Any("error", err))
+		return
+	}
+	for _, id := range ids {
+		n, err := rents.BackfillLedger(ctx, id)
+		switch {
+		case err != nil:
+			logger.Error("ledger backfill", slog.String("organization_id", id.String()), slog.Any("error", err))
+		case n > 0:
+			logger.Info("ledger backfill", slog.String("organization_id", id.String()), slog.Int("rents", n))
+		}
 	}
 }

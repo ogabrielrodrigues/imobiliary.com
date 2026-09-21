@@ -26,6 +26,7 @@ func (db *DB) InOrganization(ctx context.Context, organizationID uuid.UUID, fn f
 			Contracts:  &contractRepository{q: tx, organizationID: organizationID},
 			Amendments: &amendmentRepository{q: tx, organizationID: organizationID},
 			Rents:      &rentRepository{q: tx, organizationID: organizationID},
+			Ledger:     &ledgerRepository{q: tx, organizationID: organizationID},
 			Dashboard:  &dashboardRepository{q: tx},
 			Audit:      &auditRepository{tx},
 		})
@@ -33,6 +34,25 @@ func (db *DB) InOrganization(ctx context.Context, organizationID uuid.UUID, fn f
 }
 
 var _ usecase.OrganizationScope = (*DB)(nil)
+
+// OrganizationIDs lists every office, for work done at start-up across all of
+// them. The organizations table carries no row-level security: it is read
+// before an office is known, at sign-in.
+func (db *DB) OrganizationIDs(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := db.pool.Query(ctx, `SELECT id FROM organizations ORDER BY id`)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: organizations: %w", err)
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[pgtype.UUID])
+	if err != nil {
+		return nil, fmt.Errorf("postgres: organizations: %w", err)
+	}
+	out := make([]uuid.UUID, len(ids))
+	for i, id := range ids {
+		out[i] = toUUID(id)
+	}
+	return out, nil
+}
 
 type personRepository struct {
 	q              querier

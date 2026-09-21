@@ -72,6 +72,13 @@ func repositoriesOn(q querier) usecase.Repositories {
 // that would otherwise depend on the driver's reflection rules.
 func pgUUID(id uuid.UUID) pgtype.UUID { return pgtype.UUID{Bytes: id, Valid: true} }
 
+func pgNullRate(r *domain.Rate) pgtype.Int4 {
+	if r == nil {
+		return pgtype.Int4{}
+	}
+	return pgtype.Int4{Int32: int32(*r), Valid: true}
+}
+
 func pgNullUUID(id *uuid.UUID) pgtype.UUID {
 	if id == nil {
 		return pgtype.UUID{}
