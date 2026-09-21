@@ -81,6 +81,7 @@ data, imóvel opcional. Excluível enquanto não estiver num repasse.
 - O total tem de ser maior que zero. Um saldo negativo (débitos maiores que
   créditos) espera o próximo recebimento.
 - Numeração sequencial por escritório e ano, para o recibo: `2026/0001`.
+  O número de um repasse desfeito não volta a ser usado (migração 0014).
 - **Desfazer** devolve as linhas ao saldo pendente. É auditado e serve para o
   repasse registrado por engano ou devolvido.
 - Duas pessoas registrando repasse das mesmas linhas ao mesmo tempo: a segunda
@@ -133,8 +134,8 @@ repasse desfazer. Conferido com `FOR UPDATE` na mesma transação.
   apagadas e lançadas de novo, na mesma transação. É o que deixa o escritório
   acertar as cobranças antigas. Valor e tipo continuam travados no aluguel pago.
 - As linhas dos recebimentos anteriores são lançadas pelo mesmo código Go que
-  lança as de um pagamento novo, num comando `imobiliary ledger-backfill`
-  idempotente, rodado logo depois da migração. SQL escrito à parte seria uma
+  lança as de um pagamento novo, a cada início do serviço (feito assim em vez
+  de um comando: é idempotente e ninguém precisa lembrar de rodá-lo). SQL escrito à parte seria uma
   segunda implementação da divisão, e as duas acabariam diferindo.
 
 ---

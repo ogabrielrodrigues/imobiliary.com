@@ -368,7 +368,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-21: phase 8 complete, so every phase of `PLANO.md` is done; phase 7 complete (the docgen integration: identity moved to the platform, documents generated from a contract, verified in the browser); phase 8 (docs on packages/ui) is next
+**Last updated:** 2026-09-21: payouts to owners built (PLANO-REPASSE.md, item 50); phase 8 complete, so every phase of `PLANO.md` is done; phase 7 complete (the docgen integration: identity moved to the platform, documents generated from a contract, verified in the browser); phase 8 (docs on packages/ui) is next
 
 ### Done
 
@@ -1516,7 +1516,8 @@ _Update this section as work proceeds. It is what a fresh session reads first._
     - **`GET /v1/dashboard`** as of today: month expected/received/open and
       the administration fee (`round((rent_amount + charges) × admin_fee)`
       on rents received this month; **the user ruled on 2026-09-16 that the
-      fee is charged on the rent with its charges, never on the late fee**),
+      fee is charged on the rent with its charges, never on the late fee**;
+      narrowed on 2026-09-21 to the charges that go to the owner, item 50),
       overdue totals, portfolio (properties,
       leased, running contracts, rent roll), contracts ending within 60 days,
       adjustments due within 30 days (index set, twelve months from start or
@@ -1678,17 +1679,67 @@ _Update this section as work proceeds. It is what a fresh session reads first._
     on). The router leaves undefined keys out of the address. **Write every
     new `validateSearch` this way.**
 
+50. **Payouts to owners** (PLANO-REPASSE.md, decided with the user on
+    2026-09-21; `a47eea6` domain, `1b0c7bd` API, `c3fa892` administrator,
+    `9e78e0c` and `53c098f` web, `cf301b6` and `a32fc0b` statement documents,
+    `6d91572` numbering).
+    - **The owner's ledger** (`owner_entries`): a received rent writes, in the
+      payment's transaction, a line per landlord for their part of the rent,
+      the late fee (all the owner's), each charge whose destination is the
+      owner, less their part of the fee and of the IRRF. `domain.Split` gives
+      the remainder to the last landlord, with a 128-bit product. Lines are
+      never updated except their `payout_id` (the app role has UPDATE on that
+      column only) and a line in a payout cannot be deleted (trigger).
+    - **Beneficiaries** are the contract's landlords: the property's shares on
+      the day when they are exactly the owners, else `contract_parties.share`
+      (required then, a deferred trigger keeps 100%). The web asks for shares
+      only then; a single such landlord is 100% without typing.
+    - **Two rules replaced older ones, by the user:** the fee is on the rent
+      and the **owner's** charges only (a charge has `destination` owner or
+      third_party), and **`amount_paid` is computed** (rent + charges + late
+      fee − IRRF): sending it is a 422, a discount goes in the late fee. The
+      dashboard's fee now reads the ledger's fee lines.
+    - Reversal is refused while a line is in a payout (the message names the
+      payout); a paid rent's charge can change destination until then, and
+      its lines are rewritten.
+    - **Payout numbers never repeat** (`payout_numbers`, migration 0014): the
+      first version took max+1, so undoing the last payout freed its number,
+      found in the browser. A printed receipt may carry it.
+    - **Rents paid before the ledger get their lines at every start of the
+      service** (`backfillLedger` in `main.go`), not by a command as the plan
+      said: idempotent, and nobody has to remember it. The user's rent
+      2026/000 was backfilled; its fan charge stayed third_party.
+    - **Administrator** (`GET/PUT /v1/organization/administrator`, migration
+      0013 fixed 0012's text column to bytea): person or company, CPF or
+      CNPJ sealed, CRECI. Ajustes › Escritório; the user is a member, so they
+      see it read-only.
+    - **Web:** `/repasses`, `/repasses/pessoa/$personId`,
+      `/repasses/$payoutId`, `/repasses/$payoutId/recibo?tipo=repasse|taxa`
+      (a `data-scheme="light"` sheet; the shell has `print:hidden`) and
+      `/repasses/$payoutId/documento`. The document flow now takes a subject,
+      contract or payout (`components/documents/`), filed as `payout:<id>`.
+      `GET /v1/payouts/{id}/document-fields` answers 123 fields; `campos.md`
+      section 9 and the published catalogue list them.
+    - OpenAPI 0.9.0; reference and catalogue republished at their URLs.
+      `PRIVACIDADE.md` has the ledger (5-year fiscal retention, CTN art. 173),
+      the administrator, and two new gaps.
+    - **Verified in the browser** on test records, deleted after: a rent with
+      an owner's IPTU and a condominium passed on, late fee and IRRF (R$
+      2.400,00 received), balance R$ 1.885,00, a typed debit, payout
+      2026/0001 by PIX, both receipts, the refused reversal, undo, a payout's
+      document draft with 123 fields.
+    - Noticed, not changed: renaming the office is audited as
+      `organization.created` (`usecase/organization.go`, Rename).
+
 ### Next step
 
-Every phase of `PLANO.md` §7 is done. **Payouts to owners are planned in
-`PLANO-REPASSE.md`** (decided with the user on 2026-09-21): a ledger per
-beneficiary, payouts recorded rather than transferred, printable receipts, the
-administrator as a person or a company. Its §7 lists the commits; start with
-migration 0012 and the domain. Two rules there replace older ones: the
-administration fee is charged on the rent and the charges that go to the owner
-only, and the amount received is computed, no longer typed.
+Every phase of `PLANO.md` §7 is done, and payouts to owners
+(`PLANO-REPASSE.md`) are built (item 50). The user has not yet seen them in
+their own browser; the office's administrator is still unrecorded, which an
+admin of the office fills in Ajustes.
 
-Still left out, to be planned before starting: partial payment, automatic
+Still left out, to be planned before starting: the DIMOB file, the carnê-leão
+report and the fee invoice (need an accountant); partial payment, automatic
 anonymisation when the legal retention ends, encryption at rest, and CI. The
 open items below still stand.
 
