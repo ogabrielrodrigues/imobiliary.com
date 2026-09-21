@@ -219,16 +219,16 @@ func (r *ledgerRepository) Balances(ctx context.Context) ([]usecase.Balance, err
 }
 
 func (r *ledgerRepository) CreatePayout(ctx context.Context, p *domain.Payout, entryIDs []uuid.UUID) error {
-	// One payout at a time per office takes the next number: a transaction
-	// lock keyed on the office, released at commit. Payouts are rare enough
-	// that the serialisation costs nothing.
-	if _, err := r.q.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('payout:' || $1::text, 0))`,
-		r.organizationID.String()); err != nil {
-		return fmt.Errorf("postgres: number payout: %w", err)
-	}
+	// The next number of the office's year, from a counter that never goes
+	// back: an undone payout's number stays spent, since its receipt may be
+	// printed. The upsert takes the counter's row lock, so two payouts at the
+	// same time get consecutive numbers and neither waits on more than that.
 	p.Year = p.PaidOn.Year()
 	if err := r.q.QueryRow(ctx,
-		`SELECT COALESCE(max(sequence), 0) + 1 FROM payouts WHERE year = $1`, p.Year).Scan(&p.Sequence); err != nil {
+		`INSERT INTO payout_numbers (organization_id, year, last_sequence) VALUES ($1, $2, 1)
+		 ON CONFLICT (organization_id, year) DO UPDATE SET last_sequence = payout_numbers.last_sequence + 1
+		 RETURNING last_sequence`,
+		pgUUID(r.organizationID), p.Year).Scan(&p.Sequence); err != nil {
 		return fmt.Errorf("postgres: number payout: %w", err)
 	}
 	_, err := r.q.Exec(ctx,

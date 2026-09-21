@@ -291,6 +291,17 @@ func TestLedgerFromAPaidRent(t *testing.T) {
 	a.expect(http.StatusNoContent, http.MethodDelete, "/v1/payouts/"+list.Payouts[0].ID, f.admin.access, nil)
 	a.expect(http.StatusNotFound, http.MethodDelete, "/v1/payouts/"+payout.ID, f.admin.access, nil)
 
+	// An undone payout's number stays spent: its receipt may be printed.
+	a.expect(http.StatusOK, http.MethodGet, "/v1/people/"+f.owner.ID+"/ledger", f.admin.access, nil).decode(t, &maria)
+	var again payoutResponse
+	a.expect(http.StatusCreated, http.MethodPost, "/v1/payouts", f.admin.access, map[string]any{
+		"person_id": f.owner.ID, "paid_on": today.String(), "entry_ids": lineIDs(maria.Pending),
+	}).decode(t, &again)
+	if again.Number != today.String()[:4]+"/0003" {
+		t.Errorf("after two undone payouts the next number is %s", again.Number)
+	}
+	a.expect(http.StatusNoContent, http.MethodDelete, "/v1/payouts/"+again.ID, f.admin.access, nil)
+
 	// With nothing paid out, the condominium can become the owners': the
 	// lines are written again, the fee now on 2120.00.
 	a.expect(http.StatusOK, http.MethodPatch, rentPath+"/charges/"+rent.Charges[1].ID, f.admin.access,
