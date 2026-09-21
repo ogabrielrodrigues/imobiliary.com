@@ -55,8 +55,8 @@ export interface LegalDocument {
 
 export const PRIVACY_POLICY: LegalDocument = {
   title: "Política de Privacidade",
-  version: "1.1",
-  effectiveFrom: "2026-09-16",
+  version: "1.2",
+  effectiveFrom: "2026-09-21",
 };
 
 export const TERMS_OF_USE: LegalDocument = {

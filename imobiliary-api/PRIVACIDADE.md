@@ -91,9 +91,9 @@ exercício regular de direitos (art. 7º, VI).
 | Partes e seus papéis (locador, locatário, fiador, cônjuge do fiador) | `contract_parties` | identificador da pessoa e papel | idem |
 | Ciência dos avisos legais: código, quem deu e quando | `contract_acknowledgments` e `audit_events` | texto puro | idem na tabela; a auditoria permanece |
 | Parcelas: vencimento, valor, pagamento | `rents` | inteiros e datas | idem |
-| Pagamentos: data, valor recebido, multa e juros | `rents` | inteiros e datas | idem; um estorno apaga os valores e fica na auditoria |
+| Pagamentos, inteiros ou parciais: data, valor recebido, multa e juros quitados ou dispensados, parte do aluguel e cobranças, IRRF | `rent_payments`, com as somas em `rents` | inteiros e datas | idem; um estorno apaga o último pagamento e fica na auditoria |
 | Cobranças junto do aluguel: tipo, descrição, valor, destino (proprietário ou terceiro) | `rent_charges` | texto puro e inteiros | idem |
-| IRRF retido pelo locatário pessoa jurídica | `rents.income_tax_withheld` | inteiro | idem |
+| IRRF retido pelo locatário pessoa jurídica | `rent_payments.income_tax`, somado em `rents.income_tax_withheld` | inteiro | idem |
 | Cotas de locadores que não são exatamente os proprietários | `contract_parties.share` | inteiro | idem |
 | Reajustes: data, índice, alíquota, aluguel anterior e novo, ciência do aviso de prazo | `amendments` | inteiros, datas e o usuário que deu a ciência | idem |
 
@@ -118,12 +118,17 @@ plataforma não movimenta dinheiro nem guarda dado bancário: o repasse é o
 registro de uma transferência que o escritório já fez.
 
 Retenção: registros financeiros ficam pelo prazo em que o fisco pode exigi-los,
-**5 anos** (CTN art. 173), e a pretensão de prestação de contas tem prazo
-próprio. Uma linha já repassada não é editada nem excluída pelo papel da
-aplicação (só a ligação com o repasse muda, e só por desfazer o repasse); uma
-pessoa com linhas não é excluída (`RESTRICT`). Isso limita a eliminação pelo
-titular do mesmo modo que o `PLANO.md` §6.3 já prevê para contratos. A
-exclusão automática ao fim do prazo é lacuna registrada.
+**5 anos** contados do primeiro dia do ano seguinte (CTN art. 173, I), e a
+pretensão de prestação de contas tem prazo próprio. Uma linha já repassada não
+é editada nem excluída pelo papel da aplicação (só a ligação com o repasse
+muda, e só por desfazer o repasse); uma pessoa com linhas não é excluída
+(`RESTRICT`). Ao fim do prazo a pessoa pode ser anonimizada (ver "Fim da
+guarda"); as linhas ficam, sem ninguém identificável.
+
+O relatório para carnê-leão (`GET /v1/people/{id}/income-report`) só soma
+essas linhas por mês para o proprietário pessoa física; não cria dado novo.
+A planilha que a tela gera é baixada pelo escritório e sai da plataforma com
+ele, como qualquer documento que ele imprime.
 
 A descrição de um débito ou crédito é texto livre digitado pelo escritório
 ("Conserto do chuveiro"); a tela não pede e o escritório não deve pôr ali dado
@@ -135,6 +140,29 @@ de saúde ou outro dado sensível.
 **Índice cego:** o HMAC recebe o identificador do escritório junto com o
 documento. O mesmo CPF cadastrado por dois escritórios gera índices diferentes,
 então a coluna não permite cruzar pessoas entre escritórios.
+
+## Fim da guarda: anonimização
+
+Uma pessoa passa a ser sugerida para anonimização quando não é proprietária de
+imóvel cadastrado, não é parte de contrato em vigor, não tem lançamento
+esperando repasse, e o fim do último contrato, o último lançamento e o último
+repasse dela passaram dos 5 anos fiscais contados do ano seguinte. Quem é
+cônjuge ou representante de alguém que não passou fica, porque o outro
+cadastro ainda precisa dele. A lista fica em Ajustes › Escritório; **nada é
+anonimizado sozinho**: um administrador confirma cada pessoa, porque o
+escritório é o controlador e pode ter motivo para guardar mais (um processo
+em curso, por exemplo, art. 16, II).
+
+Ao confirmar, o nome vira "Pessoa anonimizada" e somem CPF ou CNPJ e seu
+índice cego, e-mail, telefone, nascimento, nacionalidade, profissão, estado
+civil, regime de bens, gênero, nome fantasia, endereços e vínculos de
+representante e de cônjuge (`POST /v1/people/{id}/anonymization`, migração
+0016). O cadastro fica, marcado em `people.anonymized_at`, para que contratos,
+aluguéis, livro e repasses continuem consistentes; ele não é mais editado. Os
+documentos gerados no Docs para os repasses da pessoa, e para os contratos
+cujas outras partes também saem, são excluídos antes; os de um contrato que
+nomeia alguém ainda cadastrado ficam, e a tela diz quantos. A auditoria
+registra `person.anonymized`, sem valores.
 
 ## Isolamento entre escritórios
 
@@ -194,7 +222,8 @@ internacional nesse caminho.
 |---|---|---|
 | Confirmação e acesso (II) | `GET /v1/me/export`, em Ajustes, Meus dados | pelo escritório, que lê o cadastro |
 | Correção (III) | alteração de nome ainda não existe (lacuna) | pelo escritório, `PUT /v1/people/{id}` |
-| Eliminação (VI) | `POST /v1/me/deletion`, com a senha | pelo escritório, `DELETE /v1/people/{id}` |
+| Eliminação (VI) | `POST /v1/me/deletion`, com a senha | pelo escritório, `DELETE /v1/people/{id}`; com vínculo, a anonimização ao fim da guarda |
+| Anonimização (IV) | não se aplica | ao fim da guarda, confirmada por um administrador |
 | Portabilidade (V) | o mesmo JSON da exportação | não há exportação de pessoas (lacuna) |
 
 **Limites da eliminação:**
@@ -232,14 +261,19 @@ internacional nesse caminho.
   da ANPD, antes de operar com dados reais.
 - **Nomes e endereços em texto puro.** Precisam ser pesquisáveis; ficam
   protegidos por isolamento e controle de acesso, não por cifra.
-- **Sem prazo automático** para a trilha de auditoria nem para pessoas de
-  contratos encerrados. A cobrança de aluguel prescreve em 3 anos (CC art. 206,
-  §3º, I); a regra de expurgo depende das fases de contratos e aluguéis.
-- **Sem expurgo do livro do proprietário** ao fim dos 5 anos fiscais: as
-  linhas e os repasses ficam até alguém decidir a regra.
-- **Obrigações fiscais fora da plataforma:** DIMOB, relatório para o
-  carnê-leão e nota fiscal da taxa ainda não são gerados; o registro guarda o
-  que eles pediriam.
+- **Sem prazo automático** para a trilha de auditoria. Pessoas de contratos
+  encerrados são sugeridas para anonimização ao fim da guarda, mas só um
+  administrador confirma; um escritório que nunca olha a lista guarda os dados
+  além do prazo.
+- **O livro do proprietário e os repasses não são apagados** ao fim dos 5
+  anos: ficam sem identificação depois da anonimização da pessoa, com os
+  valores.
+- **Documentos no Docs de um contrato com partes ainda cadastradas** ficam
+  depois que uma delas é anonimizada, porque nomeiam as outras. Excluí-los é
+  decisão do escritório, na tela do contrato.
+- **Obrigações fiscais fora da plataforma:** DIMOB e nota fiscal da taxa
+  ainda não são gerados. O relatório para carnê-leão soma o livro e não
+  calcula imposto.
 - **Sem exportação de pessoas** para atender portabilidade pedida ao escritório.
 - **Sem troca de nome e e-mail da conta.**
 - **Sem cifra do disco** e sem política de backup definida; dependem da

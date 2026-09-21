@@ -112,7 +112,7 @@
 <div class="shell">
   <nav class="rail" aria-label="Sections">
     <div class="brand">imobiliary <span>api</span></div>
-    <div class="ver">v0.9.0 · payouts</div>
+    <div class="ver">v0.12.0 · partial payments</div>
     <h3>Guide</h3>
     <ul>
       <li><a href="#auth">Authentication</a></li>
@@ -459,7 +459,7 @@ If-Match: "3"
 
       <article class="op-card">
         <div class="sig"><span class="m patch">PUT</span><span class="path">/v1/people/{personID}</span><span class="access">session · writes</span></div>
-        <p>Replaces the record, addresses and representatives included. The kind cannot change. Dropping or replacing the spouse clears the link on the former spouse's record.</p>
+        <p>Replaces the record, addresses and representatives included. The kind cannot change. Dropping or replacing the spouse clears the link on the former spouse's record. An anonymised record is a <code>422</code> on <code>person</code>.</p>
         <dl class="io"><dt>Headers</dt><dd><code>If-Match: "&lt;version&gt;"</code></dd><dt>Answers</dt><dd><code>200</code> · <code>404</code> · <code>412</code> · <code>422</code> · <code>428</code></dd></dl>
       </article>
 
@@ -467,6 +467,18 @@ If-Match: "3"
         <div class="sig"><span class="m delete">DELETE</span><span class="path">/v1/people/{personID}</span><span class="access">session · writes</span></div>
         <p>Permanent, with the person's addresses, audited without values. Refused while something links to the person, such as a company they represent. A spouse keeps their record and loses the link.</p>
         <dl class="io"><dt>Answers</dt><dd><code>204</code> · <code>404</code> · <code>409 in_use</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/people/anonymization-candidates</span><span class="access">session</span></div>
+        <p>Who is past the legal retention: no property owned, no contract running today or later, nothing waiting for a payout, and the last contract end, ledger line and payout past five years counted from the first day of the following year (CTN art. 173, I). A spouse or representative of someone not listed stays out. Each with the contracts they were party to, saying whether every other party is listed too, and their payouts.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>{ candidates: [{ person, last_activity_on, retention_ended_on, contracts, payouts }] }</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/people/{personID}/anonymization</span><span class="access admin">admin</span></div>
+        <p>Anonymises a person still listed: the name becomes "Pessoa anonimizada", and the CPF or CNPJ with its lookup index, contacts, personal details, addresses and representative links go. The record stays, marked <code>anonymized_at</code>, so contracts, rents and the ledger still point at it. Audited as <code>person.anonymized</code>. The documents generated about the person live in the document service; the platform clears them first.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>204</code> · <code>404</code> · <code>422</code> on <code>person</code> when not listed</dd></dl>
       </article>
     </section>
 
@@ -594,25 +606,25 @@ If-Match: "3"
 
       <article class="op-card">
         <div class="sig"><span class="m get">GET</span><span class="path">/v1/rents/{rentID}</span><span class="access">session</span></div>
-        <p>With its charges and, while unpaid, <code>suggested_late_fee</code> for paying today.</p>
+        <p>With its charges, its <code>payments</code> in order, <code>principal_paid</code> and <code>outstanding</code>, and, while unpaid, the interest and penalty owed today (<code>suggested_late_fee</code>) and everything owed today (<code>owed_today</code>). <code>partially_paid</code> is true while money came in and something is open; the status stays <code>pending</code> or <code>overdue</code>.</p>
         <dl class="io"><dt>Answers</dt><dd><code>200</code> · <code>404</code></dd></dl>
       </article>
 
       <article class="op-card">
         <div class="sig"><span class="m post">POST</span><span class="path">/v1/rents/{rentID}/payment/preview</span><span class="access">session · writes</span></div>
-        <p>The late fee and total for a payment day. Records nothing.</p>
-        <dl class="io"><dt>Body</dt><dd><code>{ paid_on }</code></dd><dt>Answers</dt><dd><code>200</code> <code>{ late_fee: { days_late, penalty, interest, total }, total }</code></dd></dl>
+        <p>What is owed on a payment day, replaying the payments already recorded: the penalty once, on the principal (rent and charges) open the day after the due day; interest every day on the principal still open, over a thirty-day month; neither earns interest. Records nothing.</p>
+        <dl class="io"><dt>Body</dt><dd><code>{ paid_on }</code></dd><dt>Answers</dt><dd><code>200</code> <code>{ late_fee: { days_late, penalty, interest, total }, principal, total }</code></dd></dl>
       </article>
 
       <article class="op-card">
         <div class="sig"><span class="m post">POST</span><span class="path">/v1/rents/{rentID}/payment</span><span class="access">session · writes</span></div>
-        <p>Records the payment and, in the same transaction, the owners' ledger lines. Left out, <code>late_fee</code> is computed; a discount is given there. The amount received is computed, never sent: the rent, its charges and the late fee, less <code>income_tax_withheld</code>, what a company tenant kept (at most the rent). Sending <code>amount_paid</code> is a <code>422</code>. Not after today. Already paid, including by a simultaneous request, is a conflict.</p>
-        <dl class="io"><dt>Body</dt><dd><code>{ paid_on, late_fee, income_tax_withheld }</code></dd><dt>Answers</dt><dd><code>200</code> · <code>409 conflict</code> · <code>422</code></dd></dl>
+        <p>Records a payment and, in the same transaction, its owners' ledger lines. Without <code>amount</code> it settles everything owed that day, computed. With <code>amount</code> it is partial: with the tax withheld it settles the interest, then the penalty, then the principal, split between the rent and each charge by what each has open (Código Civil art. 354). More than is owed is a <code>422</code> on <code>amount</code>; <code>late_fee</code> below what is owed forgives the rest. Sending <code>amount_paid</code> is a <code>422</code>. Not after today nor before the last payment. Once a rent has a payment its charges no longer change. Already paid, including by a simultaneous request, is a conflict.</p>
+        <dl class="io"><dt>Body</dt><dd><code>{ paid_on, amount, late_fee, income_tax_withheld }</code></dd><dt>Answers</dt><dd><code>200</code> · <code>409 conflict</code> · <code>422</code></dd></dl>
       </article>
 
       <article class="op-card">
         <div class="sig"><span class="m delete">DELETE</span><span class="path">/v1/rents/{rentID}/payment</span><span class="access">session · writes</span></div>
-        <p>Reverses a payment: back to unpaid, its ledger lines removed, audited. Refused while any of its lines is in a payout; the message names the payout to undo.</p>
+        <p>Reverses the last payment: its ledger lines removed, the earlier payments standing, the rent unpaid again, audited. Refused while any line of that payment is in a payout; the message names the payout to undo.</p>
         <dl class="io"><dt>Answers</dt><dd><code>200</code> · <code>422</code> on <code>payment</code> when not paid or paid out</dd></dl>
       </article>
 
@@ -655,6 +667,12 @@ If-Match: "3"
         <div class="sig"><span class="m get">GET</span><span class="path">/v1/people/{personID}/ledger</span><span class="access">session</span></div>
         <p>A person's pending lines and their sum. Each line carries <code>amount</code> (positive) and <code>signed</code> (its effect on the balance), and what it came from: the property's address, the contract, the rent, the charge.</p>
         <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>{ person, balance, pending, today }</code> · <code>404</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/people/{personID}/income-report</span><span class="access">session</span></div>
+        <p>A year of an individual owner's receipts, for the carnê-leão: the ledger's lines, paid out or not, added up by the month the office received them. Rents paid by an individual tenant and by a company are kept apart, since only the first goes in the carnê-leão. Typed debits and credits are informative. No tax is computed. A company is a <code>422</code>.</p>
+        <dl class="io"><dt>Query</dt><dd><code>year</code></dd><dt>Answers</dt><dd><code>200</code> <code>{ person, year, months: [{ month, individual, company, debits, credits }], total }</code> · <code>404</code> · <code>422</code></dd></dl>
       </article>
 
       <article class="op-card">

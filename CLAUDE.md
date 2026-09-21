@@ -368,7 +368,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-21: payouts to owners built (PLANO-REPASSE.md, item 50); phase 8 complete, so every phase of `PLANO.md` is done; phase 7 complete (the docgen integration: identity moved to the platform, documents generated from a contract, verified in the browser); phase 8 (docs on packages/ui) is next
+**Last updated:** 2026-09-21: partial payments, the carnê-leão report and anonymisation at the end of the retention built (PLANO-PENDENCIAS.md, item 51); payouts to owners built (PLANO-REPASSE.md, item 50); phase 8 complete, so every phase of `PLANO.md` is done; phase 7 complete (the docgen integration: identity moved to the platform, documents generated from a contract, verified in the browser); phase 8 (docs on packages/ui) is next
 
 ### Done
 
@@ -1733,17 +1733,68 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       counts one creation. No rename had been recorded in the development
       database, so no row carries the old label.
 
+51. **Partial payments, the carnê-leão report, anonymisation**
+    (PLANO-PENDENCIAS.md, decided with the user on 2026-09-21; `b2a48e8`
+    statement model, `4332db7` and `c77d532` partial payments, `5c18035`
+    report, `b9605cd` and `7fb14d6` anonymisation).
+    - **A marked payout statement model** is in `modelos/`, written with
+      `packages/docx`; the docgen engine filled it and Word read it back.
+    - **A rent is paid by one payment or several** (`rent_payments`,
+      migration 0015). Each settles interest, then penalty, then the
+      principal, split between the rent and each charge by what each has
+      open (CC art. 354; `PrincipalParts`, randomised test). Interest runs on
+      the principal still open; the penalty is charged once, on what was
+      open the day after the due day. `RentStanding` replays the payments to
+      a day; with none it equals the old late fee exactly (tested). The rent
+      keeps the sums (`amount_paid`, `late_fee`, `income_tax_withheld`,
+      `principal_paid`) and `paid_on` only once settled, so "paid" still
+      means settled; **"touched" (`amount_paid IS NOT NULL`) is what keeps a
+      rent from terminations, adjustments and charge changes.**
+    - The payment routes stayed; `amount` makes a payment partial, and
+      `DELETE .../payment` reverses the last one. A payment cannot be dated
+      before the last. Each payment writes its own ledger lines
+      (`owner_entries.payment_id`), from a replay of all of them, so writing
+      one alone gives the lines writing all would.
+    - **Forced row security binds the migration owner too.** A migration
+      that reads or backfills rows must lift it (`NO FORCE`) and force it
+      again, as 0015 does; otherwise it sees nothing. **0012's backfill of
+      landlord shares therefore did nothing**; no contract in the
+      development database needed it, which was checked.
+    - `pg_dump` fails for the same reason; the migration was rehearsed on
+      the development database inside a rolled-back transaction instead.
+    - **Carnê-leão report**: `GET /v1/people/{id}/income-report?year=`,
+      individuals only, sums the ledger by month and by tenant kind (a
+      contract with any company tenant counts as a company's); no tax, no
+      judgement of deductions. Web: `/repasses/pessoa/$personId/carne-leao`
+      (file `pessoa.$personId_.carne-leao.tsx`), printable sheet and a CSV for
+      Excel in Brazil.
+    - **Anonymisation** (migration 0016): candidates own no property, are in
+      no running contract, have no pending line, and their last contract end,
+      ledger line and payout are past `domain.RetentionEnds` (five years
+      from the next 1 January, CTN art. 173, I); a spouse or representative
+      of someone not listed stays out. Any member sees the list in Ajustes ›
+      Escritório; an administrator confirms. The web server function erases
+      the person's payout documents and the documents of contracts whose
+      other parties go too, **after checking the session's role**, then calls
+      the API. The record stays as "Pessoa anonimizada" and is never edited.
+    - OpenAPI 0.12.0; reference republished. `PRIVACIDADE.md` has a section
+      on the end of the retention; privacy policy 1.2.
+    - Verified in the browser on test data, deleted after: a partial of
+      900.00 ten days late on 1800.00, the rest a month later, the owner's
+      ledger, reversal of the last payment; the report on the user's own
+      owner (read only); the retention list as a member.
+
 ### Next step
 
-Every phase of `PLANO.md` §7 is done, and payouts to owners
-(`PLANO-REPASSE.md`) are built (item 50). The user has not yet seen them in
-their own browser; the office's administrator is still unrecorded, which an
-admin of the office fills in Ajustes.
+Every phase of `PLANO.md` §7 is done, payouts to owners (`PLANO-REPASSE.md`)
+are built (item 50), and so is `PLANO-PENDENCIAS.md` (item 51). The user has
+not yet seen payouts, partial payments or the report in their own browser; the
+office's administrator is still unrecorded, which an admin fills in Ajustes;
+the statement model in `modelos/` is waiting to be uploaded to Docs.
 
-Still left out, to be planned before starting: the DIMOB file, the carnê-leão
-report and the fee invoice (need an accountant); partial payment, automatic
-anonymisation when the legal retention ends, encryption at rest, and CI. The
-open items below still stand.
+Left out on purpose: the DIMOB file and the fee invoice (the user chose the
+carnê-leão report only). Still to plan: deployment, encryption at rest, and
+CI. The open items below still stand.
 
 Not in the editor on purpose, for now: fonts, colours, highlight, tables,
 images, headers and footers. Tables are the costly one: the block model,

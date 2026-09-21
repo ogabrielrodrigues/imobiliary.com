@@ -32,9 +32,12 @@ modelos no Docs) continua com ele. A parte que cabe aqui:
 ### 2.1 Modelo
 
 - Nova tabela `rent_payments(id, organization_id, rent_id, paid_on, amount,
-  interest, penalty, principal, income_tax, created_by, created_at)`, com RLS
-  e `RESTRICT` para o escritório. `amount = interest + penalty + principal −
-  income_tax`, conferido por `CHECK`.
+  late_fee, waived, principal, income_tax, created_by, created_at)`, com RLS.
+  `late_fee` junta juros e multa quitados e `waived` o que foi dispensado
+  (na implementação: o livro já tratava os dois juntos). `amount = late_fee +
+  principal − income_tax`, conferido por `CHECK` só nas linhas novas, porque
+  os valores digitados antes do repasse não fechavam essa conta.
+- `rents.principal_paid` guarda a parte do aluguel e das cobranças quitada.
 - `rents` guarda o resumo, mantido na mesma transação: `paid_on` é o dia em
   que a parcela ficou quitada (nulo enquanto falta algo), `amount_paid` a
   soma recebida, `late_fee` a soma de juros e multa cobrados,
@@ -170,6 +173,10 @@ Pessoas sem vínculo algum não entram: essas o escritório já pode excluir.
 - `PRIVACIDADE.md` e a política de privacidade descrevem o procedimento.
 
 ## 5. Ordem dos commits
+
+Feito em 2026-09-21: `b2a48e8` (modelo), `4332db7` (parcial, API), `c77d532`
+(parcial, web), `5c18035` (carnê-leão), `b9605cd` e `7fb14d6` (anonimização),
+e o commit de documentação que fecha a lista.
 
 1. Modelo de demonstrativo em `modelos/`.
 2. Pagamento parcial: migração e domínio, com testes.
