@@ -1,6 +1,6 @@
 # Repasse ao proprietário
 
-Planejado com o usuário em 2026-09-21, em quatro rodadas. Fica fora do
+Planejado com o usuário em 2026-09-21, em cinco rodadas. Fica fora do
 `PLANO.md` original ("Fase posterior a esta implantação") e começa depois da
 fase 8.
 
@@ -126,9 +126,16 @@ repasse desfazer. Conferido com `FOR UPDATE` na mesma transação.
   pendentes. O escritório registra, com a data real, os repasses que já fez
   fora da plataforma.
 - Como as cobranças existentes recebem `third_party`, a taxa desses aluguéis
-  antigos passa a ser só sobre o aluguel. O dashboard de um mês passado pode
-  mostrar uma taxa menor que a de antes da migração; o escritório corrige o
-  destino de uma cobrança antes de a migração rodar, se quiser outra base.
+  antigos passa a ser só sobre o aluguel, e o dashboard de um mês passado pode
+  mostrar uma taxa menor que antes.
+- **O destino de uma cobrança pode mudar depois do pagamento**, enquanto
+  nenhuma linha daquele aluguel estiver num repasse: as linhas do aluguel são
+  apagadas e lançadas de novo, na mesma transação. É o que deixa o escritório
+  acertar as cobranças antigas. Valor e tipo continuam travados no aluguel pago.
+- As linhas dos recebimentos anteriores são lançadas pelo mesmo código Go que
+  lança as de um pagamento novo, num comando `imobiliary ledger-backfill`
+  idempotente, rodado logo depois da migração. SQL escrito à parte seria uma
+  segunda implementação da divisão, e as duas acabariam diferindo.
 
 ---
 
