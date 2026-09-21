@@ -286,7 +286,7 @@ here because that access may not survive.
 
 Three themes since 2026-09-11: **Escuro** (the default, reproduced below),
 **Claro** and **Papel** (`... -claro-.dc.html`, `... -papel-.dc.html` in the
-same project). Their values live in `docs/src/styles/app.css`, one block per
+same project). Their values live in `packages/ui/src/tokens.css`, one block per
 `data-scheme`. **The token block at the end of both light files is out of
 date** — it repeats the dark accents; the swatches and components are right.
 Four places where the light designs fail WCAG AA were changed on purpose, and
@@ -368,7 +368,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-21: phase 7 complete (the docgen integration: identity moved to the platform, documents generated from a contract, verified in the browser); phase 8 (docs on packages/ui) is next
+**Last updated:** 2026-09-21: phase 8 complete, so every phase of `PLANO.md` is done; phase 7 complete (the docgen integration: identity moved to the platform, documents generated from a contract, verified in the browser); phase 8 (docs on packages/ui) is next
 
 ### Done
 
@@ -1141,8 +1141,8 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       `docs` keeps `imobiliary_docs_accessibility` when it migrates.
     - **A third font, Inter Variable**, as `--font-reading` (`font-reading`),
       for text that is read rather than scanned and for columns of money.
-    - **`docs` still has its own copies**, untouched. Its migration is phase 8
-      and must be proved with the computed-style hash at 1280px.
+    - `docs` had its own copies until phase 8 (item 48), which replaced them
+      with the package.
     - **`shadcn init` asks for a project name even with `-y`**, and it creates
       the project in a subdirectory of that name. Piping answers in gives the
       directory a name made of the piped text; the contents were moved up and
@@ -1632,13 +1632,45 @@ _Update this section as work proceeds. It is what a fresh session reads first._
     - **Not verified here:** the signed-in half of Docs against the new
       service (templates, generation, history), which needs the user's own
       password, and the marked model uploaded as a template, which is an
-      upload on Docs.
+      upload on Docs. The model was filled with contract 2026/001's real
+      fields (fetched through the platform) by the docgen engine on
+      2026-09-21, and read correctly.
+
+48. **Phase 8: `docs` on `packages/ui`**, in a commit of its own.
+    - `docs/src/styles/app.css` now imports `@imobiliary/ui/tokens.css` after
+      Tailwind, exactly as `web` does, and keeps only the block editor's rules.
+      `lib/utils.ts` re-exports `cn` from the package, and
+      `lib/accessibility-storage.ts` builds the storage with
+      `accessibilityStorage("imobiliary_docs_accessibility")`, the key the
+      privacy policy names; changing it would drop every reader's saved
+      preferences. The settings panels import `@imobiliary/ui/accessibility`.
+    - Removed as copies: `domain/accessibility.ts` and its test,
+      `lib/accessibility-storage.test.ts`, `lib/utils.test.ts`,
+      `styles/contrast.test.ts`. The package holds and tests all of them, so
+      the notes in items 18 and 20 about those files now mean
+      `packages/ui/src/`. `docs` lost its direct `cn` and font dependencies;
+      the Open Graph source reads the font files from the package.
+    - **Proof:** before touching anything, the computed style of every
+      element and pseudo-element of `/`, `/entrar`, `/privacidade`, `/termos`
+      and the 404 page, at 1280px, in Escuro, Claro and Papel, was hashed (15
+      hashes, the first repeated to show it is stable). After the change, with
+      the dev server restarted on a cleared `node_modules/.vite`, all 15 were
+      identical. The package's only addition, Inter, is declared and emitted
+      by the build but never downloaded, since no `docs` page uses
+      `font-reading`.
+    - **An iframe cannot do this measurement**: `frame-ancestors 'none'` blocks
+      it. The hashes were taken by navigating the tab itself, with the
+      snapshot function kept in `sessionStorage`.
+    - Checks: `pnpm check` in `docs` (117 tests), the production build, and the
+      two settings panels and `AppearanceSync` loaded in the browser. Ajustes
+      itself was not seen signed in.
 
 ### Next step
 
-Phase 8 of `PLANO.md` §7: `docs` consumes `packages/ui`, in a commit of its
-own, proved with the computed-style hash of the public pages at 1280px in the
-three themes, before and after.
+Every phase of `PLANO.md` §7 is done. What the plan left out of this
+implementation, to be planned with the user before any of it starts: payouts
+to owners, partial payment, automatic anonymisation when the legal retention
+ends, encryption at rest, and CI. The open items below still stand.
 
 Not in the editor on purpose, for now: fonts, colours, highlight, tables,
 images, headers and footers. Tables are the costly one: the block model,
