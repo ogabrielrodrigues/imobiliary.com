@@ -10,6 +10,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AccessibilityPanel } from "@/components/settings/accessibility-panel";
 import { AppearancePanel } from "@/components/settings/appearance-panel";
 import { DataPanel } from "@/components/settings/data-panel";
+import { AdministratorSection } from "@/components/settings/administrator-section";
 import { OrganizationPanel } from "@/components/settings/organization-panel";
 import { PasswordPanel } from "@/components/settings/password-panel";
 import { SecondFactorPanel } from "@/components/settings/second-factor-panel";
@@ -99,11 +100,19 @@ function SettingsPage() {
 
         <TabsContent value="escritorio">
           {data.organization.ok ? (
-            <OrganizationPanel
-              user={user}
-              members={data.organization.value.members}
-              invitations={data.organization.value.invitations}
-            />
+            <div className="flex flex-col gap-4">
+              <OrganizationPanel
+                user={user}
+                members={data.organization.value.members}
+                invitations={data.organization.value.invitations}
+              />
+              <div className="max-w-2xl">
+                <AdministratorSection
+                  administrator={data.organization.value.administrator}
+                  isAdmin={user.role === "admin"}
+                />
+              </div>
+            </div>
           ) : (
             <p className="text-small text-muted-foreground">
               Não foi possível carregar o escritório agora. Recarregue a página.

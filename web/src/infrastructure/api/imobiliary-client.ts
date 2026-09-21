@@ -10,6 +10,7 @@
  * screens away, and the mapping is where an instant becomes a Date.
  */
 
+import type { Administrator } from "../../domain/administrator.ts";
 import type {
   CallContext,
   ContractsGateway,
@@ -1225,6 +1226,20 @@ class OrganizationClient implements OrganizationGateway {
       body: JSON.stringify({ name }),
       contentType: "application/json",
     });
+  }
+
+  async administrator(ctx: CallContext): Promise<Administrator | null> {
+    const response = await this.transport.send(ctx, "GET", "/v1/organization/administrator");
+    if (response.status === 204) return null;
+    return (await response.json()) as Administrator;
+  }
+
+  async setAdministrator(ctx: CallContext, input: Administrator): Promise<Administrator> {
+    const response = await this.transport.send(ctx, "PUT", "/v1/organization/administrator", {
+      body: JSON.stringify({ kind: input.kind, document: input.document.trim(), creci: input.creci.trim() }),
+      contentType: "application/json",
+    });
+    return (await response.json()) as Administrator;
   }
 
   async members(ctx: CallContext): Promise<readonly Member[]> {

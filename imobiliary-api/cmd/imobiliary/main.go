@@ -187,6 +187,7 @@ func serve(logger *slog.Logger) error {
 	})
 	organizations := usecase.NewOrganizations(usecase.OrganizationsConfig{
 		Identity:      identity,
+		Sealer:        sealer,
 		Repositories:  repos,
 		Hasher:        hasher,
 		Mailer:        mailer,

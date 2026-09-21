@@ -31,6 +31,43 @@ func (s *Server) handleRenameOrganization(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// --- administrator ----------------------------------------------------------
+
+type administratorBody struct {
+	Kind     domain.AdministratorKind `json:"kind"`
+	Document string                   `json:"document"`
+	CRECI    string                   `json:"creci"`
+}
+
+// handleAdministrator answers who signs the office's receipts, or 204 while
+// the office has not said.
+func (s *Server) handleAdministrator(w http.ResponseWriter, r *http.Request) {
+	a, err := s.organizations.Administrator(r.Context(), callerFrom(r.Context()))
+	if err != nil {
+		writeError(w, s.logger, err)
+		return
+	}
+	if a == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	writeJSON(w, s.logger, http.StatusOK, administratorBody{Kind: a.Kind, Document: a.FormattedDocument(), CRECI: a.CRECI})
+}
+
+func (s *Server) handleSetAdministrator(w http.ResponseWriter, r *http.Request) {
+	var body administratorBody
+	if err := decodeJSON(r, &body); err != nil {
+		writeDecodeError(w, s.logger, err)
+		return
+	}
+	a := &domain.Administrator{Kind: body.Kind, Document: body.Document, CRECI: body.CRECI}
+	if err := s.organizations.SetAdministrator(r.Context(), callerFrom(r.Context()), a); err != nil {
+		writeError(w, s.logger, err)
+		return
+	}
+	writeJSON(w, s.logger, http.StatusOK, administratorBody{Kind: a.Kind, Document: a.FormattedDocument(), CRECI: a.CRECI})
+}
+
 // --- members ----------------------------------------------------------------
 
 type membersBody struct {

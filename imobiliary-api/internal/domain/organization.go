@@ -71,3 +71,60 @@ func ValidateRole(v *ValidationError, field string, role Role) {
 		v.Addf(field, "must be one of %s, %s", RoleAdmin, RoleMember)
 	}
 }
+
+// AdministratorKind is how the office administers rentals: as a person, a
+// self-employed broker, or as a company (PLANO-REPASSE.md §1).
+type AdministratorKind string
+
+const (
+	AdministratorIndividual AdministratorKind = "individual"
+	AdministratorCompany    AdministratorKind = "company"
+)
+
+// MaxCRECILength bounds the broker's registration, "CRECI 123456-F/SP".
+const MaxCRECILength = 30
+
+// Administrator is who signs the receipts: the office's kind, its CPF or CNPJ
+// and its CRECI. The document is a CPF for a self-employed broker, which is
+// personal data, and is sealed at rest like a person's.
+type Administrator struct {
+	Kind AdministratorKind
+	// Document is the CPF's digits or the CNPJ's characters, normalised.
+	Document string
+	CRECI    string
+}
+
+// FormattedDocument is the document as a receipt prints it.
+func (a *Administrator) FormattedDocument() string {
+	if a.Kind == AdministratorCompany {
+		return FormatCNPJ(a.Document)
+	}
+	return FormatCPF(a.Document)
+}
+
+// NormalizeAdministrator reduces the document to its characters and trims the
+// CRECI, reporting on the document's field when it cannot be read.
+func NormalizeAdministrator(a *Administrator) error {
+	a.CRECI = strings.TrimSpace(a.CRECI)
+	v := &ValidationError{}
+	switch a.Kind {
+	case AdministratorIndividual:
+		if cpf, ok := NormalizeCPF(a.Document); ok {
+			a.Document = cpf
+		} else {
+			v.Add("document", "is not a valid CPF")
+		}
+	case AdministratorCompany:
+		if cnpj, ok := NormalizeCNPJ(a.Document); ok {
+			a.Document = cnpj
+		} else {
+			v.Add("document", "is not a valid CNPJ")
+		}
+	default:
+		v.Add("kind", "must be individual or company")
+	}
+	if utf8.RuneCountInString(a.CRECI) > MaxCRECILength {
+		v.Addf("creci", "must be at most %d characters", MaxCRECILength)
+	}
+	return v.OrNil()
+}

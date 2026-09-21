@@ -155,6 +155,8 @@ func (s *Server) Handler() http.Handler {
 
 	mux.Handle("GET /v1/organization", authenticated(http.HandlerFunc(s.handleOrganization)))
 	mux.Handle("PATCH /v1/organization", admin(http.HandlerFunc(s.handleRenameOrganization)))
+	mux.Handle("GET /v1/organization/administrator", authenticated(http.HandlerFunc(s.handleAdministrator)))
+	mux.Handle("PUT /v1/organization/administrator", admin(http.HandlerFunc(s.handleSetAdministrator)))
 	mux.Handle("GET /v1/organization/members", authenticated(http.HandlerFunc(s.handleMembers)))
 	mux.Handle("PATCH /v1/organization/members/{userID}", admin(http.HandlerFunc(s.handleChangeRole)))
 	mux.Handle("DELETE /v1/organization/members/{userID}", admin(http.HandlerFunc(s.handleRemoveMember)))

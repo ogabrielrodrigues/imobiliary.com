@@ -380,3 +380,29 @@ func prefixed(columns, alias string) string {
 	}
 	return strings.Join(parts, ", ")
 }
+
+func (r *organizationRepository) Administrator(ctx context.Context, id uuid.UUID) (*usecase.StoredAdministrator, error) {
+	var (
+		kind  pgtype.Text
+		doc   []byte
+		creci string
+	)
+	err := r.q.QueryRow(ctx,
+		`SELECT administrator_kind, administrator_document, administrator_creci FROM organizations WHERE id = $1`,
+		pgUUID(id)).Scan(&kind, &doc, &creci)
+	if err != nil {
+		return nil, noRows(err, "postgres: administrator")
+	}
+	if !kind.Valid {
+		return nil, nil
+	}
+	return &usecase.StoredAdministrator{Kind: domain.AdministratorKind(kind.String), DocumentSealed: doc, CRECI: creci}, nil
+}
+
+func (r *organizationRepository) SetAdministrator(ctx context.Context, id uuid.UUID, a *usecase.StoredAdministrator, at time.Time) error {
+	tag, err := r.q.Exec(ctx,
+		`UPDATE organizations SET administrator_kind = $2, administrator_document = $3, administrator_creci = $4, updated_at = $5
+		  WHERE id = $1`,
+		pgUUID(id), string(a.Kind), a.DocumentSealed, a.CRECI, at)
+	return affected(tag, err, "postgres: set administrator")
+}

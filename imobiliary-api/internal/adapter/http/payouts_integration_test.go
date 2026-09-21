@@ -321,3 +321,46 @@ func TestLandlordWhoIsNotTheOwner(t *testing.T) {
 		t.Errorf("the owner kept a share %+v", got.Parties)
 	}
 }
+
+// Who signs the receipts: absent until an administrator says, then read back
+// formatted, the document sealed at rest.
+func TestAdministrator(t *testing.T) {
+	a := newAPI(t)
+	admin := a.officeAdmin("ana@example.com", "Central")
+	a.expect(http.StatusNoContent, http.MethodGet, "/v1/organization/administrator", admin.access, nil)
+
+	a.expect(http.StatusUnprocessableEntity, http.MethodPut, "/v1/organization/administrator", admin.access,
+		map[string]any{"kind": "individual", "document": "111.111.111-11", "creci": "12345-F"})
+	a.expect(http.StatusUnprocessableEntity, http.MethodPut, "/v1/organization/administrator", admin.access,
+		map[string]any{"kind": "person", "document": "529.982.247-25"})
+
+	var got struct {
+		Kind     string `json:"kind"`
+		Document string `json:"document"`
+		CRECI    string `json:"creci"`
+	}
+	a.expect(http.StatusOK, http.MethodPut, "/v1/organization/administrator", admin.access,
+		map[string]any{"kind": "individual", "document": "52998224725", "creci": " CRECI 12345-F/SP "}).decode(t, &got)
+	if got.Document != "529.982.247-25" || got.CRECI != "CRECI 12345-F/SP" {
+		t.Errorf("stored %+v", got)
+	}
+	a.expect(http.StatusOK, http.MethodGet, "/v1/organization/administrator", admin.access, nil).decode(t, &got)
+	if got.Kind != "individual" || got.Document != "529.982.247-25" {
+		t.Errorf("read back %+v", got)
+	}
+
+	// Sealed at rest: the digits are nowhere in the row.
+	var raw []byte
+	if err := a.db.QueryRowForTest(t.Context(), `SELECT administrator_document FROM organizations`).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "52998224725") {
+		t.Error("the administrator's CPF is stored in the clear")
+	}
+
+	a.expect(http.StatusOK, http.MethodPut, "/v1/organization/administrator", admin.access,
+		map[string]any{"kind": "company", "document": "12.ABC.345/01DE-35", "creci": "J-9999"}).decode(t, &got)
+	if got.Document != "12.ABC.345/01DE-35" {
+		t.Errorf("company %+v", got)
+	}
+}

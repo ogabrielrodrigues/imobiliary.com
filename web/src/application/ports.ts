@@ -8,6 +8,7 @@
  * fake is a few lines rather than a mock framework.
  */
 
+import type { Administrator } from "../domain/administrator.ts";
 import type {
   Membership,
   Organization,
@@ -276,6 +277,10 @@ export interface Invitation {
 
 export interface OrganizationGateway {
   rename(ctx: CallContext, name: string): Promise<void>;
+  /** Who signs the receipts; null until the office says. */
+  administrator(ctx: CallContext): Promise<Administrator | null>;
+  /** Administrators only. */
+  setAdministrator(ctx: CallContext, input: Administrator): Promise<Administrator>;
   members(ctx: CallContext): Promise<readonly Member[]>;
   changeRole(ctx: CallContext, userId: string, role: Role): Promise<void>;
   removeMember(ctx: CallContext, userId: string): Promise<void>;

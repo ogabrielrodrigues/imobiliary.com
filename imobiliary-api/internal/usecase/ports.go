@@ -22,10 +22,21 @@ import (
 type Clock func() time.Time
 
 // OrganizationRepository stores offices.
+// StoredAdministrator is the administrator as the database keeps it.
+type StoredAdministrator struct {
+	Kind           domain.AdministratorKind
+	DocumentSealed []byte
+	CRECI          string
+}
+
 type OrganizationRepository interface {
 	Create(ctx context.Context, o *domain.Organization) error
 	ByID(ctx context.Context, id uuid.UUID) (*domain.Organization, error)
 	Rename(ctx context.Context, id uuid.UUID, name string, at time.Time) error
+	// Administrator reads who administers, the document still sealed; nil
+	// when the office never said.
+	Administrator(ctx context.Context, id uuid.UUID) (*StoredAdministrator, error)
+	SetAdministrator(ctx context.Context, id uuid.UUID, a *StoredAdministrator, at time.Time) error
 	// Delete removes an office and, through the cascades, its memberships,
 	// invitations and sessions. Only an account closing as the office's sole
 	// member reaches it. An office that still holds business data is

@@ -672,6 +672,48 @@ paths:
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /v1/organization/administrator:
+    get:
+      tags: [Office]
+      summary: Who signs the receipts
+      description: |
+        Whether the office administers as a person (a self-employed broker,
+        with a CPF) or as a company (a CNPJ), and its CRECI. `204` while the
+        office has not said. The document is sealed at rest.
+      operationId: getAdministrator
+      responses:
+        "200":
+          description: The administrator.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Administrator" }
+        "204": { description: Not recorded yet. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    put:
+      tags: [Office]
+      summary: Record who signs the receipts
+      description: Administrators only. The document must be a valid CPF for `individual` and CNPJ for `company`. Audited.
+      operationId: setAdministrator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Administrator" }
+      responses:
+        "200":
+          description: Recorded, the document formatted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Administrator" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
   /v1/organization/members:
     get:
       tags: [Office]
@@ -2829,6 +2871,14 @@ components:
                   amount: { $ref: "#/components/schemas/Money" }
                   destination: { $ref: "#/components/schemas/ChargeDestination" }
             suggested_late_fee: { $ref: "#/components/schemas/LateFee" }
+
+    Administrator:
+      type: object
+      required: [kind, document]
+      properties:
+        kind: { type: string, enum: [individual, company] }
+        document: { type: string, description: "A CPF or a CNPJ, with or without punctuation; returned formatted.", examples: ["529.982.247-25"] }
+        creci: { type: string, maxLength: 30, examples: ["CRECI 12345-F/SP"] }
 
     ChargeDestination:
       type: string

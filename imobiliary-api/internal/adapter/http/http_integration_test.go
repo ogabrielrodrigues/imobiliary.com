@@ -146,7 +146,7 @@ func newAPI(t *testing.T) *api {
 		AppURL: "https://imobiliary.test", ResetTTL: 30 * time.Minute, Logger: logger,
 	})
 	organizations := usecase.NewOrganizations(usecase.OrganizationsConfig{
-		Identity: identity, Repositories: repos, Hasher: hasher, Mailer: box,
+		Identity: identity, Repositories: repos, Hasher: hasher, Mailer: box, Sealer: sealer,
 		AppURL: "https://imobiliary.test", InvitationTTL: 7 * 24 * time.Hour, Logger: logger,
 	})
 

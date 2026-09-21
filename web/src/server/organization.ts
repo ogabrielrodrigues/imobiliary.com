@@ -6,7 +6,12 @@ import { createServerFn } from "@tanstack/react-start";
 
 import type { Invitation, Member } from "../application/ports.ts";
 import { attempt, type Result } from "../application/result.ts";
-import { fieldError, type FieldError } from "../domain/errors.ts";
+import {
+  translateAdministratorProblem,
+  validateAdministrator,
+  type Administrator,
+} from "../domain/administrator.ts";
+import { fieldError, ValidationError, type FieldError } from "../domain/errors.ts";
 import {
   validateEmail,
   validateName,
@@ -23,6 +28,8 @@ export interface OrganizationView {
   readonly members: readonly Member[];
   /** Only an administrator may read these, so a member gets an empty list. */
   readonly invitations: readonly Invitation[];
+  /** Who signs the receipts; null until the office says. */
+  readonly administrator: Administrator | null;
 }
 
 export const organizationView = createServerFn({ method: "GET" }).handler(
@@ -37,7 +44,8 @@ export const organizationView = createServerFn({ method: "GET" }).handler(
         const invitations = await api()
           .organizations.invitations(ctx)
           .catch(() => [] as readonly Invitation[]);
-        return { members, invitations };
+        const administrator = await api().organizations.administrator(ctx);
+        return { members, invitations, administrator };
       });
     }),
 );
@@ -55,6 +63,22 @@ export const renameOrganization = createServerFn({ method: "POST" })
         api().organizations.rename(ctx, data.trim()),
       );
       return null;
+    }),
+  );
+
+export const setAdministrator = createServerFn({ method: "POST" })
+  .validator((input: Administrator) => input)
+  .handler(async ({ data }): Promise<Result<Administrator>> =>
+    attempt(async () => {
+      assertSameOrigin();
+      const problems = validateAdministrator(data);
+      if (problems.length > 0) throw new ValidationError(problems);
+      try {
+        return await sessions().authorize(callContext(), (ctx) => api().organizations.setAdministrator(ctx, data));
+      } catch (error) {
+        if (error instanceof ValidationError) throw new ValidationError(error.fields.map(translateAdministratorProblem));
+        throw error;
+      }
     }),
   );
 
