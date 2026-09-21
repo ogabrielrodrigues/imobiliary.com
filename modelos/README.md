@@ -7,6 +7,14 @@ seus pela plataforma.
 - `contrato-de-locacao-marcado.docx` — cópia do modelo que o usuário forneceu
   em 2026-09-17, com cada valor substituído por um campo de
   `GET /v1/contracts/{id}/document-fields`. O original não foi alterado.
+- `demonstrativo-de-repasse-marcado.docx`: um demonstrativo de repasse escrito
+  aqui (não vem de um modelo do usuário), com os campos de
+  `GET /v1/payouts/{id}/document-fields`: o repasse, o proprietário, o
+  administrador, os totais e o imóvel 1, e um recibo para o proprietário
+  assinar. Para usar, envie no Imobiliary Docs como modelo e escolha-o em
+  **Gerar documento** na tela do repasse. O Docs não tem blocos que se
+  repetem, então um proprietário com mais imóveis pede linhas para
+  `imovel_2_...` em diante; a linha de um imóvel que não existe sai vazia.
 
 O texto usa os campos de concordância onde a redação exige: `{{.locador_do}}`
 ("do locador", "da locadora"), `{{.locatario_ao}}`, `{{.locatario_termo_inicio}}`
