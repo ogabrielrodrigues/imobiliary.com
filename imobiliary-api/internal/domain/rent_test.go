@@ -27,20 +27,21 @@ func TestComputeLateFee(t *testing.T) {
 }
 
 func TestValidateCharge(t *testing.T) {
-	good := &Charge{Kind: ChargeCondominium, Amount: 45000}
+	good := &Charge{Kind: ChargeCondominium, Amount: 45000, Destination: DestinationThirdParty}
 	if err := ValidateCharge(good); err != nil {
 		t.Fatalf("a condominium charge was refused: %v", err)
 	}
 	for name, c := range map[string]Charge{
 		"unknown kind":                {Kind: "garage", Amount: 1},
 		"other without a description": {Kind: ChargeOther, Amount: 1},
-		"no amount":                   {Kind: ChargeWater},
+		"no amount":                   {Kind: ChargeWater, Destination: DestinationThirdParty},
+		"no destination":              {Kind: ChargeWater, Amount: 1},
 	} {
 		if err := ValidateCharge(&c); err == nil {
 			t.Errorf("%s was accepted", name)
 		}
 	}
-	other := &Charge{Kind: ChargeOther, Description: "  Taxa de lixo ", Amount: 1500}
+	other := &Charge{Kind: ChargeOther, Description: "  Taxa de lixo ", Amount: 1500, Destination: DestinationOwner}
 	NormalizeCharge(other)
 	if err := ValidateCharge(other); err != nil || other.Description != "Taxa de lixo" {
 		t.Errorf("another charge with a description: %v %q", err, other.Description)

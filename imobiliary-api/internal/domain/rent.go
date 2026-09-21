@@ -20,6 +20,29 @@ const (
 
 var chargeKinds = []ChargeKind{ChargeCondominium, ChargePropertyTax, ChargeWater, ChargeEnergy, ChargeOther}
 
+// ChargeDestination is where a charge's money goes once the tenant pays it.
+type ChargeDestination string
+
+const (
+	// DestinationOwner: the charge is the owner's, such as an IPTU in the
+	// owner's name, and enters the payout. The administration fee is charged
+	// on it too.
+	DestinationOwner ChargeDestination = "owner"
+	// DestinationThirdParty: the office pays it on, to the condominium or the
+	// utility, and it never reaches the owner or pays a fee.
+	DestinationThirdParty ChargeDestination = "third_party"
+)
+
+// SuggestedDestination is what a new charge of a kind usually is: the
+// property tax is the owner's, the rest is paid on to a third party. The
+// office changes it at will.
+func SuggestedDestination(k ChargeKind) ChargeDestination {
+	if k == ChargePropertyTax {
+		return DestinationOwner
+	}
+	return DestinationThirdParty
+}
+
 // Charge is an amount billed with a rent besides the rent itself.
 type Charge struct {
 	ID          uuid.UUID
@@ -27,6 +50,7 @@ type Charge struct {
 	Kind        ChargeKind
 	Description string
 	Amount      Money
+	Destination ChargeDestination
 }
 
 // MaxChargesPerRent bounds the list a rent carries.
@@ -51,6 +75,9 @@ func ValidateCharge(c *Charge) error {
 	}
 	if c.Amount <= 0 || !c.Amount.Valid() {
 		v.Add("amount", "must be greater than zero")
+	}
+	if c.Destination != DestinationOwner && c.Destination != DestinationThirdParty {
+		v.Add("destination", "must be owner or third_party")
 	}
 	return v.OrNil()
 }
@@ -93,12 +120,29 @@ func ComputeLateFee(due Money, dueOn, paidOn Date, penaltyRate, interestRate Rat
 	return LateFee{DaysLate: days, Penalty: penalty, Interest: Money(v), Total: total}, nil
 }
 
-// Payment is a rent received in full. AmountPaid is what actually came in,
-// which the office types; LateFee is recorded as agreed.
+// Payment is a rent received in full. LateFee is recorded as agreed; a
+// discount is given there. IncomeTax is what a company tenant withheld.
+// AmountPaid is what came in, computed rather than typed since payouts exist
+// (user's decision, 2026-09-21): every centavo received has to come from
+// somewhere the owner's ledger can show.
 type Payment struct {
 	PaidOn     Date
 	AmountPaid Money
 	LateFee    Money
+	IncomeTax  Money
+}
+
+// AmountReceived is what a payment brings in: the rent with its charges and
+// the late fee, less the tax the tenant withheld.
+func AmountReceived(due, lateFee, incomeTax Money) (Money, error) {
+	total, err := due.Add(lateFee)
+	if err != nil {
+		return 0, err
+	}
+	if incomeTax > total {
+		return 0, ErrOutOfRange
+	}
+	return total - incomeTax, nil
 }
 
 // ValidatePayment checks a payment against today, where the office is.
