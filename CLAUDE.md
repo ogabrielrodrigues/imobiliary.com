@@ -1680,10 +1680,17 @@ _Update this section as work proceeds. It is what a fresh session reads first._
 
 ### Next step
 
-Every phase of `PLANO.md` §7 is done. What the plan left out of this
-implementation, to be planned with the user before any of it starts: payouts
-to owners, partial payment, automatic anonymisation when the legal retention
-ends, encryption at rest, and CI. The open items below still stand.
+Every phase of `PLANO.md` §7 is done. **Payouts to owners are planned in
+`PLANO-REPASSE.md`** (decided with the user on 2026-09-21): a ledger per
+beneficiary, payouts recorded rather than transferred, printable receipts, the
+administrator as a person or a company. Its §7 lists the commits; start with
+migration 0012 and the domain. Two rules there replace older ones: the
+administration fee is charged on the rent and the charges that go to the owner
+only, and the amount received is computed, no longer typed.
+
+Still left out, to be planned before starting: partial payment, automatic
+anonymisation when the legal retention ends, encryption at rest, and CI. The
+open items below still stand.
 
 Not in the editor on purpose, for now: fonts, colours, highlight, tables,
 images, headers and footers. Tables are the costly one: the block model,
