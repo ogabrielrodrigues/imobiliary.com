@@ -5,7 +5,7 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import { attempt, type Result } from "../application/result.ts";
-import { ValidationError } from "../domain/errors.ts";
+import { PermissionError, ValidationError } from "../domain/errors.ts";
 import {
   translatePersonProblem,
   validatePerson,
@@ -15,7 +15,14 @@ import {
   type PersonKind,
   type PersonSummary,
 } from "../domain/person.ts";
-import { api, assertSameOrigin, callContext, sessions } from "./runtime.ts";
+import {
+  translateAnonymizationProblem,
+  type AnonymizationCandidate,
+  type AnonymizationResult,
+} from "../domain/anonymization.ts";
+import { subjectReference } from "../domain/document.ts";
+import { createCookieSessionStore } from "../infrastructure/session/cookie-session-store.ts";
+import { api, assertSameOrigin, callContext, documents, sessions } from "./runtime.ts";
 
 export interface PeopleQuery {
   readonly q?: string | undefined;
@@ -119,5 +126,61 @@ export const deletePerson = createServerFn({ method: "POST" })
       assertSameOrigin();
       await sessions().authorize(callContext(), (ctx) => api().people.remove(ctx, data));
       return null;
+    }),
+  );
+
+/** Who is past the legal retention. A read: a loader calls it. */
+export const anonymizationCandidates = createServerFn({ method: "GET" })
+  .handler(async (): Promise<Result<AnonymizationCandidate[]>> =>
+    attempt(() => sessions().authorize(callContext(), (ctx) => api().people.anonymizationCandidates(ctx))),
+  );
+
+/**
+ * Anonymises a person past the retention, and first erases from the document
+ * service what was generated about them: the documents of each of their
+ * payouts, and of each contract whose other parties are anonymised too or
+ * are being. A contract that names someone still registered keeps its
+ * documents, and the answer counts them. The documents go first: once the
+ * person is anonymised they are no longer a candidate, and nothing would say
+ * which documents were theirs.
+ */
+export const anonymizePerson = createServerFn({ method: "POST" })
+  .validator((personId: string) => personId)
+  .handler(async ({ data }): Promise<Result<AnonymizationResult>> =>
+    attempt(async () => {
+      assertSameOrigin();
+      // The API refuses a member, but only after the documents would be gone:
+      // ask the session first.
+      const session = await createCookieSessionStore().read();
+      if (session?.role !== "admin") throw new PermissionError();
+      const candidates = await sessions().authorize(callContext(), (ctx) => api().people.anonymizationCandidates(ctx));
+      const candidate = candidates.find((c) => c.person.id === data);
+      if (candidate === undefined) {
+        throw new ValidationError([translateAnonymizationProblem({ field: "person", message: "is not due for anonymization" })]);
+      }
+      const erase = [
+        ...candidate.contracts.filter((c) => c.documentsCanGo).map((c) => subjectReference({ kind: "contract", id: c.id })),
+        ...candidate.payouts.map((p) => subjectReference({ kind: "payout", id: p.id })),
+      ];
+      const keep = candidate.contracts.filter((c) => !c.documentsCanGo).map((c) => subjectReference({ kind: "contract", id: c.id }));
+      const { deleted, kept } = await sessions().authorizeDocuments(callContext(), async (ctx) => {
+        let deleted = 0;
+        for (const reference of erase) {
+          for (const document of await documents().listByReference(ctx, reference)) {
+            await documents().remove(ctx, document.id);
+            deleted++;
+          }
+        }
+        let kept = 0;
+        for (const reference of keep) kept += (await documents().listByReference(ctx, reference)).length;
+        return { deleted, kept };
+      });
+      try {
+        await sessions().authorize(callContext(), (ctx) => api().people.anonymize(ctx, data));
+      } catch (error) {
+        if (error instanceof ValidationError) throw new ValidationError(error.fields.map(translateAnonymizationProblem));
+        throw error;
+      }
+      return { documentsDeleted: deleted, documentsKept: kept };
     }),
   );

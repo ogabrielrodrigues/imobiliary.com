@@ -116,6 +116,8 @@ export interface Person extends PersonInput {
   readonly version: number;
   readonly createdAt: Date;
   readonly updatedAt: Date;
+  /** When the office anonymised the record; null otherwise. Never edited after. */
+  readonly anonymizedAt: Date | null;
 }
 
 export interface PersonSummary {

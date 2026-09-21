@@ -8,6 +8,7 @@
  * fake is a few lines rather than a mock framework.
  */
 
+import type { AnonymizationCandidate } from "../domain/anonymization.ts";
 import type { IncomeReport } from "../domain/income-report.ts";
 import type {
   Balance,
@@ -157,6 +158,10 @@ export interface PeopleGateway {
   update(ctx: CallContext, id: string, version: number, input: PersonInput): Promise<Person>;
   /** A person something still links to is an InUseError. */
   remove(ctx: CallContext, id: string): Promise<void>;
+  /** Who is past the legal retention. */
+  anonymizationCandidates(ctx: CallContext): Promise<AnonymizationCandidate[]>;
+  /** Administrators only; a person no longer due is a ValidationError. */
+  anonymize(ctx: CallContext, id: string): Promise<void>;
 }
 
 /** The office's register of properties. */

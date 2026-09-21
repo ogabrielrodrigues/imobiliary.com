@@ -10,6 +10,7 @@
  * screens away, and the mapping is where an instant becomes a Date.
  */
 
+import type { AnonymizationCandidate } from "../../domain/anonymization.ts";
 import type { Administrator } from "../../domain/administrator.ts";
 import type {
   CallContext,
@@ -355,6 +356,7 @@ interface PersonBody {
   version: number;
   created_at: string;
   updated_at: string;
+  anonymized_at: string | null;
 }
 
 interface PeoplePageBody {
@@ -399,6 +401,7 @@ function toPerson(b: PersonBody): Person {
     version: b.version,
     createdAt: new Date(b.created_at),
     updatedAt: new Date(b.updated_at),
+    anonymizedAt: b.anonymized_at === null ? null : new Date(b.anonymized_at),
   };
 }
 
@@ -479,6 +482,29 @@ class PeopleClient implements PeopleGateway {
 
   async remove(ctx: CallContext, id: string): Promise<void> {
     await this.transport.send(ctx, "DELETE", `/v1/people/${encodeURIComponent(id)}`);
+  }
+
+  async anonymizationCandidates(ctx: CallContext): Promise<AnonymizationCandidate[]> {
+    const body = await this.transport.json<{
+      candidates: {
+        person: { id: string; name: string; kind: PersonKind };
+        last_activity_on: string;
+        retention_ended_on: string;
+        contracts: { id: string; registry: string; documents_can_go: boolean }[];
+        payouts: { id: string; number: string }[];
+      }[];
+    }>(ctx, "GET", "/v1/people/anonymization-candidates");
+    return body.candidates.map((c) => ({
+      person: c.person,
+      lastActivityOn: c.last_activity_on,
+      retentionEndedOn: c.retention_ended_on,
+      contracts: c.contracts.map((k) => ({ id: k.id, registry: k.registry, documentsCanGo: k.documents_can_go })),
+      payouts: c.payouts,
+    }));
+  }
+
+  async anonymize(ctx: CallContext, id: string): Promise<void> {
+    await this.transport.send(ctx, "POST", `/v1/people/${encodeURIComponent(id)}/anonymization`);
   }
 }
 

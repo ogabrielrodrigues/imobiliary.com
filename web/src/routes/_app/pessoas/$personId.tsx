@@ -91,9 +91,17 @@ function PersonPage() {
               Ver saldo e repasses
             </Link>
           </div>
-          <DeletePerson id={person.id} name={person.name} />
+          {person.anonymizedAt === null && <DeletePerson id={person.id} name={person.name} />}
         </div>
       </header>
+
+      {person.anonymizedAt !== null && (
+        <p role="status" className="rounded-md border border-border bg-card px-4 py-3 text-small text-muted-foreground">
+          Cadastro anonimizado em {person.anonymizedAt.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}, ao
+          fim do prazo de guarda. Contratos, aluguéis e repasses continuam ligados a ele, sem os dados pessoais, e ele não
+          pode ser editado.
+        </p>
+      )}
 
       {owned.ok && owned.value.properties.length > 0 && (
         <section aria-labelledby="owned-title" className="flex flex-col gap-2">
@@ -126,22 +134,24 @@ function PersonPage() {
         </p>
       )}
 
-      <PersonForm
-        key={person.version}
-        initial={person}
-        personId={person.id}
-        linked={linked}
-        kindLocked
-        submitLabel="Salvar alterações"
-        save={(value) => {
-          setSaved(false);
-          return updatePerson({ data: { id: person.id, version: person.version, person: value } });
-        }}
-        onSaved={async () => {
-          await router.invalidate();
-          setSaved(true);
-        }}
-      />
+      {person.anonymizedAt === null && (
+        <PersonForm
+          key={person.version}
+          initial={person}
+          personId={person.id}
+          linked={linked}
+          kindLocked
+          submitLabel="Salvar alterações"
+          save={(value) => {
+            setSaved(false);
+            return updatePerson({ data: { id: person.id, version: person.version, person: value } });
+          }}
+          onSaved={async () => {
+            await router.invalidate();
+            setSaved(true);
+          }}
+        />
+      )}
     </div>
   );
 }

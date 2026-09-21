@@ -12,11 +12,13 @@ import { AppearancePanel } from "@/components/settings/appearance-panel";
 import { DataPanel } from "@/components/settings/data-panel";
 import { AdministratorSection } from "@/components/settings/administrator-section";
 import { OrganizationPanel } from "@/components/settings/organization-panel";
+import { RetentionSection } from "@/components/settings/retention-section";
 import { PasswordPanel } from "@/components/settings/password-panel";
 import { SecondFactorPanel } from "@/components/settings/second-factor-panel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { account } from "@/server/auth";
 import { organizationView } from "@/server/organization";
+import { anonymizationCandidates } from "@/server/people";
 
 const TABS = [
   { value: "aparencia", label: "Aparência", icon: IconPalette },
@@ -46,6 +48,7 @@ export const Route = createFileRoute("/_app/ajustes")({
   loader: async () => ({
     account: await account(),
     organization: await organizationView(),
+    retention: await anonymizationCandidates(),
   }),
   head: () => ({ meta: [{ title: "Ajustes | Imobiliary" }] }),
   component: SettingsPage,
@@ -112,6 +115,7 @@ function SettingsPage() {
                   isAdmin={user.role === "admin"}
                 />
               </div>
+              {data.retention.ok && <RetentionSection candidates={data.retention.value} isAdmin={user.role === "admin"} />}
             </div>
           ) : (
             <p className="text-small text-muted-foreground">
