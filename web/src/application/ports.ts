@@ -8,6 +8,15 @@
  * fake is a few lines rather than a mock framework.
  */
 
+import type {
+  Balance,
+  LedgerEntry,
+  ManualEntryInput,
+  PayoutDetail,
+  PayoutInput,
+  PayoutsPage,
+  PersonLedger,
+} from "../domain/payout.ts";
 import type { Administrator } from "../domain/administrator.ts";
 import type {
   Membership,
@@ -298,4 +307,17 @@ export interface OrganizationGateway {
       termsVersion?: string | undefined;
     },
   ): Promise<void>;
+}
+
+/** The owners' ledger and the payouts the office records. */
+export interface PayoutsGateway {
+  balances(ctx: CallContext): Promise<readonly Balance[]>;
+  ledger(ctx: CallContext, personId: string): Promise<PersonLedger>;
+  addEntry(ctx: CallContext, personId: string, input: ManualEntryInput): Promise<LedgerEntry>;
+  deleteEntry(ctx: CallContext, entryId: string): Promise<void>;
+  /** A line another payout took meanwhile is a ConflictError or a ValidationError. */
+  create(ctx: CallContext, input: PayoutInput): Promise<PayoutDetail>;
+  get(ctx: CallContext, id: string): Promise<PayoutDetail>;
+  list(ctx: CallContext, query: { personId?: string; cursor?: string; limit?: number }): Promise<PayoutsPage>;
+  undo(ctx: CallContext, id: string): Promise<void>;
 }

@@ -83,6 +83,13 @@ function PersonPage() {
             >
               Ver contratos desta pessoa
             </Link>
+            <Link
+              to="/repasses/pessoa/$personId"
+              params={{ personId: person.id }}
+              className="self-start text-small text-muted-foreground underline hover:text-foreground"
+            >
+              Ver saldo e repasses
+            </Link>
           </div>
           <DeletePerson id={person.id} name={person.name} />
         </div>

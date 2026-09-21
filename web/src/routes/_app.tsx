@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-router";
 import {
   IconBuildingEstate,
+  IconCashBanknote,
   IconFileDescription,
   IconLayoutDashboard,
   IconLogout,
@@ -48,7 +49,7 @@ export const Route = createFileRoute("/_app")({
 });
 
 interface NavItem {
-  readonly to: "/dashboard" | "/imoveis" | "/pessoas" | "/contratos" | "/alugueis" | "/ajustes";
+  readonly to: "/dashboard" | "/imoveis" | "/pessoas" | "/contratos" | "/alugueis" | "/repasses" | "/ajustes";
   readonly label: string;
   readonly icon: typeof IconLayoutDashboard;
 }
@@ -63,6 +64,7 @@ const PRIMARY: readonly NavItem[] = [
   { to: "/pessoas", label: "Pessoas", icon: IconUsers },
   { to: "/contratos", label: "Contratos", icon: IconFileDescription },
   { to: "/alugueis", label: "Aluguéis", icon: IconReceipt2 },
+  { to: "/repasses", label: "Repasses", icon: IconCashBanknote },
 ];
 
 function AppLayout() {
@@ -71,9 +73,9 @@ function AppLayout() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
 
   return (
-    <div className="flex h-dvh flex-col bg-background text-foreground md:flex-row">
+    <div className="flex h-dvh flex-col bg-background text-foreground md:flex-row print:block print:h-auto">
       {/* Below md the sidebar becomes a drawer behind this bar. */}
-      <div className="flex items-center gap-3 border-b border-border bg-raised px-4 py-3 md:hidden">
+      <div className="flex items-center gap-3 border-b border-border bg-raised px-4 py-3 md:hidden print:hidden">
         <Button
           variant="ghost"
           size="icon"
@@ -85,7 +87,7 @@ function AppLayout() {
         <Brand to="/dashboard" />
       </div>
 
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-raised md:flex">
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-raised md:flex print:hidden">
         <SidebarContent user={user} pathname={pathname} onNavigate={() => undefined} />
       </aside>
 
@@ -105,7 +107,11 @@ function AppLayout() {
         min-h-0 is load-bearing: a flex-1 item in a column refuses to shrink
         below its content without it, and this would never scroll.
       */}
-      <main id={MAIN_CONTENT_ID} tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto outline-none">
+      <main
+        id={MAIN_CONTENT_ID}
+        tabIndex={-1}
+        className="min-h-0 flex-1 overflow-y-auto outline-none print:overflow-visible"
+      >
         <Outlet />
       </main>
     </div>

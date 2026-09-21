@@ -25,9 +25,11 @@ import type {
   PeopleGateway,
   PrivacyGateway,
   PropertiesGateway,
+  PayoutsGateway,
   RentsGateway,
   SecondFactorGateway,
 } from "../../application/ports.ts";
+import { PayoutsClient } from "./payouts-client.ts";
 import type {
   Membership,
   Organization,
@@ -211,6 +213,7 @@ export function createGateways(transport: Transport): {
   properties: PropertiesGateway;
   contracts: ContractsGateway;
   rents: RentsGateway;
+  payouts: PayoutsGateway;
 } {
   return {
     identity: new IdentityClient(transport),
@@ -222,6 +225,7 @@ export function createGateways(transport: Transport): {
     properties: new PropertiesClient(transport),
     contracts: new ContractsClient(transport),
     rents: new RentsClient(transport),
+    payouts: new PayoutsClient(transport),
   };
 }
 
@@ -478,7 +482,7 @@ class PeopleClient implements PeopleGateway {
   }
 }
 
-interface PropertyAddressBody {
+export interface PropertyAddressBody {
   street: string;
   number: string;
   complement: string;
@@ -506,7 +510,7 @@ interface PropertiesPageBody {
   next_cursor?: string;
 }
 
-function toPropertyAddress(a: PropertyAddressBody): PropertyAddress {
+export function toPropertyAddress(a: PropertyAddressBody): PropertyAddress {
   return {
     street: a.street,
     number: a.number,
