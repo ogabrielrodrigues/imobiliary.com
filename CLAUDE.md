@@ -368,7 +368,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-17: phase 7 complete (the docgen integration: identity moved to the platform, documents generated from a contract, verified in the browser); phase 8 (docs on packages/ui) is next
+**Last updated:** 2026-09-21: phase 7 complete (the docgen integration: identity moved to the platform, documents generated from a contract, verified in the browser); phase 8 (docs on packages/ui) is next
 
 ### Done
 
@@ -1614,12 +1614,16 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       said the qualification paragraph was the wrong shape: a paragraph
       written by the API fits one model and no other. Every role now also
       answers `locador_1_nome`, `locador_1_cpf`, `locatario_2_estado_civil`
-      and so on, numbered to `MaxPartiesPerRole` (4) with the 28 suffixes in
+      and so on, numbered to `MaxPartiesPerRole` (4) with the 30 suffixes in
       `domain/person_fields.go`; the paragraph stays for whoever wants it.
       The contract gained the property's address line by line, its utility
       accounts and owners, the office's name, the guarantee kind, plain-number
       variants of money and rates, long dates, `hoje`, and the rent as it
-      stands after adjustments: 419 fields. **`imobiliary-api/docs/campos.md`
+      stands after adjustments: 443 fields. Each person also has `_o` and `_a`,
+      the endings that agree with that person alone ("inscrit{{.locatario_1_o}}",
+      "portador{{.locatario_1_a}}"), and the marked model in `modelos/` is
+      written field by field with them; the docgen engine filled it and Word
+      read it back. **`imobiliary-api/docs/campos.md`
       is the catalogue**, in Portuguese, and `TestEveryFieldIsDocumented`
       fails when a field is added without being written there. The same
       catalogue is published for the user at

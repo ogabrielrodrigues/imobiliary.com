@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Imobiliary API
-  version: "0.8.0"
+  version: "0.8.1"
   summary: Rental property management for brokers, small agencies and owners.
   description: |
     The API behind the Imobiliary platform. It covers identity and the office
@@ -1414,7 +1414,9 @@ paths:
         * each party, field by field and numbered from 1 to 4:
           `locador_1_nome`, `locador_1_cpf`, `locador_1_estado_civil`,
           `locador_1_endereco_cidade`, `locatario_2_nome`, and so on, with the
-          same suffixes for `locatario_*` and `fiador_*`.
+          same suffixes for `locatario_*` and `fiador_*`. `locador_1_o` and
+          `locador_1_a` are the endings that agree with that person alone
+          ("inscrit{{.locador_1_o}}", "portador{{.locador_1_a}}").
 
         A qualification writes the CIN with the CPF's number, and the field
         `..._rg` repeats it for a model still written for the old document.

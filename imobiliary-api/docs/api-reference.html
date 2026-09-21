@@ -112,7 +112,7 @@
 <div class="shell">
   <nav class="rail" aria-label="Sections">
     <div class="brand">imobiliary <span>api</span></div>
-    <div class="ver">v0.8.0 · phase 7</div>
+    <div class="ver">v0.8.1 · phase 7</div>
     <h3>Guide</h3>
     <ul>
       <li><a href="#auth">Authentication</a></li>
@@ -547,7 +547,7 @@ If-Match: "3"
       <article class="op-card">
         <div class="sig"><span class="m get">GET</span><span class="path">/v1/contracts/{contractID}/document-fields</span><span class="access">session</span></div>
         <p>Every field a lease template can use, computed for the contract, in a fixed order; empty when the register lacks what a field needs. Qualifications use the CIN with the CPF's number; roles agree with the registered genders (neutral when one is missing, feminine for a company); amounts and percentages come in words; <code>foro</code> is suggested as the property's city.</p>
-        <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>{ fields: [{ name, value }] }</code>, 419 of them, always in the same order. Three groups: the contract, the property and the money (<code>contrato_numero</code>, <code>escritorio_nome</code>, <code>imovel_endereco</code> and each line of it, <code>aluguel_valor</code> with <code>_numero</code> and <code>_extenso</code>, <code>garantia_texto</code>, the dates including <code>hoje</code>, and <code>foro</code>); each role as a whole (<code>locador_qualificacao</code>, <code>locador_nome</code>, <code>locador_quantidade</code>, and the agreement fields <code>locador_termo</code>, <code>locador_titulo</code>, <code>locador_termo_inicio</code>, <code>locador_do</code>, <code>locador_ao</code>, <code>locador_no</code>, <code>locador_pelo</code>, <code>locador_o</code>); and each party, field by field and numbered from 1 to 4 (<code>locador_1_nome</code>, <code>locatario_1_cpf</code>, <code>fiador_2_endereco_cidade</code>, 28 suffixes each). The CIN carries the CPF's number, and <code>..._rg</code> repeats it for an older model. The catalogue, with an example of every field, is <code>docs/campos.md</code>.</dd></dl>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>{ fields: [{ name, value }] }</code>, 443 of them, always in the same order. Three groups: the contract, the property and the money (<code>contrato_numero</code>, <code>escritorio_nome</code>, <code>imovel_endereco</code> and each line of it, <code>aluguel_valor</code> with <code>_numero</code> and <code>_extenso</code>, <code>garantia_texto</code>, the dates including <code>hoje</code>, and <code>foro</code>); each role as a whole (<code>locador_qualificacao</code>, <code>locador_nome</code>, <code>locador_quantidade</code>, and the agreement fields <code>locador_termo</code>, <code>locador_titulo</code>, <code>locador_termo_inicio</code>, <code>locador_do</code>, <code>locador_ao</code>, <code>locador_no</code>, <code>locador_pelo</code>, <code>locador_o</code>); and each party, field by field and numbered from 1 to 4 (<code>locador_1_nome</code>, <code>locatario_1_cpf</code>, <code>fiador_2_endereco_cidade</code>, 30 suffixes each, including <code>_o</code> and <code>_a</code>, the endings that agree with that person alone). The CIN carries the CPF's number, and <code>..._rg</code> repeats it for an older model. The catalogue, with an example of every field, is <code>docs/campos.md</code>.</dd></dl>
       </article>
 
       <article class="op-card">

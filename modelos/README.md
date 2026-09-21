@@ -11,8 +11,16 @@ seus pela plataforma.
 O texto usa os campos de concordância onde a redação exige: `{{.locador_do}}`
 ("do locador", "da locadora"), `{{.locatario_ao}}`, `{{.locatario_termo_inicio}}`
 no início de frase e `{{.locatario_o}}` na terminação de palavras que concordam
-com a parte ("obrigad{{.locatario_o}}"). O cabeçalho das qualificações vem
-inteiro de `{{.locador_qualificacao}}` e `{{.locatario_qualificacao}}`.
+com a parte ("obrigad{{.locatario_o}}").
+
+As qualificações são escritas campo a campo, na redação do próprio modelo:
+`{{.locador_1_nome}}, {{.locador_1_nacionalidade}}, {{.locador_1_estado_civil}}`
+e assim por diante, com `portador{{.locador_1_a}}`, `inscrit{{.locador_1_o}}` e
+`domiciliad{{.locador_1_o}}` concordando com cada pessoa. O original dizia
+"cédula de identidade RG n.º ... SSP/SP"; a cópia diz "Carteira de Identidade
+Nacional (CIN) n.º", que usa o número do CPF. As assinaturas usam
+`{{.locador_1_nome}}` e `{{.locatario_1_nome}}`: o modelo é para um locador e um
+locatário. Até 2026-09-21 o cabeçalho vinha pronto de `{{.locador_qualificacao}}`.
 
 O modelo original não tinha cláusula de foro. Ela foi acrescentada ao parágrafo
 de fechamento com `{{.foro}}`, que é o que permite a execução judicial.

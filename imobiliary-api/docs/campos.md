@@ -212,6 +212,17 @@ Os sufixos são sempre os mesmos:
 | `endereco_cidade` | | Bebedouro |
 | `endereco_uf` | | SP |
 | `endereco_cep` | | 14700-000 |
+| `o` | terminação que concorda só com esta pessoa | a |
+| `a` | idem, para palavras terminadas em "or" | a |
+
+Sobre a **concordância de cada pessoa**: `_o` e `_a` fazem por uma pessoa o
+que `locador_o` faz pelo papel inteiro, então dois locatários de gêneros
+diferentes saem certos cada um no seu parágrafo:
+
+| Escrito no modelo | Homem | Mulher ou empresa | Sem gênero informado |
+|---|---|---|---|
+| `inscrit{{.locatario_1_o}}` | inscrito | inscrita | inscrito(a) |
+| `portador{{.locatario_1_a}}` | portador | portadora | portador(a) |
 
 Sobre o **CIN**: a Carteira de Identidade Nacional usa o número do CPF, então
 `cpf`, `cin` e `rg` trazem o mesmo número. `rg` existe só para um modelo antigo
@@ -231,12 +242,14 @@ blocos numerados cobrem os quatro primeiros.
 CONTRATO PARTICULAR DE LOCAÇÃO N.º {{.contrato_numero}}
 
 LOCADOR: {{.locador_1_nome}}, {{.locador_1_nacionalidade}},
-{{.locador_1_estado_civil}}, {{.locador_1_profissao}}, inscrito no CPF sob o
-n.º {{.locador_1_cpf}}, residente à {{.locador_1_endereco}}.
+{{.locador_1_estado_civil}}, {{.locador_1_profissao}}, inscrit{{.locador_1_o}}
+no CPF sob o n.º {{.locador_1_cpf}}, residente à {{.locador_1_endereco}}.
 
 LOCATÁRIO: {{.locatario_1_nome}}, {{.locatario_1_nacionalidade}},
-{{.locatario_1_estado_civil}}, {{.locatario_1_profissao}}, inscrito no CPF sob
-o n.º {{.locatario_1_cpf}}, residente à {{.locatario_1_endereco}}.
+{{.locatario_1_estado_civil}}, {{.locatario_1_profissao}},
+portador{{.locatario_1_a}} da CIN n.º {{.locatario_1_cin}},
+inscrit{{.locatario_1_o}} no CPF sob o n.º {{.locatario_1_cpf}},
+residente à {{.locatario_1_endereco}}.
 
 OBJETO: o imóvel situado à {{.imovel_endereco}}, matrícula
 {{.imovel_matricula}} do {{.imovel_cartorio}}, de propriedade {{.locador_do}}.
@@ -263,5 +276,5 @@ Fica eleito o foro da comarca de {{.foro}}.
 A lista sai de `internal/usecase/documents.go` (`DocumentFieldNames`) e de
 `internal/domain/person_fields.go` (`PersonFieldSuffixes`). Um teste compara
 este arquivo com o código e falha quando um campo é acrescentado sem ser
-documentado aqui. São 419 campos no total: 50 do contrato e do imóvel, mais 11
-de grupo e 28 por parte, em 3 papéis e 4 posições.
+documentado aqui. São 443 campos no total: 50 do contrato e do imóvel, mais 11
+de grupo e 30 por parte, em 3 papéis e 4 posições.
