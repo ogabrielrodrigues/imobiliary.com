@@ -39,8 +39,9 @@ export const Route = createFileRoute("/_app/ajustes")({
    * keeps it. An unknown value falls back to the first tab rather than an
    * error: it is a preference about where to look, not data.
    */
-  validateSearch: (search: Record<string, unknown>): { aba?: Tab } =>
-    isTab(search["aba"]) ? { aba: search["aba"] } : {},
+  validateSearch: (search: Record<string, unknown>): { aba?: Tab | undefined } => ({
+    aba: isTab(search["aba"]) ? search["aba"] : undefined,
+  }),
   loader: async () => ({
     account: await account(),
     organization: await organizationView(),

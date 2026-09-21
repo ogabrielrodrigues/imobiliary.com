@@ -1663,7 +1663,20 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       snapshot function kept in `sessionStorage`.
     - Checks: `pnpm check` in `docs` (117 tests), the production build, and the
       two settings panels and `AppearanceSync` loaded in the browser. Ajustes
-      itself was not seen signed in.
+      was then seen signed in (2026-09-21): theme, "Seguir o sistema", high
+      contrast, text size and "Restaurar padrões" all apply and are saved
+      under the old key.
+
+49. **A search validator must name every key it owns** (found checking Docs'
+    Ajustes). TanStack Router merges a route's validated search over its
+    parent's, and the root keeps the raw parameters, so a validator that
+    merely leaves a refused key out lets the raw value through:
+    `/ajustes?aba=conta` selected no tab and showed an empty page, and an
+    invalid `?mes=` or `?versao=` reached the loader as text. Every
+    validator in both apps now returns each key, `undefined` when refused,
+    and the types say `?: T | undefined` (`exactOptionalPropertyTypes` is
+    on). The router leaves undefined keys out of the address. **Write every
+    new `validateSearch` this way.**
 
 ### Next step
 

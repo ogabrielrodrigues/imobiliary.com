@@ -22,7 +22,7 @@ type Tab = (typeof TABS)[number]["value"];
 const DEFAULT_TAB: Tab = "aparencia";
 
 interface SettingsSearch {
-  readonly aba?: Tab;
+  readonly aba?: Tab | undefined;
 }
 
 function isTab(value: unknown): value is Tab {
@@ -35,8 +35,9 @@ export const Route = createFileRoute("/_app/ajustes")({
    * keeps it. An unknown value falls back to the first tab rather than an
    * error: it is a preference about where to look, not data.
    */
-  validateSearch: (search: Record<string, unknown>): SettingsSearch =>
-    isTab(search["aba"]) ? { aba: search["aba"] } : {},
+  validateSearch: (search: Record<string, unknown>): SettingsSearch => ({
+    aba: isTab(search["aba"]) ? search["aba"] : undefined,
+  }),
   // The platform's addresses come from the server: the deployment configures
   // them, and the account panel links to them.
   loader: async () => ({ links: await platformLinks() }),

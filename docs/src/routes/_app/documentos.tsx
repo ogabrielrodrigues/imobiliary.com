@@ -71,9 +71,9 @@ import { deleteBatch, downloadBatch } from "@/server/history";
 
 interface DocumentsSearch {
   /** One-based, as a person counts. Absent means the first page. */
-  readonly pagina?: number;
+  readonly pagina?: number | undefined;
   /** A template id: only what was generated from it. */
-  readonly modelo?: string;
+  readonly modelo?: string | undefined;
 }
 
 const IDENTIFIER = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -87,8 +87,8 @@ export const Route = createFileRoute("/_app/documentos")({
     const page = Number(search["pagina"]);
     const template = search["modelo"];
     return {
-      ...(Number.isInteger(page) && page > 1 ? { pagina: page } : {}),
-      ...(typeof template === "string" && IDENTIFIER.test(template) ? { modelo: template } : {}),
+      pagina: Number.isInteger(page) && page > 1 ? page : undefined,
+      modelo: typeof template === "string" && IDENTIFIER.test(template) ? template : undefined,
     };
   },
   loaderDeps: ({ search }) => ({ page: (search.pagina ?? 1) - 1, templateId: search.modelo }),
