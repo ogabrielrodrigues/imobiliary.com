@@ -18,6 +18,7 @@ import type {
   PersonLedger,
   PersonRef,
 } from "../../domain/payout.ts";
+import type { DocumentField } from "../../domain/document.ts";
 import type { ChargeKind } from "../../domain/rent.ts";
 import { toPropertyAddress, type PropertyAddressBody } from "./imobiliary-client.ts";
 import type { Transport } from "./transport.ts";
@@ -158,5 +159,14 @@ export class PayoutsClient implements PayoutsGateway {
 
   async undo(ctx: CallContext, id: string): Promise<void> {
     await this.transport.send(ctx, "DELETE", `/v1/payouts/${encodeURIComponent(id)}`);
+  }
+
+  async documentFields(ctx: CallContext, id: string): Promise<DocumentField[]> {
+    const body = await this.transport.json<{ fields: { name: string; value: string }[] }>(
+      ctx,
+      "GET",
+      `/v1/payouts/${encodeURIComponent(id)}/document-fields`,
+    );
+    return body.fields.map((field) => ({ name: field.name, value: field.value }));
   }
 }

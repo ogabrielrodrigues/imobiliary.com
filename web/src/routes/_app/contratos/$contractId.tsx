@@ -4,7 +4,7 @@ import { IconArrowLeft, IconBan, IconPencil, IconTrash } from "@tabler/icons-rea
 
 import { messageFor, summaryOf, type Failure } from "@/application/result";
 import { ContractAmendments } from "@/components/contracts/amendments";
-import { ContractDocuments } from "@/components/contracts/documents";
+import { ContractDocuments } from "@/components/documents/generated-documents";
 import { ContractStatusBadge } from "@/components/contracts/status-badge";
 import { FormField } from "@/components/form-field";
 import {

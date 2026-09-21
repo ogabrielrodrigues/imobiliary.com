@@ -15,20 +15,29 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatMoney } from "@/domain/contract";
+import { GeneratedDocuments } from "@/components/documents/generated-documents";
 import { Statement } from "@/components/payouts/statement";
 import { methodLabel, totalsByKind, type PayoutDetail } from "@/domain/payout";
+import { listPayoutDocuments } from "@/server/documents";
 import { payoutStatement, undoPayout } from "@/server/payouts";
 
 export const Route = createFileRoute("/_app/repasses/$payoutId")({
-  loader: ({ params }) => payoutStatement({ data: params.payoutId }),
+  loader: async ({ params }) => ({
+    statement: await payoutStatement({ data: params.payoutId }),
+    documents: await listPayoutDocuments({ data: params.payoutId }),
+  }),
   head: ({ loaderData }) => ({
-    meta: [{ title: `${loaderData?.ok ? `Repasse ${loaderData.value.payout.number}` : "Repasse"} | Imobiliary` }],
+    meta: [
+      {
+        title: `${loaderData?.statement.ok ? `Repasse ${loaderData.statement.value.payout.number}` : "Repasse"} | Imobiliary`,
+      },
+    ],
   }),
   component: PayoutPage,
 });
 
 function PayoutPage() {
-  const result = Route.useLoaderData();
+  const { statement: result, documents } = Route.useLoaderData();
   const back = (
     <Link to="/repasses" className="flex w-fit items-center gap-1 text-small text-muted-foreground hover:text-foreground">
       <IconArrowLeft aria-hidden="true" className="size-4" />
@@ -108,6 +117,13 @@ function PayoutPage() {
       </header>
 
       <Statement payout={payout} />
+
+      <GeneratedDocuments
+        generate={<Link to="/repasses/$payoutId/documento" params={{ payoutId: payout.id }} />}
+        empty="Nenhum documento gerado a partir deste repasse. Um modelo do Imobiliary Docs com os campos do repasse vira o demonstrativo do escritório."
+        documents={documents.ok ? documents.value : []}
+        failure={documents.ok ? null : documents.failure}
+      />
     </div>
   );
 }

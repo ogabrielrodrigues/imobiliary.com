@@ -320,4 +320,6 @@ export interface PayoutsGateway {
   get(ctx: CallContext, id: string): Promise<PayoutDetail>;
   list(ctx: CallContext, query: { personId?: string; cursor?: string; limit?: number }): Promise<PayoutsPage>;
   undo(ctx: CallContext, id: string): Promise<void>;
+  /** What a statement template is filled with. */
+  documentFields(ctx: CallContext, id: string): Promise<DocumentField[]>;
 }

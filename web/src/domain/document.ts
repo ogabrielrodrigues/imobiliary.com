@@ -6,9 +6,22 @@
  * without the service knowing anything about leases.
  */
 
-/** How a document says which record it belongs to. */
+/**
+ * The record a document is generated from: a lease, or a payout to an owner.
+ * Each answers its own fields, and the document is filed under it.
+ */
+export interface DocumentSubject {
+  readonly kind: "contract" | "payout";
+  readonly id: string;
+}
+
+/** How a document says which record it belongs to: "contract:<id>", "payout:<id>". */
+export function subjectReference(subject: DocumentSubject): string {
+  return `${subject.kind}:${subject.id}`;
+}
+
 export function contractReference(contractId: string): string {
-  return `contract:${contractId}`;
+  return subjectReference({ kind: "contract", id: contractId });
 }
 
 /** One value a template asks for, as the contract answers it. */
@@ -65,15 +78,16 @@ export function cleanDocumentName(name: string): string {
 }
 
 /**
- * The name to suggest for a lease's document: the template, the contract and
- * the tenant, which is how an office looks for one afterwards.
+ * The name to suggest for a document: the template, the record's number (a
+ * contract's, a payout's) and the person it concerns (the tenant, the owner),
+ * which is how an office looks for one afterwards.
  */
 export function suggestDocumentName(parts: {
   readonly template: string;
-  readonly contractRegistry: string;
-  readonly tenant: string;
+  readonly record: string;
+  readonly person: string;
 }): string {
-  const pieces = [parts.template, parts.contractRegistry, parts.tenant]
+  const pieces = [parts.template, parts.record, parts.person]
     .map((piece) => piece.trim())
     .filter((piece) => piece !== "");
   return cleanDocumentName(pieces.join(" - "));
