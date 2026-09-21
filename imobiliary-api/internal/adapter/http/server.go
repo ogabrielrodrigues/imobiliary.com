@@ -214,6 +214,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /v1/payouts", write(http.HandlerFunc(s.handleCreatePayout)))
 	mux.Handle("GET /v1/payouts/{payoutID}", authenticated(http.HandlerFunc(s.handleGetPayout)))
 	mux.Handle("DELETE /v1/payouts/{payoutID}", write(http.HandlerFunc(s.handleUndoPayout)))
+	mux.Handle("GET /v1/payouts/{payoutID}/document-fields", authenticated(http.HandlerFunc(s.handlePayoutDocumentFields)))
 
 	// Probes, and the catch-all that answers JSON rather than net/http's text.
 	mux.HandleFunc("GET /healthz", s.handleLive)

@@ -2131,6 +2131,48 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /v1/payouts/{payoutID}/document-fields:
+    parameters:
+      - name: payoutID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+    get:
+      tags: [Payouts]
+      summary: What a payout statement template is filled with
+      description: |
+        123 fields, always in the same order, for a template in the document
+        service: the payout (`repasse_numero`, `repasse_total` with `_numero`
+        and `_extenso`, `repasse_forma`), the beneficiary field by field with
+        the parties' 30 suffixes under `proprietario_`, the administrator
+        (`administrador_nome`, `_documento`, `_creci`, `_tipo`), totals by kind
+        (`total_alugueis`, `total_taxa`, `total_irrf`, `total_debitos`...), and
+        each property numbered from 1 to 10 (`imovel_1_endereco`,
+        `imovel_1_liquido`...). Nothing is stored. The catalogue is
+        `docs/campos.md`, section 9.
+      operationId: getPayoutDocumentFields
+      responses:
+        "200":
+          description: The fields.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [fields]
+                properties:
+                  fields:
+                    type: array
+                    items:
+                      type: object
+                      required: [name, value]
+                      properties:
+                        name: { type: string, pattern: "^[a-z][a-z0-9_]*$" }
+                        value: { type: string, description: Empty when the register does not hold it. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
   # --- operations -------------------------------------------------------------
 
   /healthz:

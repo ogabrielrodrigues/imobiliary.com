@@ -1,6 +1,7 @@
 # Campos para montar um documento
 
-Este é o catálogo de tudo o que a plataforma sabe responder sobre um contrato.
+Este é o catálogo de tudo o que a plataforma sabe responder sobre um contrato
+e sobre um repasse ao proprietário (seção 9).
 A mesma lista, com busca e um clique para copiar cada marca, está publicada em
 <https://claude.ai/artifact/3dsJQEkMPa9iHfdLpq1iGD>.
 Você marca o seu modelo do Word com esses nomes e, ao gerar um documento a
@@ -269,6 +270,68 @@ Fica eleito o foro da comarca de {{.foro}}.
 {{.imovel_cidade}}/{{.imovel_uf}}, {{.hoje_extenso}}.
 ```
 
+## 9. O demonstrativo de repasse
+
+Um repasse também gera documento: na tela do repasse, **Gerar documento** usa
+um modelo do Imobiliary Docs com os campos abaixo. É outro documento, com
+outros campos; os do contrato não valem aqui.
+
+O Imobiliary Docs não repete blocos, então o documento não percorre uma lista
+de tamanho variável. Ele traz o repasse, o proprietário campo a campo, o
+administrador, os totais por natureza e cada imóvel numerado até 10. O detalhe
+linha a linha fica no demonstrativo da plataforma e no recibo impresso.
+
+| Campo | Exemplo |
+|---|---|
+| `repasse_numero` | 2026/0001 |
+| `repasse_data` | 21/09/2026 |
+| `repasse_data_extenso` | 21 de setembro de 2026 |
+| `repasse_total` | R$ 1.800,00 |
+| `repasse_total_numero` | 1.800,00 |
+| `repasse_total_extenso` | mil e oitocentos reais |
+| `repasse_forma` | PIX |
+| `repasse_observacao` | o que foi digitado no repasse |
+| `escritorio_nome` | Administração - Colina/SP |
+| `administrador_nome` | Administração - Colina/SP |
+| `administrador_tipo` | Pessoa física |
+| `administrador_documento` | 529.982.247-25 |
+| `administrador_creci` | CRECI 12345-F/SP |
+| `total_alugueis` | R$ 2.000,00 |
+| `total_multas` | R$ 50,00 |
+| `total_cobrancas` | R$ 150,00 |
+| `total_creditos` | R$ 0,00 |
+| `total_taxa` | R$ 215,00 |
+| `total_irrf` | R$ 100,00 |
+| `total_debitos` | R$ 85,00 |
+| `imoveis_quantidade` | 1 |
+| `hoje` | 21/09/2026 |
+| `hoje_extenso` | 21 de setembro de 2026 |
+
+Os totais são sempre positivos; o modelo diz o que soma e o que desconta
+("Taxa de administração: - {{.total_taxa}}"). `total_cobrancas` são só as
+cobranças do proprietário: as que o escritório repassa a terceiros não entram
+no repasse. O administrador vem de **Ajustes › Escritório**; sem ele
+informado, `administrador_documento` e `administrador_creci` saem vazios.
+
+O proprietário tem os mesmos 30 sufixos de cada parte da seção 7, com o
+prefixo `proprietario_`: `proprietario_nome`, `proprietario_cpf`,
+`proprietario_qualificacao`, `proprietario_endereco`, `proprietario_o`...
+
+Cada imóvel, na ordem do demonstrativo, de 1 a 10:
+
+| Campo | O que é | Exemplo |
+|---|---|---|
+| `imovel_1_endereco` | endereço em uma linha | Rua das Flores, 120, Centro, Colina/SP |
+| `imovel_1_aluguel` | aluguéis deste imóvel | R$ 2.000,00 |
+| `imovel_1_multas` | multas e juros | R$ 50,00 |
+| `imovel_1_cobrancas` | cobranças do proprietário | R$ 150,00 |
+| `imovel_1_taxa` | taxa de administração | R$ 215,00 |
+| `imovel_1_irrf` | IRRF retido pelo locatário | R$ 100,00 |
+| `imovel_1_liquido` | o que este imóvel rende no repasse | R$ 1.885,00 |
+
+Troque o `1` por `2` a `10` para os demais. Um débito ou crédito digitado sem
+imóvel entra só nos totais.
+
 ---
 
 ## Manutenção
@@ -277,4 +340,6 @@ A lista sai de `internal/usecase/documents.go` (`DocumentFieldNames`) e de
 `internal/domain/person_fields.go` (`PersonFieldSuffixes`). Um teste compara
 este arquivo com o código e falha quando um campo é acrescentado sem ser
 documentado aqui. São 443 campos no total: 50 do contrato e do imóvel, mais 11
-de grupo e 30 por parte, em 3 papéis e 4 posições.
+de grupo e 30 por parte, em 3 papéis e 4 posições. O demonstrativo de repasse
+tem os seus 123: 23 do repasse, 30 do proprietário e 7 por imóvel, até 10
+imóveis (`PayoutFieldNames` em `internal/usecase/payout_documents.go`).

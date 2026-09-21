@@ -22,20 +22,23 @@ import (
 // template has to be free to write its own sentence. `docs/campos.md` is the
 // catalogue, and it must be updated whenever a name is added here.
 type Documents struct {
-	scope    OrganizationScope
-	people   *People
-	now      Clock
-	location *time.Location
+	scope         OrganizationScope
+	people        *People
+	organizations *Organizations
+	now           Clock
+	location      *time.Location
 }
 
 // DocumentsConfig collects the dependencies. People opens the sealed fields a
 // qualification needs, and Location is where "today" is reckoned, since a
 // document dated today is dated by the office's calendar.
 type DocumentsConfig struct {
-	Scope    OrganizationScope
-	People   *People
-	Now      Clock
-	Location *time.Location
+	Scope  OrganizationScope
+	People *People
+	// Organizations reads the administrator a payout statement names.
+	Organizations *Organizations
+	Now           Clock
+	Location      *time.Location
 }
 
 // NewDocuments wires the use case.
@@ -47,10 +50,11 @@ func NewDocuments(cfg DocumentsConfig) *Documents {
 		cfg.Location = time.UTC
 	}
 	return &Documents{
-		scope:    cfg.Scope,
-		people:   cfg.People,
-		now:      cfg.Now,
-		location: cfg.Location,
+		scope:         cfg.Scope,
+		people:        cfg.People,
+		organizations: cfg.Organizations,
+		now:           cfg.Now,
+		location:      cfg.Location,
 	}
 }
 

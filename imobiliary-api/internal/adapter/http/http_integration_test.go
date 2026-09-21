@@ -137,7 +137,6 @@ func newAPI(t *testing.T) *api {
 	contracts := usecase.NewContracts(usecase.ContractsConfig{Scope: db, Logger: logger})
 	rents := usecase.NewRents(usecase.RentsConfig{Scope: db, Logger: logger})
 	payouts := usecase.NewPayouts(usecase.PayoutsConfig{Scope: db, Logger: logger})
-	documents := usecase.NewDocuments(usecase.DocumentsConfig{Scope: db, People: people})
 	privacy := usecase.NewPrivacy(usecase.PrivacyConfig{
 		Identity: identity, Repositories: repos, Hasher: hasher, Sealer: sealer, Mailer: box, Logger: logger,
 	})
@@ -149,6 +148,7 @@ func newAPI(t *testing.T) *api {
 		Identity: identity, Repositories: repos, Hasher: hasher, Mailer: box, Sealer: sealer,
 		AppURL: "https://imobiliary.test", InvitationTTL: 7 * 24 * time.Hour, Logger: logger,
 	})
+	documents := usecase.NewDocuments(usecase.DocumentsConfig{Scope: db, People: people, Organizations: organizations})
 
 	// The limits are real but generous: what they do is covered by their own
 	// test, and a suite that ran into them would fail for the wrong reason.

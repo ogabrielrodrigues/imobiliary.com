@@ -181,6 +181,34 @@ func TestLedgerFromAPaidRent(t *testing.T) {
 	if maria.Balance != "0.00" || len(maria.Pending) != 0 {
 		t.Errorf("after the payout %+v", maria)
 	}
+
+	// What a statement template is filled with: the payout, Maria field by
+	// field, the totals, and the one property numbered.
+	var fields struct {
+		Fields []struct {
+			Name  string `json:"name"`
+			Value string `json:"value"`
+		} `json:"fields"`
+	}
+	a.expect(http.StatusOK, http.MethodGet, "/v1/payouts/"+payout.ID+"/document-fields", f.admin.access, nil).decode(t, &fields)
+	got := map[string]string{}
+	for _, field := range fields.Fields {
+		got[field.Name] = field.Value
+	}
+	for name, want := range map[string]string{
+		"repasse_numero": payout.Number, "repasse_total": "R$ 1.000,00", "repasse_total_extenso": "mil reais",
+		"repasse_forma": "PIX", "proprietario_nome": "Maria da Conceição", "proprietario_cpf": "529.982.247-25",
+		"total_alugueis": "R$ 1.120,00", "total_taxa": "R$ 120,40", "total_debitos": "R$ 38,10",
+		"imoveis_quantidade": "1", "imovel_1_liquido": "R$ 1.000,00", "imovel_1_irrf": "R$ 70,00",
+		"imovel_2_endereco": "", "escritorio_nome": "Central",
+	} {
+		if got[name] != want {
+			t.Errorf("field %s = %q, want %q", name, got[name], want)
+		}
+	}
+	if len(fields.Fields) != 123 {
+		t.Errorf("%d payout fields", len(fields.Fields))
+	}
 	// The same lines again: already closed.
 	a.expect(http.StatusUnprocessableEntity, http.MethodPost, "/v1/payouts", f.admin.access, map[string]any{
 		"person_id": f.owner.ID, "paid_on": today.String(), "entry_ids": lineIDs(payout.Entries),

@@ -213,7 +213,9 @@ func serve(logger *slog.Logger) error {
 		Location: saoPaulo,
 		Logger:   logger,
 	})
-	documents := usecase.NewDocuments(usecase.DocumentsConfig{Scope: db, People: people, Location: saoPaulo})
+	documents := usecase.NewDocuments(usecase.DocumentsConfig{
+		Scope: db, People: people, Organizations: organizations, Location: saoPaulo,
+	})
 	rents := usecase.NewRents(usecase.RentsConfig{
 		Scope:    db,
 		Location: saoPaulo,
