@@ -36,3 +36,7 @@ Thumbs.db
 
 # Generated code map (graphify). Regenerable, and ~2 MB of artefacts.
 graphify-out/
+
+# --- Office ------------------------------------------------------------------
+# Word writes a lock file beside any document it has open.
+~$*
