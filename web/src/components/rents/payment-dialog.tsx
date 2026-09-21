@@ -5,6 +5,7 @@ import { IconCash } from "@tabler/icons-react";
 import { messageFor, summaryOf, type Failure, type Result } from "@/application/result";
 import { FormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -14,9 +15,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatDate, formatMoney, formatMoneyInput, parseMoney } from "@/domain/contract";
+import { Label } from "@/components/ui/label";
 import { addressLine } from "@/domain/property";
 import {
   RENT_STATUS,
+  amountReceived,
   todayInSaoPaulo,
   validatePayment,
   type PaymentInput,
@@ -48,7 +51,9 @@ export function RentStatusBadge({ status, className }: { readonly status: RentSt
  * Recording a payment in full.
  *
  * The API computes the late fee for the day typed, shown as it changes; the
- * office can type over it (a waived fee is 0) and over the amount received.
+ * office can type over it (a waived fee is 0). The amount received is not
+ * typed: it is what the owners' payout is made of, so it follows the rent,
+ * the charges, the late fee and the income tax a company tenant withheld.
  */
 export function PaymentDialog({
   rent,
@@ -63,7 +68,8 @@ export function PaymentDialog({
   const [open, setOpen] = useState(false);
   // Mounted only once asked for: a Base UI dialog cannot render on the server.
   const [mounted, setMounted] = useState(false);
-  const [value, setValue] = useState<PaymentInput>({ paidOn: "", lateFee: "", amountPaid: "" });
+  const [value, setValue] = useState<PaymentInput>({ paidOn: "", lateFee: "", incomeTax: "" });
+  const [withheld, setWithheld] = useState(false);
   const [attempted, setAttempted] = useState(false);
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
@@ -87,15 +93,15 @@ export function PaymentDialog({
     };
   }, [open, paidOn, rent.id, today]);
 
-  const local = attempted ? validatePayment(value, today) : [];
+  const local = attempted ? validatePayment(value, today, rent.amount) : [];
   const error = (field: string) => messageFor(failure, field) ?? local.find((p) => p.field === field)?.message;
   const ready = preview?.ok ? preview.value : null;
 
-  // What will be recorded when the fields are left empty.
-  const typedFee = parseMoney(value.lateFee);
-  const due = parseMoney(rent.due) ?? 0;
-  const fee = typedFee ?? (ready ? parseMoney(ready.lateFee.total) : null);
-  const expected = fee === null ? null : due + fee;
+  // What will be recorded: the late fee typed or computed, less the tax.
+  const fee = value.lateFee.trim() !== "" ? value.lateFee : ready ? formatMoneyInput(parseMoney(ready.lateFee.total) ?? 0) : null;
+  const tax = withheld ? value.incomeTax : "";
+  const received = fee === null ? null : amountReceived(rent.due, fee, tax);
+  const taxCents = tax.trim() === "" ? 0 : parseMoney(tax);
 
   function change(patch: Partial<PaymentInput>) {
     setFailure(null);
@@ -104,10 +110,11 @@ export function PaymentDialog({
 
   async function onSave() {
     setAttempted(true);
-    if (validatePayment(value, today).length > 0) return;
+    const payment = { ...value, incomeTax: withheld ? value.incomeTax : "" };
+    if (validatePayment(payment, today, rent.amount).length > 0) return;
     setPending(true);
     setFailure(null);
-    const result = await payRent({ data: { id: rent.id, payment: value } });
+    const result = await payRent({ data: { id: rent.id, payment } });
     setPending(false);
     if (!result.ok) {
       setFailure(result.failure);
@@ -124,7 +131,8 @@ export function PaymentDialog({
         variant={size === "sm" ? "secondary" : "default"}
         size={size}
         onClick={() => {
-          setValue({ paidOn: today, lateFee: "", amountPaid: "" });
+          setValue({ paidOn: today, lateFee: "", incomeTax: "" });
+          setWithheld(false);
           setAttempted(false);
           setFailure(null);
           setPreview(null);
@@ -189,10 +197,16 @@ export function PaymentDialog({
                     <dd className="text-right">nenhum, pago em dia</dd>
                   </>
                 )}
-                {ready !== null && (
+                {withheld && taxCents !== null && taxCents > 0 && (
                   <>
-                    <dt className="font-medium">Total calculado</dt>
-                    <dd className="text-right font-medium">{formatMoney(ready.total)}</dd>
+                    <dt className="text-muted-foreground">IRRF retido pelo locatário</dt>
+                    <dd className="text-right">− R$ {formatMoneyInput(taxCents)}</dd>
+                  </>
+                )}
+                {received !== null && (
+                  <>
+                    <dt className="font-medium">Valor recebido</dt>
+                    <dd className="text-right font-medium">R$ {formatMoneyInput(received)}</dd>
                   </>
                 )}
               </dl>
@@ -212,21 +226,46 @@ export function PaymentDialog({
                     change({ lateFee: next });
                   }}
                 />
-                <FormField
-                  name="amount_paid"
-                  label="Valor recebido (R$)"
-                  placeholder={expected === null ? formatMoney(rent.due).replace("R$ ", "") : formatMoneyInput(expected)}
-                  inputMode="decimal"
-                  autoComplete="off"
-                  hint="Vazio para o total com a multa e os juros."
-                  value={value.amountPaid}
-                  error={error("amountPaid")}
-                  onChange={(event) => {
-                    const next = event.currentTarget.value;
-                    change({ amountPaid: next });
+                {withheld && (
+                  <FormField
+                    name="income_tax_withheld"
+                    label="IRRF retido (R$)"
+                    placeholder="0,00"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    hint="O valor que o locatário descontou e recolheu."
+                    value={value.incomeTax}
+                    error={error("incomeTax")}
+                    onChange={(event) => {
+                      const next = event.currentTarget.value;
+                      change({ incomeTax: next });
+                    }}
+                  />
+                )}
+              </div>
+
+              <div className="flex items-start gap-2.5">
+                <Checkbox
+                  id={`withheld-${rent.id}`}
+                  checked={withheld}
+                  onCheckedChange={(checked) => {
+                    setFailure(null);
+                    setWithheld(checked === true);
                   }}
                 />
+                <Label htmlFor={`withheld-${rent.id}`} className="flex flex-col items-start gap-0.5 text-small font-normal">
+                  O locatário é empresa e reteve imposto de renda
+                  <span className="text-caption text-muted-foreground">
+                    O aluguel conta como pago inteiro, e o repasse desconta o IRRF.
+                  </span>
+                </Label>
               </div>
+
+              {error("form") !== undefined && (
+                <p role="alert" className="text-small text-destructive-soft">
+                  {error("form")}
+                </p>
+              )}
 
               {failure !== null && failure.kind !== "validation" && (
                 <p role="alert" className="text-small text-destructive-soft">

@@ -18,6 +18,7 @@ import {
   GUARANTEES,
   indexLabel,
   INDEXES,
+  landlordSharesNeeded,
   NOTICES,
   parseMoney,
   ROLE_LABELS,
@@ -32,7 +33,7 @@ import {
   type NoticeCode,
 } from "@/domain/contract";
 import type { PersonSummary } from "@/domain/person";
-import { addressLine, type PropertySummary } from "@/domain/property";
+import { addressLine, formatShare, parseShare, splitEvenly, type PropertySummary } from "@/domain/property";
 import { blurThenChange, formErrors, submitForm, visibleError } from "@/lib/form";
 import { cn } from "@/lib/utils";
 import { getProperty } from "@/server/properties";
@@ -41,13 +42,15 @@ import { previewContract } from "@/server/contracts";
 /** The form's values, with mutable lists for TanStack Form. */
 type ContractFormValues = Omit<
   ContractInput,
-  "landlordIds" | "tenantIds" | "guarantorIds" | "guarantorSpouseIds" | "acknowledgments"
+  "landlordIds" | "tenantIds" | "guarantorIds" | "guarantorSpouseIds" | "acknowledgments" | "landlordShares" | "propertyOwnerIds"
 > & {
   landlordIds: string[];
   tenantIds: string[];
   guarantorIds: string[];
   guarantorSpouseIds: string[];
   acknowledgments: NoticeCode[];
+  landlordShares: Record<string, string>;
+  propertyOwnerIds: string[];
 };
 
 type PartyField = "landlordIds" | "tenantIds" | "guarantorIds" | "guarantorSpouseIds";
@@ -103,6 +106,8 @@ export function ContractForm({
       guarantorIds: [...initial.guarantorIds],
       guarantorSpouseIds: [...initial.guarantorSpouseIds],
       acknowledgments: [...initial.acknowledgments],
+      landlordShares: { ...initial.landlordShares },
+      propertyOwnerIds: [...initial.propertyOwnerIds],
     } as ContractFormValues,
     validationLogic: blurThenChange,
     validators: { onDynamic: ({ value }) => formErrors(validateContract(value)) },
@@ -134,6 +139,21 @@ export function ContractForm({
       setStep(first);
     }
   }
+
+  // Editing: the owners of the saved property decide whether landlords need shares.
+  useEffect(() => {
+    if (initial.propertyId === "" || initial.propertyOwnerIds.length > 0) return;
+    let cancelled = false;
+    void getProperty({ data: initial.propertyId }).then((result) => {
+      if (cancelled || !result.ok) return;
+      form.setFieldValue("propertyOwnerIds", result.value.owners.map((o) => o.personId));
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Once, for the property the contract was saved with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // The review always shows what the API makes of the current values.
   useEffect(() => {
@@ -179,7 +199,9 @@ export function ContractForm({
     if (!result.ok) return;
     const owners = result.value.owners.map((o) => ({ id: o.personId, kind: o.kind, name: o.name, tradeName: "" }));
     remember(owners);
+    form.setFieldValue("propertyOwnerIds", owners.map((o) => o.id));
     form.setFieldValue("landlordIds", owners.map((o) => o.id));
+    form.setFieldValue("landlordShares", {});
   }
 
   const text = (
@@ -333,6 +355,61 @@ export function ContractForm({
         <>
           <Section title="Partes">
             {party("landlordIds", "Locadores", "Preenchido com os proprietários do imóvel.", false)}
+            {landlordSharesNeeded(values) && values.landlordIds.length > 1 && (
+              <form.Field name="landlordShares">
+                {(field) => {
+                  const total = values.landlordIds.reduce((sum, id) => sum + (parseShare(values.landlordShares[id] ?? "") ?? 0), 0);
+                  const message = serverError("landlordShares") ?? visibleError(field.state.meta, shown);
+                  return (
+                    <fieldset className="flex flex-col gap-3 rounded-md border border-border px-4 py-3">
+                      <legend className="px-1 text-small font-medium">Cota de cada locador</legend>
+                      <p className="font-reading text-small text-muted-foreground">
+                        Os locadores não são exatamente os proprietários do imóvel. Diga a parte de cada um em cada
+                        aluguel: é ela que vai para o repasse.
+                      </p>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {values.landlordIds.map((id) => (
+                          <FormField
+                            key={id}
+                            name={`share-${id}`}
+                            label={`${people.get(id)?.name ?? "Locador"} (%)`}
+                            placeholder="50"
+                            inputMode="decimal"
+                            autoComplete="off"
+                            value={values.landlordShares[id] ?? ""}
+                            onBlur={field.handleBlur}
+                            onChange={(event) => {
+                              const next = event.currentTarget.value;
+                              setFailure(null);
+                              field.handleChange({ ...field.state.value, [id]: next });
+                            }}
+                          />
+                        ))}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        {values.landlordIds.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
+                              const even = splitEvenly(values.landlordIds.length);
+                              setFailure(null);
+                              field.handleChange(Object.fromEntries(values.landlordIds.map((id, i) => [id, even[i] ?? ""])));
+                              field.handleBlur();
+                            }}
+                          >
+                            Dividir igualmente
+                          </Button>
+                        )}
+                        <span className="text-small tabular-nums text-muted-foreground">Total: {formatShare(total)}%</span>
+                      </div>
+                      {message !== undefined && <p className="text-xs text-destructive">{message}</p>}
+                    </fieldset>
+                  );
+                }}
+              </form.Field>
+            )}
             {party("tenantIds", "Locatários", "Pessoas físicas ou jurídicas já cadastradas.", false)}
             {serverError("parties") !== undefined && <p className="text-xs text-destructive">{serverError("parties")}</p>}
           </Section>

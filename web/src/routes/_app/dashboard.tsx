@@ -111,7 +111,7 @@ function MonthCards({ d }: { readonly d: Dashboard }) {
         {overdue.count === 1 ? "1 aluguel" : `${overdue.count} aluguéis`}, sem multa e juros
       </Card>
       <Card label="Taxa de administração do mês" value={formatMoney(month.officeFee)}>
-        sobre aluguéis e cobranças recebidos, sem multa e juros
+        sobre aluguéis e cobranças do proprietário recebidos, sem multa e juros
       </Card>
       <Card label="Imóveis" value={String(portfolio.properties)}>
         {portfolio.leasedProperties === 1 ? "1 locado" : `${portfolio.leasedProperties} locados`}

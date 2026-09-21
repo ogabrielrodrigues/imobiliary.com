@@ -82,6 +82,7 @@ import {
   type RentStatus,
 } from "../../domain/contract.ts";
 import type {
+  ChargeDestination,
   ChargeInput,
   ChargeKind,
   ContractDeadline,
@@ -631,7 +632,7 @@ interface ContractTermsBody {
 interface ContractBody extends ContractTermsBody {
   id: string;
   property: { id: string; address: PropertyAddressBody };
-  parties: { person_id: string; role: PartyRole; name: string; kind: PersonKind }[];
+  parties: { person_id: string; role: PartyRole; name: string; kind: PersonKind; share?: string }[];
   acknowledgments: { code: NoticeCode; acknowledged_at: string }[];
   rents: {
     id: string;
@@ -716,7 +717,7 @@ function toContract(b: ContractBody): Contract {
     ...toContractTerms(b),
     id: b.id,
     address: toPropertyAddress(b.property.address),
-    parties: b.parties.map((p) => ({ personId: p.person_id, role: p.role, name: p.name, kind: p.kind })),
+    parties: b.parties.map((p) => ({ personId: p.person_id, role: p.role, name: p.name, kind: p.kind, share: p.share ?? null })),
     acknowledgments: b.acknowledgments.map((a) => ({ code: a.code, acknowledgedAt: a.acknowledged_at })),
     rents: b.rents.map((r) => ({
       id: r.id,
@@ -771,7 +772,7 @@ function contractPayload(c: ContractInput): string {
     signed_on: c.signedOn,
     starts_on: c.startsOn,
     expires_on: c.expiresOn,
-    parties: partiesOf(c).map((p) => ({ person_id: p.personId, role: p.role })),
+    parties: partiesOf(c).map((p) => ({ person_id: p.personId, role: p.role, ...(p.share === undefined ? {} : { share: p.share }) })),
     acknowledgments: c.acknowledgments,
   });
 }
@@ -907,6 +908,7 @@ interface RentSummaryBody {
   late_fee: string;
   amount_paid: string | null;
   paid_on: string | null;
+  income_tax_withheld: string;
   status: RentViewStatus;
 }
 
@@ -918,7 +920,7 @@ interface LateFeeBody {
 }
 
 interface RentDetailBody extends RentSummaryBody {
-  charges: { id: string; kind: ChargeKind; description: string; amount: string }[];
+  charges: { id: string; kind: ChargeKind; description: string; amount: string; destination: ChargeDestination }[];
   suggested_late_fee: LateFeeBody;
 }
 
@@ -941,7 +943,10 @@ interface DashboardBody {
     open: string;
     open_count: number;
     office_fee: string;
+    paid_out: string;
+    paid_out_count: number;
   };
+  payouts: { pending: string; beneficiaries: number };
   overdue: { count: number; amount: string };
   portfolio: { properties: number; leased_properties: number; active_contracts: number; rent_roll: string };
   expiring: DeadlineBody[];
@@ -967,6 +972,7 @@ function toRentSummary(b: RentSummaryBody): RentSummary {
     lateFee: b.late_fee,
     amountPaid: b.amount_paid,
     paidOn: b.paid_on,
+    incomeTaxWithheld: b.income_tax_withheld,
     status: b.status,
   };
 }
@@ -978,7 +984,13 @@ function toLateFee(b: LateFeeBody): LateFee {
 function toRentDetail(b: RentDetailBody): RentDetail {
   return {
     ...toRentSummary(b),
-    charges: b.charges.map((c) => ({ id: c.id, kind: c.kind, description: c.description, amount: c.amount })),
+    charges: b.charges.map((c) => ({
+      id: c.id,
+      kind: c.kind,
+      description: c.description,
+      amount: c.amount,
+      destination: c.destination,
+    })),
     suggestedLateFee: toLateFee(b.suggested_late_fee),
   };
 }
@@ -987,7 +999,10 @@ function toDeadline(b: DeadlineBody): ContractDeadline {
   return { contractId: b.contract_id, registry: b.registry, address: toPropertyAddress(b.address), on: b.on };
 }
 
-/** Typed amounts leave as the API reads money; empty ones are left out for the computation. */
+/**
+ * Typed amounts leave as the API reads money; an empty late fee is left out
+ * for the computation. The amount received is never sent: the API computes it.
+ */
 function paymentPayload(p: PaymentInput): string {
   const money = (value: string) => {
     const cents = parseMoney(value);
@@ -996,7 +1011,7 @@ function paymentPayload(p: PaymentInput): string {
   return JSON.stringify({
     paid_on: p.paidOn,
     ...(p.lateFee.trim() === "" ? {} : { late_fee: money(p.lateFee) }),
-    ...(p.amountPaid.trim() === "" ? {} : { amount_paid: money(p.amountPaid) }),
+    ...(p.incomeTax.trim() === "" ? {} : { income_tax_withheld: money(p.incomeTax) }),
   });
 }
 
@@ -1065,7 +1080,16 @@ class RentsClient implements RentsGateway {
         kind: input.kind,
         description: input.description.trim(),
         amount: cents === null ? input.amount : moneyForApi(cents),
+        destination: input.destination,
       }),
+      contentType: "application/json",
+    });
+    return toRentDetail((await response.json()) as RentDetailBody);
+  }
+
+  async setChargeDestination(ctx: CallContext, id: string, chargeId: string, destination: ChargeDestination): Promise<RentDetail> {
+    const response = await this.transport.send(ctx, "PATCH", this.path(id, `/charges/${encodeURIComponent(chargeId)}`), {
+      body: JSON.stringify({ destination }),
       contentType: "application/json",
     });
     return toRentDetail((await response.json()) as RentDetailBody);
@@ -1090,7 +1114,10 @@ class RentsClient implements RentsGateway {
         open: b.month.open,
         openCount: b.month.open_count,
         officeFee: b.month.office_fee,
+        paidOut: b.month.paid_out,
+        paidOutCount: b.month.paid_out_count,
       },
+      payouts: b.payouts,
       overdue: b.overdue,
       portfolio: {
         properties: b.portfolio.properties,

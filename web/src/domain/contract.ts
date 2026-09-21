@@ -9,7 +9,7 @@
 
 import type { FieldError } from "./errors.ts";
 import type { PersonKind } from "./person.ts";
-import { parseShare, shareForApi, shareFromApi, type PropertyAddress } from "./property.ts";
+import { FULL_SHARE, parseShare, shareForApi, shareFromApi, type PropertyAddress } from "./property.ts";
 
 export type GuaranteeKind = "none" | "deposit" | "surety" | "surety_insurance" | "fund_assignment";
 export type PartyRole = "landlord" | "tenant" | "guarantor" | "guarantor_spouse";
@@ -188,6 +188,14 @@ export interface ContractInput {
   readonly guarantorIds: readonly string[];
   readonly guarantorSpouseIds: readonly string[];
   readonly acknowledgments: readonly NoticeCode[];
+  /**
+   * Each landlord's share as typed ("50", "33,3333"), by person. Sent only
+   * when the landlords are not exactly the property's owners, whose own
+   * shares decide otherwise.
+   */
+  readonly landlordShares: Readonly<Record<string, string>>;
+  /** The chosen property's owners, to tell whether shares are needed. Never sent. */
+  readonly propertyOwnerIds: readonly string[];
 }
 
 export interface ContractParty {
@@ -195,6 +203,8 @@ export interface ContractParty {
   readonly role: PartyRole;
   readonly name: string;
   readonly kind: PersonKind;
+  /** A landlord's share as the API writes it ("50.00"), when the contract records one. */
+  readonly share: string | null;
 }
 
 export interface Rent {
@@ -295,6 +305,8 @@ export function emptyContract(): ContractInput {
     guarantorIds: [],
     guarantorSpouseIds: [],
     acknowledgments: [],
+    landlordShares: {},
+    propertyOwnerIds: [],
   };
 }
 
@@ -321,13 +333,38 @@ export function contractToInput(c: Contract): ContractInput {
     guarantorIds: ids("guarantor"),
     guarantorSpouseIds: ids("guarantor_spouse"),
     acknowledgments: c.acknowledgments.map((a) => a.code),
+    landlordShares: Object.fromEntries(
+      c.parties.filter((p) => p.role === "landlord" && p.share !== null).map((p) => [p.personId, shareFromApi(p.share ?? "")]),
+    ),
+    propertyOwnerIds: [],
   };
 }
 
-/** The parties in the order the API keeps them: landlords, tenants, guarantors. */
-export function partiesOf(c: ContractInput): { personId: string; role: PartyRole }[] {
+/**
+ * Whether the landlords need a share each: they are not exactly the
+ * property's owners (a usufructuary, one co-owner alone). Mirrors
+ * SameLandlordsAsOwners in Go. Unknown owners ask for nothing.
+ */
+export function landlordSharesNeeded(c: Pick<ContractInput, "landlordIds" | "propertyOwnerIds">): boolean {
+  if (c.propertyOwnerIds.length === 0 || c.landlordIds.length === 0) return false;
+  if (c.landlordIds.length !== c.propertyOwnerIds.length) return true;
+  return c.landlordIds.some((id) => !c.propertyOwnerIds.includes(id));
+}
+
+/**
+ * The parties in the order the API keeps them: landlords, tenants, guarantors.
+ * A landlord carries its share only when shares are needed.
+ */
+export function partiesOf(c: ContractInput): { personId: string; role: PartyRole; share?: string }[] {
+  const needed = landlordSharesNeeded(c);
+  const share = (personId: string) => {
+    // A single landlord holds the whole rent, whatever a hidden field says.
+    if (needed && c.landlordIds.length === 1) return { share: "100" };
+    const millionths = parseShare(c.landlordShares[personId] ?? "");
+    return needed && millionths !== null ? { share: shareForApi(millionths) } : {};
+  };
   return [
-    ...c.landlordIds.map((personId) => ({ personId, role: "landlord" as const })),
+    ...c.landlordIds.map((personId) => ({ personId, role: "landlord" as const, ...share(personId) })),
     ...c.tenantIds.map((personId) => ({ personId, role: "tenant" as const })),
     ...c.guarantorIds.map((personId) => ({ personId, role: "guarantor" as const })),
     ...c.guarantorSpouseIds.map((personId) => ({ personId, role: "guarantor_spouse" as const })),
@@ -341,7 +378,13 @@ export type ContractStep = "property" | "parties" | "terms" | "review";
 
 export function stepOfField(field: string): ContractStep {
   if (field === "propertyId" || field === "registry" || field === "property_id") return "property";
-  if (field.startsWith("parties") || /Ids$/.test(field) || field === "guaranteeKind" || field === "advanceRent") {
+  if (
+    field.startsWith("parties") ||
+    /Ids$/.test(field) ||
+    field === "landlordShares" ||
+    field === "guaranteeKind" ||
+    field === "advanceRent"
+  ) {
     return "parties";
   }
   if (field === "acknowledgments" || field === "rents" || field === "terminated_on") return "review";
@@ -391,6 +434,14 @@ export function validateContract(c: ContractInput): FieldError[] {
     add("tenantIds", "A mesma pessoa não pode ser locadora e locatária.");
   }
   if (partiesOf(c).length > MAX_PARTIES) add("tenantIds", `Informe no máximo ${MAX_PARTIES} partes no total.`);
+  if (landlordSharesNeeded(c) && c.landlordIds.length > 1) {
+    const shares = c.landlordIds.map((id) => parseShare(c.landlordShares[id] ?? ""));
+    if (shares.some((v) => v === null || v <= 0 || v > FULL_SHARE)) {
+      add("landlordShares", "Informe a cota de cada locador, entre 0 e 100.");
+    } else if (shares.reduce<number>((sum, v) => sum + (v ?? 0), 0) !== FULL_SHARE) {
+      add("landlordShares", "As cotas dos locadores precisam somar 100%.");
+    }
+  }
 
   if (c.advanceRent === null) add("advanceRent", "Informe se o aluguel é antecipado.");
 
@@ -445,6 +496,7 @@ export function contractFormField(apiField: string): string {
     starts_on: "startsOn",
     expires_on: "expiresOn",
   };
+  if (/^parties\[\d+\]\.share$/.test(apiField)) return "landlordShares";
   if (apiField.startsWith("parties")) return "parties";
   return map[apiField] ?? apiField;
 }
@@ -468,6 +520,11 @@ export function translateContractProblem(problem: FieldError): FieldError {
     "a guarantor must be an individual": "Fiadores e cônjuges precisam ser pessoas físicas.",
     "a tenant cannot guarantee their own lease": "Um locatário não pode ser fiador do próprio contrato.",
     "a person cannot be landlord and tenant of the same lease": "A mesma pessoa não pode ser locadora e locatária.",
+    "is required when the landlords are not the property's owners":
+      "Os locadores não são exatamente os proprietários do imóvel: informe a cota de cada um.",
+    "must be greater than 0 and at most 100": "Informe a cota de cada locador, entre 0 e 100.",
+    "the landlords' shares must add up to 100": "As cotas dos locadores precisam somar 100%.",
+    "must be a percentage with up to four decimal places, such as 50 or 33.3333": "Use um percentual como 50 ou 33,3333.",
     "must name a guarantor with a surety guarantee": "A fiança precisa de ao menos um fiador.",
     "may have guarantors only with a surety guarantee": "Fiadores só entram quando a garantia é fiança.",
   };

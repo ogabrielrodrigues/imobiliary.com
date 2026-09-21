@@ -27,6 +27,7 @@ import type {
 } from "../domain/person.ts";
 import type { PropertiesPage, Property, PropertyInput } from "../domain/property.ts";
 import type {
+  ChargeDestination,
   ChargeInput,
   Dashboard,
   PaymentInput,
@@ -231,6 +232,8 @@ export interface RentsGateway {
   reverse(ctx: CallContext, id: string): Promise<RentDetail>;
   addCharge(ctx: CallContext, id: string, input: ChargeInput): Promise<RentDetail>;
   removeCharge(ctx: CallContext, id: string, chargeId: string): Promise<RentDetail>;
+  /** Also on a paid rent, until it is in a payout. */
+  setChargeDestination(ctx: CallContext, id: string, chargeId: string, destination: ChargeDestination): Promise<RentDetail>;
   dashboard(ctx: CallContext): Promise<Dashboard>;
 }
 

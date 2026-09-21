@@ -11,6 +11,7 @@ import {
   translateRentProblem,
   validateCharge,
   validatePayment,
+  type ChargeDestination,
   type ChargeInput,
   type Dashboard,
   type PaymentInput,
@@ -117,6 +118,20 @@ export const removeCharge = createServerFn({ method: "POST" })
       assertSameOrigin();
       return translated(() =>
         sessions().authorize(callContext(), (ctx) => api().rents.removeCharge(ctx, data.id, data.chargeId)),
+      );
+    }),
+  );
+
+/** Also on a paid rent, whose owners' lines the API writes again. */
+export const setChargeDestination = createServerFn({ method: "POST" })
+  .validator((input: { readonly id: string; readonly chargeId: string; readonly destination: ChargeDestination }) => input)
+  .handler(async ({ data }): Promise<Result<RentDetail>> =>
+    attempt(async () => {
+      assertSameOrigin();
+      return translated(() =>
+        sessions().authorize(callContext(), (ctx) =>
+          api().rents.setChargeDestination(ctx, data.id, data.chargeId, data.destination),
+        ),
       );
     }),
   );

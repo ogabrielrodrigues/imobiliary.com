@@ -20,15 +20,20 @@ import { Button } from "@/components/ui/button";
 import { formatDate, formatMoney } from "@/domain/contract";
 import { addressLine, addressPlace } from "@/domain/property";
 import {
+  CHARGE_DESTINATIONS,
   CHARGE_KINDS,
   chargeLabel,
+  suggestedDestination,
   todayInSaoPaulo,
   validateCharge,
+  type ChargeDestination,
   type ChargeInput,
   type ChargeKind,
   type RentDetail,
 } from "@/domain/rent";
-import { addCharge, getRent, removeCharge, reversePayment } from "@/server/rents";
+import { addCharge, getRent, removeCharge, reversePayment, setChargeDestination } from "@/server/rents";
+
+const DESTINATION_OPTIONS: readonly (readonly [string, string])[] = CHARGE_DESTINATIONS.map(([value, label]) => [value, label]);
 
 export const Route = createFileRoute("/_app/alugueis/$rentId")({
   loader: ({ params }) => getRent({ data: params.rentId }),
@@ -109,6 +114,9 @@ function RentPage() {
           {paid ? (
             <>
               <Row label="Multa e juros registrados">{formatMoney(rent.lateFee)}</Row>
+              {rent.incomeTaxWithheld !== "0.00" && (
+                <Row label="IRRF retido pelo locatário">− {formatMoney(rent.incomeTaxWithheld)}</Row>
+              )}
               <Row label={`Recebido em ${formatDate(rent.paidOn ?? "")}`}>{formatMoney(rent.amountPaid ?? "0.00")}</Row>
             </>
           ) : (
@@ -144,7 +152,7 @@ function Section({ title, children }: { readonly title: string; readonly childre
   );
 }
 
-const EMPTY_CHARGE: ChargeInput = { kind: "condominium", description: "", amount: "" };
+const EMPTY_CHARGE: ChargeInput = { kind: "condominium", description: "", amount: "", destination: "third_party" };
 
 function Charges({ rent }: { readonly rent: RentDetail }) {
   const router = useRouter();
@@ -173,6 +181,16 @@ function Charges({ rent }: { readonly rent: RentDetail }) {
     await router.invalidate();
   }
 
+  async function onDestination(chargeId: string, destination: ChargeDestination) {
+    setFailure(null);
+    const result = await setChargeDestination({ data: { id: rent.id, chargeId, destination } });
+    if (!result.ok) {
+      setFailure(result.failure);
+      return;
+    }
+    await router.invalidate();
+  }
+
   async function onRemove(chargeId: string) {
     setFailure(null);
     const result = await removeCharge({ data: { id: rent.id, chargeId } });
@@ -196,6 +214,21 @@ function Charges({ rent }: { readonly rent: RentDetail }) {
                 {c.description !== "" && <span className="text-muted-foreground">: {c.description}</span>}
               </span>
               <span className="tabular-nums">{formatMoney(c.amount)}</span>
+              <select
+                aria-label={`Destino de ${chargeLabel(c.kind)}`}
+                value={c.destination}
+                onChange={(event) => {
+                  const next = event.currentTarget.value as ChargeDestination;
+                  void onDestination(c.id, next);
+                }}
+                className="h-8 rounded-md border border-input-border bg-input px-2 text-small text-foreground outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/20"
+              >
+                {CHARGE_DESTINATIONS.map(([d, label]) => (
+                  <option key={d} value={d}>
+                    {label}
+                  </option>
+                ))}
+              </select>
               {!paid && (
                 <Button
                   type="button"
@@ -213,11 +246,14 @@ function Charges({ rent }: { readonly rent: RentDetail }) {
       )}
 
       {paid ? (
-        <p className="text-caption text-muted-foreground">As cobranças de um aluguel pago não mudam. Estorne o pagamento para alterá-las.</p>
+        <p className="text-caption text-muted-foreground">
+          Num aluguel pago, só o destino de uma cobrança muda, e o repasse é refeito. Valor e tipo mudam estornando o
+          pagamento.
+        </p>
       ) : (
         <form
           noValidate
-          className="grid gap-3 sm:grid-cols-[10rem_1fr_9rem_auto] sm:items-start"
+          className="grid gap-3 sm:grid-cols-[9rem_1fr_8rem_9rem_auto] sm:items-start"
           onSubmit={(event) => {
             event.preventDefault();
             void onAdd();
@@ -229,7 +265,8 @@ function Charges({ rent }: { readonly rent: RentDetail }) {
             onBlur={() => {}}
             onChange={(next) => {
               setFailure(null);
-              setValue((c) => ({ ...c, kind: next as ChargeKind }));
+              const kind = next as ChargeKind;
+              setValue((c) => ({ ...c, kind, destination: suggestedDestination(kind) }));
             }}
             options={CHARGE_KINDS}
           />
@@ -260,12 +297,26 @@ function Charges({ rent }: { readonly rent: RentDetail }) {
               setValue((c) => ({ ...c, amount: next }));
             }}
           />
+          <SelectField
+            label="Destino"
+            value={value.destination}
+            onBlur={() => {}}
+            onChange={(next) => {
+              setFailure(null);
+              setValue((c) => ({ ...c, destination: next as ChargeDestination }));
+            }}
+            options={DESTINATION_OPTIONS}
+          />
           <Button type="submit" variant="secondary" disabled={pending} className="sm:mt-5.5">
             <IconPlus data-icon="inline-start" aria-hidden="true" />
             {pending ? "Adicionando..." : "Adicionar"}
           </Button>
         </form>
       )}
+      <p className="text-caption text-muted-foreground">
+        Terceiro: o escritório repassa ao condomínio ou à concessionária, fora do repasse e da taxa. Proprietário: entra no
+        repasse e na base da taxa de administração.
+      </p>
       {failure !== null && messageFor(failure, "description") === undefined && messageFor(failure, "amount") === undefined && (
         <p role="alert" className="text-small text-destructive-soft">
           {failure.kind === "validation" ? failure.fields[0]?.message : summaryOf(failure)}
