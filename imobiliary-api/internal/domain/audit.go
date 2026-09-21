@@ -13,6 +13,7 @@ type AuditAction string
 
 const (
 	ActionOrganizationCreated   AuditAction = "organization.created"
+	ActionOrganizationRenamed   AuditAction = "organization.renamed"
 	ActionAdministratorUpdated  AuditAction = "organization.administrator_updated"
 	ActionUserRegistered        AuditAction = "user.registered"
 	ActionUserSignedIn          AuditAction = "user.signed_in"

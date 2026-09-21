@@ -1728,8 +1728,10 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       2.400,00 received), balance R$ 1.885,00, a typed debit, payout
       2026/0001 by PIX, both receipts, the refused reversal, undo, a payout's
       document draft with 123 fields.
-    - Noticed, not changed: renaming the office is audited as
-      `organization.created` (`usecase/organization.go`, Rename).
+    - Renaming the office was audited as `organization.created`; it is
+      `organization.renamed` now, and the audit-trail integration test
+      counts one creation. No rename had been recorded in the development
+      database, so no row carries the old label.
 
 ### Next step
 

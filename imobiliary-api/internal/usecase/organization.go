@@ -87,7 +87,7 @@ func (o *Organizations) Rename(ctx context.Context, caller *Caller, name string)
 		return o.audit.recordWith(ctx, repos.Audit, AuditEntry{
 			OrganizationID: &caller.Organization.ID,
 			ActorID:        &caller.User.ID,
-			Action:         domain.ActionOrganizationCreated,
+			Action:         domain.ActionOrganizationRenamed,
 			EntityType:     "organization",
 			EntityID:       &caller.Organization.ID,
 			Fields:         []string{"name"},

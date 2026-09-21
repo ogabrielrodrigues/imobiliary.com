@@ -713,6 +713,8 @@ func TestTheAuditTrailIsWrittenAndCannotBeRewritten(t *testing.T) {
 	a := newAPI(t)
 	admin := a.register("ana@example.com", "Ana", "Central")
 	a.enrollTOTP(admin)
+	a.expect(http.StatusNoContent, http.MethodPatch, "/v1/organization", admin.access,
+		map[string]any{"name": "Central Imóveis"})
 
 	var actions []string
 	rows, err := a.db.QueryForTest(t.Context(),
@@ -731,10 +733,21 @@ func TestTheAuditTrailIsWrittenAndCannotBeRewritten(t *testing.T) {
 
 	for _, want := range []domain.AuditAction{
 		domain.ActionOrganizationCreated, domain.ActionUserRegistered, domain.ActionTOTPEnabled,
+		domain.ActionOrganizationRenamed,
 	} {
 		if !contains(actions, string(want)) {
 			t.Errorf("the trail has no %s: %v", want, actions)
 		}
+	}
+	// A rename is its own event, not a second creation.
+	created := 0
+	for _, action := range actions {
+		if action == string(domain.ActionOrganizationCreated) {
+			created++
+		}
+	}
+	if created != 1 {
+		t.Errorf("the office was created %d times: %v", created, actions)
 	}
 
 	// An audit row carries no secret and no personal value, only names.
