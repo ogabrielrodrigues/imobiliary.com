@@ -195,19 +195,20 @@ func serve(logger *slog.Logger) error {
 		InvitationTTL: cfg.InvitationTTL,
 		Logger:        logger,
 	})
+	saoPaulo, err := time.LoadLocation("America/Sao_Paulo")
+	if err != nil {
+		return fmt.Errorf("load America/Sao_Paulo: %w", err)
+	}
 	people := usecase.NewPeople(usecase.PeopleConfig{
-		Scope:  db,
-		Sealer: sealer,
-		Logger: logger,
+		Scope:    db,
+		Sealer:   sealer,
+		Location: saoPaulo,
+		Logger:   logger,
 	})
 	properties := usecase.NewProperties(usecase.PropertiesConfig{
 		Scope:  db,
 		Logger: logger,
 	})
-	saoPaulo, err := time.LoadLocation("America/Sao_Paulo")
-	if err != nil {
-		return fmt.Errorf("load America/Sao_Paulo: %w", err)
-	}
 	contracts := usecase.NewContracts(usecase.ContractsConfig{
 		Scope:    db,
 		Location: saoPaulo,

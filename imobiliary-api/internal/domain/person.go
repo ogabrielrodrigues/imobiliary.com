@@ -142,6 +142,9 @@ type Person struct {
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	// AnonymizedAt is when the office anonymised the record at the end of
+	// the legal retention; nil otherwise. An anonymised record is never edited.
+	AnonymizedAt *time.Time
 }
 
 // PersonSummary is a row of a list: enough to recognise someone, and nothing

@@ -259,6 +259,17 @@ type PersonRepository interface {
 	SetSpouse(ctx context.Context, personID uuid.UUID, spouseID *uuid.UUID, at time.Time) error
 	// Delete reports domain.ErrInUse when something still links to the person.
 	Delete(ctx context.Context, id uuid.UUID) error
+	// RetentionCandidates are the people not yet anonymised who own no
+	// property, are party to no contract running on today or later, have no
+	// ledger line waiting for a payout, and had some link to the office; each
+	// with the day of their last contract end, ledger line or payout.
+	RetentionCandidates(ctx context.Context, today domain.Date) ([]RetentionCandidate, error)
+	// Edges are the links between people: marriages and representatives.
+	Edges(ctx context.Context) ([]PersonEdge, error)
+	// PartyContracts are the contracts any of the people is party to.
+	PartyContracts(ctx context.Context, personIDs []uuid.UUID) ([]PartyContract, error)
+	// Anonymize clears what identifies a person and marks the record.
+	Anonymize(ctx context.Context, id uuid.UUID, at time.Time) error
 }
 
 // PropertyQuery filters and pages the list of properties.

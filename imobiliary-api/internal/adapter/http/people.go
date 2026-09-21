@@ -52,6 +52,7 @@ type personBody struct {
 	Version           int                   `json:"version"`
 	CreatedAt         time.Time             `json:"created_at"`
 	UpdatedAt         time.Time             `json:"updated_at"`
+	AnonymizedAt      *time.Time            `json:"anonymized_at"`
 }
 
 func presentPerson(p *domain.Person) personBody {
@@ -60,6 +61,7 @@ func presentPerson(p *domain.Person) personBody {
 		Nationality: p.Nationality, MaritalStatus: p.MaritalStatus, PropertyRegime: p.PropertyRegime,
 		SpouseID: optionalID(p.SpouseID), Occupation: p.Occupation, Gender: p.Gender,
 		TradeName: p.TradeName, Version: p.Version, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
+		AnonymizedAt:      p.AnonymizedAt,
 		RepresentativeIDs: make([]string, 0, len(p.RepresentativeIDs)),
 		Addresses:         make([]addressBody, 0, len(p.Addresses)),
 	}
@@ -329,4 +331,64 @@ func ifMatchVersion(r *http.Request) int {
 		return 0
 	}
 	return n
+}
+
+// --- anonymisation ---------------------------------------------------------------
+
+type candidateContractBody struct {
+	ID             string `json:"id"`
+	Registry       string `json:"registry"`
+	DocumentsCanGo bool   `json:"documents_can_go"`
+}
+
+type candidatePayoutBody struct {
+	ID     string `json:"id"`
+	Number string `json:"number"`
+}
+
+type anonymizationCandidateBody struct {
+	Person         personRefBody           `json:"person"`
+	LastActivityOn domain.Date             `json:"last_activity_on"`
+	RetentionEnded domain.Date             `json:"retention_ended_on"`
+	Contracts      []candidateContractBody `json:"contracts"`
+	Payouts        []candidatePayoutBody   `json:"payouts"`
+}
+
+func (s *Server) handleAnonymizationCandidates(w http.ResponseWriter, r *http.Request) {
+	found, err := s.people.AnonymizationCandidates(r.Context(), callerFrom(r.Context()))
+	if err != nil {
+		writeError(w, s.logger, err)
+		return
+	}
+	out := struct {
+		Candidates []anonymizationCandidateBody `json:"candidates"`
+	}{Candidates: make([]anonymizationCandidateBody, 0, len(found))}
+	for _, c := range found {
+		body := anonymizationCandidateBody{
+			Person:         personRefBody{ID: c.Person.ID.String(), Name: c.Person.Name, Kind: c.Person.Kind},
+			LastActivityOn: c.LastActivity, RetentionEnded: c.RetentionEnded,
+			Contracts: make([]candidateContractBody, 0, len(c.Contracts)),
+			Payouts:   make([]candidatePayoutBody, 0, len(c.Payouts)),
+		}
+		for _, k := range c.Contracts {
+			body.Contracts = append(body.Contracts, candidateContractBody{ID: k.ID.String(), Registry: k.Registry, DocumentsCanGo: k.DocumentsCanGo})
+		}
+		for _, p := range c.Payouts {
+			body.Payouts = append(body.Payouts, candidatePayoutBody{ID: p.ID.String(), Number: p.Number})
+		}
+		out.Candidates = append(out.Candidates, body)
+	}
+	writeJSON(w, s.logger, http.StatusOK, out)
+}
+
+func (s *Server) handleAnonymizePerson(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.personID(w, r)
+	if !ok {
+		return
+	}
+	if err := s.people.Anonymize(r.Context(), callerFrom(r.Context()), id); err != nil {
+		writeError(w, s.logger, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Imobiliary API
-  version: "0.11.0"
+  version: "0.12.0"
   summary: Rental property management for brokers, small agencies and owners.
   description: |
     The API behind the Imobiliary platform. It covers identity and the office
@@ -985,6 +985,88 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/people/anonymization-candidates:
+    get:
+      tags: [People]
+      summary: Who is past the legal retention
+      description: |
+        People not yet anonymised who own no property, are party to no
+        contract running today or later, have no ledger line waiting for a
+        payout, and whose last contract end, ledger line and payout are past
+        five years counted from the first day of the following year (Código
+        Tributário Nacional art. 173, I). Someone linked as a spouse or a
+        representative to a person who is not listed stays out. Each comes
+        with the contracts they were party to, saying whether every other party
+        is listed too (so the contract's generated documents can go), and the
+        payouts made to them. Any member may read it.
+      operationId: listAnonymizationCandidates
+      responses:
+        "200":
+          description: The candidates, by name.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [candidates]
+                properties:
+                  candidates:
+                    type: array
+                    items:
+                      type: object
+                      required: [person, last_activity_on, retention_ended_on, contracts, payouts]
+                      properties:
+                        person: { $ref: "#/components/schemas/PersonRef" }
+                        last_activity_on: { $ref: "#/components/schemas/Date" }
+                        retention_ended_on: { $ref: "#/components/schemas/Date" }
+                        contracts:
+                          type: array
+                          items:
+                            type: object
+                            required: [id, registry, documents_can_go]
+                            properties:
+                              id: { $ref: "#/components/schemas/ID" }
+                              registry: { type: string }
+                              documents_can_go: { type: boolean }
+                        payouts:
+                          type: array
+                          items:
+                            type: object
+                            required: [id, number]
+                            properties:
+                              id: { $ref: "#/components/schemas/ID" }
+                              number: { type: string, examples: ["2019/0004"] }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/people/{personID}/anonymization:
+    parameters:
+      - name: personID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+    post:
+      tags: [People]
+      summary: Anonymise a person past the retention
+      description: |
+        Only a person still listed as a candidate. The name becomes "Pessoa
+        anonimizada"; the CPF or CNPJ and its lookup index, e-mail, phone,
+        birth date, nationality, occupation, marital details, trade name,
+        addresses and representative links are cleared, so the document can
+        be registered again as someone else. The record stays, so contracts,
+        rents and the ledger still point at it. Administrators only; audited
+        as `person.anonymized` without values. Anything else is a `422` on
+        `person`. Generated documents live in the document service and are
+        cleared there.
+      operationId: anonymizePerson
+      responses:
+        "204": { description: Anonymised. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
@@ -2640,6 +2722,9 @@ components:
             version: { type: integer, minimum: 1 }
             created_at: { $ref: "#/components/schemas/Instant" }
             updated_at: { $ref: "#/components/schemas/Instant" }
+            anonymized_at:
+              oneOf: [{ $ref: "#/components/schemas/Instant" }, { type: "null" }]
+              description: When the office anonymised the record at the end of the legal retention. An anonymised record is never edited.
 
     PersonSummary:
       type: object

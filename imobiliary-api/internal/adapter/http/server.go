@@ -170,6 +170,10 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /v1/people/{personID}", authenticated(http.HandlerFunc(s.handleGetPerson)))
 	mux.Handle("PUT /v1/people/{personID}", write(http.HandlerFunc(s.handleUpdatePerson)))
 	mux.Handle("DELETE /v1/people/{personID}", write(http.HandlerFunc(s.handleDeletePerson)))
+	// Anonymisation at the end of the legal retention: every member sees who is
+	// due, and an administrator confirms each one.
+	mux.Handle("GET /v1/people/anonymization-candidates", authenticated(http.HandlerFunc(s.handleAnonymizationCandidates)))
+	mux.Handle("POST /v1/people/{personID}/anonymization", admin(http.HandlerFunc(s.handleAnonymizePerson)))
 
 	// Properties, likewise.
 	mux.Handle("GET /v1/properties", authenticated(http.HandlerFunc(s.handleListProperties)))
