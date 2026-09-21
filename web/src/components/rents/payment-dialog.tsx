@@ -20,6 +20,7 @@ import { addressLine } from "@/domain/property";
 import {
   RENT_STATUS,
   amountReceived,
+  splitPartial,
   todayInSaoPaulo,
   validatePayment,
   type PaymentInput,
@@ -31,29 +32,45 @@ import { cn } from "@/lib/utils";
 import { payRent, previewPayment } from "@/server/rents";
 
 /** A rent's situation today, in words and not in colour alone. */
-export function RentStatusBadge({ status, className }: { readonly status: RentStatus; readonly className?: string }) {
+export function RentStatusBadge({
+  status,
+  partial = false,
+  className,
+}: {
+  readonly status: RentStatus;
+  /** Money came in and something is still open. */
+  readonly partial?: boolean;
+  readonly className?: string;
+}) {
+  const badge = cn(
+    "inline-flex shrink-0 items-center rounded-md border px-2 py-0.5 font-mono text-micro tracking-[0.1em] uppercase",
+  );
   return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center rounded-md border px-2 py-0.5 font-mono text-micro tracking-[0.1em] uppercase",
-        status === "paid" && "border-success/35 bg-success/5 text-success-soft",
-        status === "overdue" && "border-destructive/35 bg-destructive/5 text-destructive-soft",
-        status === "pending" && "border-border text-muted-foreground",
-        className,
-      )}
-    >
-      {RENT_STATUS[status]}
+    <span className={cn("inline-flex shrink-0 items-center gap-1.5", className)}>
+      <span
+        className={cn(
+          badge,
+          status === "paid" && "border-success/35 bg-success/5 text-success-soft",
+          status === "overdue" && "border-destructive/35 bg-destructive/5 text-destructive-soft",
+          status === "pending" && "border-border text-muted-foreground",
+        )}
+      >
+        {RENT_STATUS[status]}
+      </span>
+      {partial && <span className={cn(badge, "border-docs/35 bg-docs/5 text-docs-soft")}>Parcial</span>}
     </span>
   );
 }
 
 /**
- * Recording a payment in full.
+ * Recording a payment, of everything or of a part.
  *
- * The API computes the late fee for the day typed, shown as it changes; the
- * office can type over it (a waived fee is 0). The amount received is not
- * typed: it is what the owners' payout is made of, so it follows the rent,
- * the charges, the late fee and the income tax a company tenant withheld.
+ * The API computes what is owed on the day typed, shown as it changes; the
+ * office can type over the interest and penalty (0 forgives them). Paying
+ * everything, the amount received is not typed: it follows what is open, the
+ * late fee and the income tax a company tenant withheld. Receiving a part,
+ * the amount is typed, and the dialog shows what it settles: the interest and
+ * penalty first, then the rent and charges.
  */
 export function PaymentDialog({
   rent,
@@ -68,8 +85,9 @@ export function PaymentDialog({
   const [open, setOpen] = useState(false);
   // Mounted only once asked for: a Base UI dialog cannot render on the server.
   const [mounted, setMounted] = useState(false);
-  const [value, setValue] = useState<PaymentInput>({ paidOn: "", lateFee: "", incomeTax: "" });
+  const [value, setValue] = useState<PaymentInput>({ paidOn: "", amount: "", lateFee: "", incomeTax: "" });
   const [withheld, setWithheld] = useState(false);
+  const [partial, setPartial] = useState(false);
   const [attempted, setAttempted] = useState(false);
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
@@ -93,14 +111,24 @@ export function PaymentDialog({
     };
   }, [open, paidOn, rent.id, today]);
 
-  const local = attempted ? validatePayment(value, today, rent.amount) : [];
+  // What the tenant can still withhold: the rent less earlier withholdings.
+  const taxRoom = formatMoneyInput(Math.max((parseMoney(rent.amount) ?? 0) - (parseMoney(rent.incomeTaxWithheld) ?? 0), 0));
+  const payment: PaymentInput = { ...value, amount: partial ? value.amount : "", incomeTax: withheld ? value.incomeTax : "" };
+  const problems = () => {
+    const found = validatePayment(payment, today, taxRoom);
+    if (partial && value.amount.trim() === "") found.push({ field: "amount", message: "Informe o valor recebido." });
+    return found;
+  };
+  const local = attempted ? problems() : [];
   const error = (field: string) => messageFor(failure, field) ?? local.find((p) => p.field === field)?.message;
   const ready = preview?.ok ? preview.value : null;
 
   // What will be recorded: the late fee typed or computed, less the tax.
   const fee = value.lateFee.trim() !== "" ? value.lateFee : ready ? formatMoneyInput(parseMoney(ready.lateFee.total) ?? 0) : null;
-  const tax = withheld ? value.incomeTax : "";
-  const received = fee === null ? null : amountReceived(rent.due, fee, tax);
+  const tax = payment.incomeTax;
+  const openAmount = ready?.principal ?? rent.outstanding;
+  const received = fee === null ? null : amountReceived(openAmount, fee, tax);
+  const split = partial && fee !== null && value.amount.trim() !== "" ? splitPartial(value.amount, tax, fee, openAmount) : null;
   const taxCents = tax.trim() === "" ? 0 : parseMoney(tax);
 
   function change(patch: Partial<PaymentInput>) {
@@ -110,8 +138,7 @@ export function PaymentDialog({
 
   async function onSave() {
     setAttempted(true);
-    const payment = { ...value, incomeTax: withheld ? value.incomeTax : "" };
-    if (validatePayment(payment, today, rent.amount).length > 0) return;
+    if (problems().length > 0) return;
     setPending(true);
     setFailure(null);
     const result = await payRent({ data: { id: rent.id, payment } });
@@ -131,8 +158,9 @@ export function PaymentDialog({
         variant={size === "sm" ? "secondary" : "default"}
         size={size}
         onClick={() => {
-          setValue({ paidOn: today, lateFee: "", incomeTax: "" });
+          setValue({ paidOn: today, amount: "", lateFee: "", incomeTax: "" });
           setWithheld(false);
+          setPartial(false);
           setAttempted(false);
           setFailure(null);
           setPreview(null);
@@ -150,8 +178,7 @@ export function PaymentDialog({
             <DialogHeader>
               <DialogTitle>Registrar pagamento</DialogTitle>
               <DialogDescription>
-                {addressLine(rent.contract.address)}, parcela {rent.sequence}, vencimento em {formatDate(rent.dueOn)}. O
-                pagamento é do valor inteiro.
+                {addressLine(rent.contract.address)}, parcela {rent.sequence}, vencimento em {formatDate(rent.dueOn)}.
               </DialogDescription>
             </DialogHeader>
 
@@ -179,14 +206,21 @@ export function PaymentDialog({
               </div>
 
               <dl aria-live="polite" className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 rounded-md border border-border px-3 py-2.5 text-small tabular-nums">
-                <dt className="text-muted-foreground">Aluguel{rent.chargesTotal !== "0.00" && " e cobranças"}</dt>
-                <dd className="text-right">{formatMoney(rent.due)}</dd>
+                <dt className="text-muted-foreground">
+                  Aluguel{rent.chargesTotal !== "0.00" && " e cobranças"}
+                  {rent.partiallyPaid && " em aberto"}
+                </dt>
+                <dd className="text-right">{formatMoney(openAmount)}</dd>
                 {ready !== null && ready.lateFee.daysLate > 0 && (
                   <>
-                    <dt className="text-muted-foreground">Multa</dt>
-                    <dd className="text-right">{formatMoney(ready.lateFee.penalty)}</dd>
+                    {ready.lateFee.penalty !== "0.00" && (
+                      <>
+                        <dt className="text-muted-foreground">Multa</dt>
+                        <dd className="text-right">{formatMoney(ready.lateFee.penalty)}</dd>
+                      </>
+                    )}
                     <dt className="text-muted-foreground">
-                      Juros de {ready.lateFee.daysLate} {ready.lateFee.daysLate === 1 ? "dia" : "dias"}
+                      Juros{rent.partiallyPaid ? " em aberto" : ` de ${ready.lateFee.daysLate} ${ready.lateFee.daysLate === 1 ? "dia" : "dias"}`}
                     </dt>
                     <dd className="text-right">{formatMoney(ready.lateFee.interest)}</dd>
                   </>
@@ -203,15 +237,57 @@ export function PaymentDialog({
                     <dd className="text-right">− R$ {formatMoneyInput(taxCents)}</dd>
                   </>
                 )}
-                {received !== null && (
+                {!partial && received !== null && (
                   <>
                     <dt className="font-medium">Valor recebido</dt>
                     <dd className="text-right font-medium">R$ {formatMoneyInput(received)}</dd>
                   </>
                 )}
+                {split !== null && !split.exceeds && (
+                  <>
+                    <dt className="text-muted-foreground">Quita de multa e juros</dt>
+                    <dd className="text-right">R$ {formatMoneyInput(split.lateFee)}</dd>
+                    <dt className="text-muted-foreground">Abate do aluguel{rent.chargesTotal !== "0.00" && " e cobranças"}</dt>
+                    <dd className="text-right">R$ {formatMoneyInput(split.principal)}</dd>
+                    <dt className="font-medium">Fica em aberto</dt>
+                    <dd className="text-right font-medium">R$ {formatMoneyInput(split.remaining)}</dd>
+                  </>
+                )}
               </dl>
 
+              <div className="flex items-start gap-2.5">
+                <Checkbox
+                  id={`partial-${rent.id}`}
+                  checked={partial}
+                  onCheckedChange={(checked) => {
+                    setFailure(null);
+                    setPartial(checked === true);
+                  }}
+                />
+                <Label htmlFor={`partial-${rent.id}`} className="flex flex-col items-start gap-0.5 text-small font-normal">
+                  Receber só uma parte
+                  <span className="text-caption text-muted-foreground">
+                    Quita primeiro multa e juros, depois o aluguel. O que faltar continua em aberto, com juros sobre o restante.
+                  </span>
+                </Label>
+              </div>
+
               <div className="grid gap-4 sm:grid-cols-2">
+                {partial && (
+                  <FormField
+                    name="amount"
+                    label="Valor recebido (R$)"
+                    placeholder="800,00"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    value={value.amount}
+                    error={error("amount") ?? (split?.exceeds === true ? "O valor passa do que falta." : undefined)}
+                    onChange={(event) => {
+                      const next = event.currentTarget.value;
+                      change({ amount: next });
+                    }}
+                  />
+                )}
                 <FormField
                   name="late_fee"
                   label="Multa e juros (R$)"
@@ -256,7 +332,7 @@ export function PaymentDialog({
                 <Label htmlFor={`withheld-${rent.id}`} className="flex flex-col items-start gap-0.5 text-small font-normal">
                   O locatário é empresa e reteve imposto de renda
                   <span className="text-caption text-muted-foreground">
-                    O aluguel conta como pago inteiro, e o repasse desconta o IRRF.
+                    O valor retido conta como pago, e o repasse desconta o IRRF.
                   </span>
                 </Label>
               </div>

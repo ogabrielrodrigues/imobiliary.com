@@ -649,6 +649,7 @@ interface ContractBody extends ContractTermsBody {
     amount_paid: string | null;
     paid_on: string | null;
     status: RentStatus;
+    partially_paid: boolean;
   }[];
   amendments: {
     id: string;
@@ -734,6 +735,7 @@ function toContract(b: ContractBody): Contract {
       amountPaid: r.amount_paid,
       paidOn: r.paid_on,
       status: r.status,
+      partiallyPaid: r.partially_paid,
     })),
     amendments: b.amendments.map((a) => ({
       id: a.id,
@@ -914,6 +916,9 @@ interface RentSummaryBody {
   amount_paid: string | null;
   paid_on: string | null;
   income_tax_withheld: string;
+  principal_paid: string;
+  outstanding: string;
+  partially_paid: boolean;
   status: RentViewStatus;
 }
 
@@ -926,7 +931,17 @@ interface LateFeeBody {
 
 interface RentDetailBody extends RentSummaryBody {
   charges: { id: string; kind: ChargeKind; description: string; amount: string; destination: ChargeDestination }[];
+  payments: {
+    id: string;
+    paid_on: string;
+    amount: string;
+    late_fee: string;
+    waived: string;
+    principal: string;
+    income_tax_withheld: string;
+  }[];
   suggested_late_fee: LateFeeBody;
+  owed_today: string;
 }
 
 interface DeadlineBody {
@@ -978,6 +993,9 @@ function toRentSummary(b: RentSummaryBody): RentSummary {
     amountPaid: b.amount_paid,
     paidOn: b.paid_on,
     incomeTaxWithheld: b.income_tax_withheld,
+    principalPaid: b.principal_paid,
+    outstanding: b.outstanding,
+    partiallyPaid: b.partially_paid,
     status: b.status,
   };
 }
@@ -996,7 +1014,17 @@ function toRentDetail(b: RentDetailBody): RentDetail {
       amount: c.amount,
       destination: c.destination,
     })),
+    payments: b.payments.map((p) => ({
+      id: p.id,
+      paidOn: p.paid_on,
+      amount: p.amount,
+      lateFee: p.late_fee,
+      waived: p.waived,
+      principal: p.principal,
+      incomeTaxWithheld: p.income_tax_withheld,
+    })),
     suggestedLateFee: toLateFee(b.suggested_late_fee),
+    owedToday: b.owed_today,
   };
 }
 
@@ -1006,7 +1034,7 @@ function toDeadline(b: DeadlineBody): ContractDeadline {
 
 /**
  * Typed amounts leave as the API reads money; an empty late fee is left out
- * for the computation. The amount received is never sent: the API computes it.
+ * for the computation, and an empty amount settles everything, computed.
  */
 function paymentPayload(p: PaymentInput): string {
   const money = (value: string) => {
@@ -1015,6 +1043,7 @@ function paymentPayload(p: PaymentInput): string {
   };
   return JSON.stringify({
     paid_on: p.paidOn,
+    ...(p.amount.trim() === "" ? {} : { amount: money(p.amount) }),
     ...(p.lateFee.trim() === "" ? {} : { late_fee: money(p.lateFee) }),
     ...(p.incomeTax.trim() === "" ? {} : { income_tax_withheld: money(p.incomeTax) }),
   });
@@ -1061,8 +1090,8 @@ class RentsClient implements RentsGateway {
       body: JSON.stringify({ paid_on: paidOn }),
       contentType: "application/json",
     });
-    const b = (await response.json()) as { late_fee: LateFeeBody; total: string };
-    return { lateFee: toLateFee(b.late_fee), total: b.total };
+    const b = (await response.json()) as { late_fee: LateFeeBody; principal: string; total: string };
+    return { lateFee: toLateFee(b.late_fee), principal: b.principal, total: b.total };
   }
 
   async pay(ctx: CallContext, id: string, input: PaymentInput): Promise<RentDetail> {

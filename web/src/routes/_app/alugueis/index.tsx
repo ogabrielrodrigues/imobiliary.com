@@ -214,10 +214,10 @@ function RentsPage() {
                   </span>
                 </Link>
                 <span className="flex flex-col items-end gap-1 tabular-nums">
-                  <span className="font-medium">{formatMoney(rent.amountPaid ?? rent.due)}</span>
+                  <span className="font-medium">{formatMoney(rent.status === "paid" ? (rent.amountPaid ?? rent.due) : rent.outstanding)}</span>
                   <span className="text-caption text-muted-foreground">{rentStatusNote(rent, today)}</span>
                 </span>
-                <RentStatusBadge status={rent.status} />
+                <RentStatusBadge status={rent.status} partial={rent.partiallyPaid} />
                 {rent.status !== "paid" && <PaymentDialog rent={rent} />}
               </li>
             ))}

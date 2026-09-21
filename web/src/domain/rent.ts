@@ -1,12 +1,13 @@
 /**
  * Instalments across contracts, payments, charges and the dashboard.
  *
- * Mirrors `internal/domain/rent.go`. The late fee is the API's to compute:
- * this module only reads what it answers and checks what a person types.
+ * Mirrors `internal/domain/rent.go` and `rent_payment.go`. The interest and
+ * penalty are the API's to compute: this module only reads what it answers,
+ * shows how a partial payment splits, and checks what a person types.
  */
 
 import type { FieldError } from "./errors.ts";
-import { parseMoney } from "./contract.ts";
+import { formatDate, formatMoney, parseMoney } from "./contract.ts";
 import type { PropertyAddress } from "./property.ts";
 
 export type RentStatus = "paid" | "overdue" | "pending";
@@ -57,12 +58,33 @@ export interface RentSummary {
   readonly chargesTotal: string;
   /** The rent with its charges. */
   readonly due: string;
+  /** The interest and penalty the payments settled. */
   readonly lateFee: string;
+  /** The sum of the payments; null before any. */
   readonly amountPaid: string | null;
+  /** The day the rent was settled; null while anything is open. */
   readonly paidOn: string | null;
   /** What a company tenant withheld as income tax; "0.00" otherwise. */
   readonly incomeTaxWithheld: string;
+  /** The part of the rent and charges settled, and the part still open. */
+  readonly principalPaid: string;
+  readonly outstanding: string;
+  /** Money came in and something is still open; the status stays pending or overdue. */
+  readonly partiallyPaid: boolean;
   readonly status: RentStatus;
+}
+
+export interface RentPayment {
+  readonly id: string;
+  readonly paidOn: string;
+  /** What came in. */
+  readonly amount: string;
+  /** Interest and penalty settled, and forgiven. */
+  readonly lateFee: string;
+  readonly waived: string;
+  /** Rent and charges settled. */
+  readonly principal: string;
+  readonly incomeTaxWithheld: string;
 }
 
 export interface Charge {
@@ -82,8 +104,12 @@ export interface LateFee {
 
 export interface RentDetail extends RentSummary {
   readonly charges: readonly Charge[];
-  /** For paying today; zero once paid. */
+  /** In the order they settle, by day. */
+  readonly payments: readonly RentPayment[];
+  /** The interest and penalty owed today; zero once paid. */
   readonly suggestedLateFee: LateFee;
+  /** Everything owed today; "0.00" once paid. */
+  readonly owedToday: string;
 }
 
 export interface RentsPage {
@@ -91,18 +117,22 @@ export interface RentsPage {
   readonly nextCursor: string | null;
 }
 
+/** What a rent owes on a day. */
 export interface PaymentPreview {
   readonly lateFee: LateFee;
+  /** The rent and charges still open. */
+  readonly principal: string;
   readonly total: string;
 }
 
 /**
- * A payment as typed. An empty late fee takes the API's computation. The
- * amount received is never typed: it is the rent, its charges and the late
- * fee, less the tax a company tenant withheld.
+ * A payment as typed. An empty amount settles everything owed on the day,
+ * computed by the API; an amount is a partial payment. An empty late fee
+ * charges the interest and penalty owed.
  */
 export interface PaymentInput {
   readonly paidOn: string;
+  readonly amount: string;
   readonly lateFee: string;
   readonly incomeTax: string;
 }
@@ -190,18 +220,23 @@ export function daysBetween(from: string, to: string): number {
 }
 
 /**
- * `rent` is the instalment's rent, the most a tenant can withhold on; left
- * out, only the API checks that limit.
+ * `taxRoom` is what the tenant can still withhold, the rent less what earlier
+ * payments withheld; left out, only the API checks that limit.
  */
-export function validatePayment(p: PaymentInput, today: string, rent?: string): FieldError[] {
+export function validatePayment(p: PaymentInput, today: string, taxRoom?: string): FieldError[] {
   const problems: FieldError[] = [];
   const add = (field: string, message: string) => problems.push({ field, message });
   if (!DATE.test(p.paidOn)) add("paidOn", "Informe a data do pagamento.");
   else if (p.paidOn > today) add("paidOn", "O pagamento não pode ter data futura.");
+  if (p.amount.trim() !== "") {
+    const amount = parseMoney(p.amount);
+    if (amount === null) add("amount", "Use um valor como 800,00.");
+    else if (amount === 0) add("amount", "O valor precisa ser maior que zero.");
+  }
   if (p.lateFee.trim() !== "" && parseMoney(p.lateFee) === null) add("lateFee", "Use um valor como 160,00 ou 0.");
   if (p.incomeTax.trim() !== "") {
     const tax = parseMoney(p.incomeTax);
-    const limit = rent === undefined ? null : parseMoney(rent);
+    const limit = taxRoom === undefined ? null : parseMoney(taxRoom);
     if (tax === null) add("incomeTax", "Use um valor como 112,50 ou 0.");
     else if (limit !== null && tax > limit) add("incomeTax", "O IRRF retido não pode passar do aluguel.");
   }
@@ -209,16 +244,45 @@ export function validatePayment(p: PaymentInput, today: string, rent?: string): 
 }
 
 /**
- * What a payment brings in, in centavos: the rent with its charges and the
- * late fee, less the tax withheld. Mirrors AmountReceived in Go; null while a
- * field cannot be read.
+ * What a payment of everything brings in, in centavos: the rent and charges
+ * still open and the late fee, less the tax withheld; null while a field
+ * cannot be read.
  */
-export function amountReceived(due: string, lateFee: string, incomeTax: string): number | null {
-  const d = parseMoney(due);
+export function amountReceived(open: string, lateFee: string, incomeTax: string): number | null {
+  const d = parseMoney(open);
   const fee = lateFee.trim() === "" ? 0 : parseMoney(lateFee);
   const tax = incomeTax.trim() === "" ? 0 : parseMoney(incomeTax);
   if (d === null || fee === null || tax === null || tax > d + fee) return null;
   return d + fee - tax;
+}
+
+/** How a partial payment settles, in centavos. */
+export interface PartialSplit {
+  /** Interest and penalty settled first. */
+  readonly lateFee: number;
+  /** Then the rent and charges. */
+  readonly principal: number;
+  /** The rent and charges left open. */
+  readonly remaining: number;
+  /** More than is owed. */
+  readonly exceeds: boolean;
+}
+
+/**
+ * Mirrors PlanPayment in Go: what came in, with the tax withheld, pays the
+ * interest and penalty charged first, then the principal. Null while a field
+ * cannot be read.
+ */
+export function splitPartial(amount: string, incomeTax: string, lateFee: string, open: string): PartialSplit | null {
+  const a = parseMoney(amount);
+  const tax = incomeTax.trim() === "" ? 0 : parseMoney(incomeTax);
+  const fee = parseMoney(lateFee);
+  const o = parseMoney(open);
+  if (a === null || tax === null || fee === null || o === null) return null;
+  const settles = a + tax;
+  const paidFee = Math.min(settles, fee);
+  const principal = settles - paidFee;
+  return { lateFee: paidFee, principal: Math.min(principal, o), remaining: Math.max(o - principal, 0), exceeds: principal > o };
 }
 
 export function validateCharge(c: ChargeInput): FieldError[] {
@@ -237,11 +301,24 @@ export function validateCharge(c: ChargeInput): FieldError[] {
 export function translateRentProblem(problem: FieldError): FieldError {
   const fields: Record<string, string> = {
     paid_on: "paidOn",
+    amount: "amount",
     late_fee: "lateFee",
     income_tax_withheld: "incomeTax",
     payment: "form",
     destination: "destination",
   };
+  const atMost = /^must be at most (\d+\.\d{2}), what is owed$/.exec(problem.message);
+  if (atMost?.[1] !== undefined) {
+    return { field: "amount", message: `O valor passa do que falta, ${formatMoney(atMost[1])}.` };
+  }
+  const feeAtMost = /^must be at most (\d+\.\d{2}), the interest and penalty owed$/.exec(problem.message);
+  if (feeAtMost?.[1] !== undefined) {
+    return { field: "lateFee", message: `Multa e juros devidos são ${formatMoney(feeAtMost[1])}; não dá para cobrar mais.` };
+  }
+  const beforeLast = /^must not be before the last payment, on (\d{4}-\d{2}-\d{2})$/.exec(problem.message);
+  if (beforeLast?.[1] !== undefined) {
+    return { field: "paidOn", message: `A data não pode ser anterior à do último pagamento, ${formatDate(beforeLast[1])}.` };
+  }
   const inPayout = /^the rent is in payout (\d{4}\/\d{4}); undo the payout first$/.exec(problem.message);
   if (inPayout !== null) {
     return {
@@ -251,13 +328,17 @@ export function translateRentProblem(problem: FieldError): FieldError {
   }
   const known: Record<string, string> = {
     "must be between zero and the rent": "O IRRF retido não pode passar do aluguel.",
+    "must not exceed the rent": "O IRRF retido, somado ao dos pagamentos anteriores, não pode passar do aluguel.",
+    "must not exceed what the payment settles": "O IRRF retido não pode passar do que o pagamento quita.",
+    "must be greater than zero": "O valor precisa ser maior que zero.",
+    "the rent is paid": "Este aluguel já está pago.",
     "must be owner or third_party": "Escolha para onde vai esta cobrança.",
     "the rent is in a payout; undo the payout first": "Este aluguel já entrou num repasse. Desfaça o repasse antes.",
     "the contract does not say how its landlords share the rent; record their shares first":
       "O contrato não diz a cota de cada locador. Informe as cotas no contrato antes de receber.",
     "must not be in the future": "O pagamento não pode ter data futura.",
     "the rent is not paid": "Este aluguel não está pago.",
-    "a paid rent's charges cannot change": "As cobranças de um aluguel pago não mudam. Estorne o pagamento antes.",
+    "a paid rent's charges cannot change": "Depois de um pagamento as cobranças não mudam. Estorne os pagamentos antes.",
     "must be at most 20": "Um aluguel tem no máximo 20 cobranças.",
     "is required for another charge": "Diga do que é esta cobrança.",
   };

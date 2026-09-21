@@ -217,6 +217,8 @@ export interface Rent {
   readonly amountPaid: string | null;
   readonly paidOn: string | null;
   readonly status: RentStatus;
+  /** Money came in and something is still open. */
+  readonly partiallyPaid: boolean;
 }
 
 export interface ContractTerms {

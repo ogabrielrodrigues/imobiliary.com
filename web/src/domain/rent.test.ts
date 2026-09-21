@@ -13,6 +13,7 @@ import {
   amountReceived,
   suggestedDestination,
   destinationLabel,
+  splitPartial,
 } from "./rent.ts";
 
 describe("dates", () => {
@@ -34,14 +35,49 @@ describe("payments and charges", () => {
   const today = "2026-11-20";
 
   it("checks the day and typed amounts", () => {
-    const fields = (paidOn: string, lateFee = "", incomeTax = "") =>
-      validatePayment({ paidOn, lateFee, incomeTax }, today, "1600.00").map((p) => p.field);
+    const fields = (paidOn: string, lateFee = "", incomeTax = "", amount = "") =>
+      validatePayment({ paidOn, amount, lateFee, incomeTax }, today, "1600.00").map((p) => p.field);
     assert.deepEqual(fields("2026-11-20"), []);
     assert.deepEqual(fields(""), ["paidOn"]);
     assert.deepEqual(fields("2026-11-21"), ["paidOn"]);
     assert.deepEqual(fields("2026-11-15", "abc", "x"), ["lateFee", "incomeTax"]);
     assert.deepEqual(fields("2026-11-15", "0", "1.600,01"), ["incomeTax"]);
     assert.deepEqual(fields("2026-11-15", "0", "112,50"), []);
+    assert.deepEqual(fields("2026-11-15", "", "", "800,00"), []);
+    assert.deepEqual(fields("2026-11-15", "", "", "0"), ["amount"]);
+    assert.deepEqual(fields("2026-11-15", "", "", "oito"), ["amount"]);
+  });
+
+  it("splits a partial payment as the API does", () => {
+    // Ten days late on 1800.00: 186.00 of interest and penalty come first.
+    assert.deepEqual(splitPartial("900,00", "", "186.00", "1800.00"), {
+      lateFee: 18600,
+      principal: 71400,
+      remaining: 108600,
+      exceeds: false,
+    });
+    // Too little to reach the principal.
+    assert.deepEqual(splitPartial("100,00", "", "186.00", "1800.00"), {
+      lateFee: 10000,
+      principal: 0,
+      remaining: 180000,
+      exceeds: false,
+    });
+    // The tax withheld settles too.
+    assert.equal(splitPartial("1914,00", "72,00", "186.00", "1800.00")?.remaining, 0);
+    assert.equal(splitPartial("1986,01", "", "186.00", "1800.00")?.exceeds, true);
+    assert.equal(splitPartial("x", "", "186.00", "1800.00"), null);
+  });
+
+  it("puts the API's partial payment refusals in Portuguese, on their fields", () => {
+    assert.deepEqual(translateRentProblem({ field: "amount", message: "must be at most 1986.00, what is owed" }), {
+      field: "amount",
+      message: "O valor passa do que falta, R$ 1.986,00.",
+    });
+    assert.deepEqual(
+      translateRentProblem({ field: "paid_on", message: "must not be before the last payment, on 2026-11-11" }),
+      { field: "paidOn", message: "A data não pode ser anterior à do último pagamento, 11/11/2026." },
+    );
   });
 
   it("computes what a payment brings in, as the API does", () => {

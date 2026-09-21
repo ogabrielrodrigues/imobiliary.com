@@ -47,7 +47,7 @@ export const Route = createFileRoute("/_app/alugueis/$rentId")({
   component: RentPage,
 });
 
-/** One instalment: what is due, its charges, and its payment. */
+/** One instalment: what is due, its charges, and its payments. */
 function RentPage() {
   const result = Route.useLoaderData();
   const today = todayInSaoPaulo();
@@ -72,6 +72,7 @@ function RentPage() {
 
   const rent = result.value;
   const paid = rent.status === "paid";
+  const hasPayments = rent.payments.length > 0;
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-4 md:p-8">
@@ -83,7 +84,7 @@ function RentPage() {
               <h1 className="text-title-lg font-semibold tracking-[-0.015em]">
                 Parcela {rent.sequence}, vence {formatDate(rent.dueOn)}
               </h1>
-              <RentStatusBadge status={rent.status} />
+              <RentStatusBadge status={rent.status} partial={rent.partiallyPaid} />
             </div>
             <Link
               to="/contratos/$contractId"
@@ -95,7 +96,8 @@ function RentPage() {
             <span className="text-small text-muted-foreground">{rent.contract.tenantNames.join(", ")}</span>
           </div>
           <div className="ml-auto flex flex-wrap gap-2">
-            {paid ? <ReversePayment rent={rent} /> : <PaymentDialog rent={rent} size="default" />}
+            {hasPayments && <ReversePayment rent={rent} />}
+            {!paid && <PaymentDialog rent={rent} size="default" />}
           </div>
         </div>
       </header>
@@ -111,23 +113,53 @@ function RentPage() {
           ))}
           <dt className="font-medium">A pagar</dt>
           <dd className="text-right font-medium">{formatMoney(rent.due)}</dd>
-          {paid ? (
+          {hasPayments && (
             <>
-              <Row label="Multa e juros registrados">{formatMoney(rent.lateFee)}</Row>
+              <Row label="Multa e juros recebidos">{formatMoney(rent.lateFee)}</Row>
               {rent.incomeTaxWithheld !== "0.00" && (
                 <Row label="IRRF retido pelo locatário">− {formatMoney(rent.incomeTaxWithheld)}</Row>
               )}
-              <Row label={`Recebido em ${formatDate(rent.paidOn ?? "")}`}>{formatMoney(rent.amountPaid ?? "0.00")}</Row>
-            </>
-          ) : (
-            rent.suggestedLateFee.daysLate > 0 && (
-              <Row label={`Multa e juros se pago hoje (${rentStatusNote(rent, today)})`}>
-                {formatMoney(rent.suggestedLateFee.total)}
+              <Row label={paid ? `Recebido, quitado em ${formatDate(rent.paidOn ?? "")}` : "Recebido até agora"}>
+                {formatMoney(rent.amountPaid ?? "0.00")}
               </Row>
-            )
+            </>
+          )}
+          {!paid && (
+            <>
+              {rent.partiallyPaid && <Row label="Aluguel e cobranças em aberto">{formatMoney(rent.outstanding)}</Row>}
+              {rent.suggestedLateFee.total !== "0.00" && (
+                <Row label={`Multa e juros se pago hoje (${rentStatusNote(rent, today)})`}>
+                  {formatMoney(rent.suggestedLateFee.total)}
+                </Row>
+              )}
+              {(rent.partiallyPaid || rent.suggestedLateFee.total !== "0.00") && (
+                <>
+                  <dt className="font-medium">Para quitar hoje</dt>
+                  <dd className="text-right font-medium">{formatMoney(rent.owedToday)}</dd>
+                </>
+              )}
+            </>
           )}
         </dl>
       </Section>
+
+      {hasPayments && (
+        <Section title={rent.payments.length === 1 ? "Pagamento" : "Pagamentos"}>
+          <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
+            {rent.payments.map((p) => (
+              <li key={p.id} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-3 py-2 text-small tabular-nums">
+                <span className="min-w-24">{formatDate(p.paidOn)}</span>
+                <span className="font-medium">{formatMoney(p.amount)}</span>
+                <span className="text-caption text-muted-foreground">
+                  multa e juros {formatMoney(p.lateFee)}, aluguel e cobranças {formatMoney(p.principal)}
+                  {p.waived !== "0.00" && `, dispensados ${formatMoney(p.waived)}`}
+                  {p.incomeTaxWithheld !== "0.00" && `, IRRF ${formatMoney(p.incomeTaxWithheld)}`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
 
       <Charges rent={rent} />
     </div>
@@ -160,7 +192,8 @@ function Charges({ rent }: { readonly rent: RentDetail }) {
   const [attempted, setAttempted] = useState(false);
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
-  const paid = rent.status === "paid";
+  // Once money came in, every payment's split depends on the charges.
+  const paid = rent.payments.length > 0;
 
   const local = attempted ? validateCharge(value) : [];
   const error = (field: string) => messageFor(failure, field) ?? local.find((p) => p.field === field)?.message;
@@ -247,8 +280,8 @@ function Charges({ rent }: { readonly rent: RentDetail }) {
 
       {paid ? (
         <p className="text-caption text-muted-foreground">
-          Num aluguel pago, só o destino de uma cobrança muda, e o repasse é refeito. Valor e tipo mudam estornando o
-          pagamento.
+          Depois de um pagamento, só o destino de uma cobrança muda, e o repasse é refeito. Valor e tipo mudam estornando
+          os pagamentos.
         </p>
       ) : (
         <form
@@ -328,6 +361,8 @@ function Charges({ rent }: { readonly rent: RentDetail }) {
 
 function ReversePayment({ rent }: { readonly rent: RentDetail }) {
   const router = useRouter();
+  const last = rent.payments.at(-1);
+  const several = rent.payments.length > 1;
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [pending, setPending] = useState(false);
@@ -357,15 +392,19 @@ function ReversePayment({ rent }: { readonly rent: RentDetail }) {
         }}
       >
         <IconArrowBackUp data-icon="inline-start" aria-hidden="true" />
-        Estornar pagamento
+        {several ? "Estornar o último pagamento" : "Estornar pagamento"}
       </Button>
       {mounted && (
         <AlertDialog open={open} onOpenChange={(next) => !pending && setOpen(next)}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Estornar o pagamento?</AlertDialogTitle>
+              <AlertDialogTitle>{several ? "Estornar o último pagamento?" : "Estornar o pagamento?"}</AlertDialogTitle>
               <AlertDialogDescription>
-                O aluguel volta a ficar em aberto, sem valor recebido nem multa registrada. O estorno fica na auditoria.
+                {last !== undefined && `O pagamento de ${formatDate(last.paidOn)}, de ${formatMoney(last.amount)}, é desfeito. `}
+                {several
+                  ? "Os anteriores continuam, e o aluguel fica em aberto pelo que faltar."
+                  : "O aluguel volta a ficar em aberto, sem valor recebido."}{" "}
+                O estorno fica na auditoria.
               </AlertDialogDescription>
             </AlertDialogHeader>
             {failure !== null && (

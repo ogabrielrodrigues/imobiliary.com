@@ -210,9 +210,10 @@ function RentTable({
                 <span className="truncate text-small font-medium">{addressLine(rent.contract.address)}</span>
                 <span className="truncate text-caption text-muted-foreground">
                   {rent.contract.tenantNames.join(", ")} · {rentStatusNote(rent, today)}
+                  {rent.partiallyPaid && ", pago em parte"}
                 </span>
               </Link>
-              <span className="text-small tabular-nums">{formatMoney(rent.due)}</span>
+              <span className="text-small tabular-nums">{formatMoney(rent.outstanding)}</span>
               <PaymentDialog rent={rent} />
             </li>
           ))}
