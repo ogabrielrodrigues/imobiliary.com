@@ -10,7 +10,7 @@ import {
   type Contrast,
   type FontScale,
   type Motion,
-} from "@/domain/accessibility";
+} from "@imobiliary/ui/accessibility";
 import { loadPreferences, savePreferences, SYSTEM_QUERIES } from "@/lib/accessibility-storage";
 import { useMediaQuery } from "@/lib/media-query";
 

@@ -5,7 +5,7 @@ import {
   type AccessibilityPreferences,
   type Scheme,
   type Theme,
-} from "@/domain/accessibility";
+} from "@imobiliary/ui/accessibility";
 import {
   loadPreferences,
   savePreferences,
