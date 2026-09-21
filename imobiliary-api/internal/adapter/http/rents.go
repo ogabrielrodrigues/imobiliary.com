@@ -53,14 +53,34 @@ type rentViewBody struct {
 	// IncomeTaxWithheld is what a company tenant kept, deducted from the
 	// amount received and from the owners' payout.
 	IncomeTaxWithheld domain.Money `json:"income_tax_withheld"`
-	Status            string       `json:"status"`
+	// PrincipalPaid is the part of the rent and charges already settled, and
+	// Outstanding the part still open. PartiallyPaid is true while money came
+	// in and something is still open; the status stays pending or overdue.
+	PrincipalPaid domain.Money `json:"principal_paid"`
+	Outstanding   domain.Money `json:"outstanding"`
+	PartiallyPaid bool         `json:"partially_paid"`
+	Status        string       `json:"status"`
+}
+
+type rentPaymentBody struct {
+	ID        string       `json:"id"`
+	PaidOn    domain.Date  `json:"paid_on"`
+	Amount    domain.Money `json:"amount"`
+	LateFee   domain.Money `json:"late_fee"`
+	Waived    domain.Money `json:"waived"`
+	Principal domain.Money `json:"principal"`
+	IncomeTax domain.Money `json:"income_tax_withheld"`
 }
 
 type rentDetailBody struct {
 	rentViewBody
-	Charges []chargeBody `json:"charges"`
-	// SuggestedLateFee is for paying today; zero once paid.
+	Charges  []chargeBody      `json:"charges"`
+	Payments []rentPaymentBody `json:"payments"`
+	// SuggestedLateFee is the interest and penalty owed today; zero once paid.
 	SuggestedLateFee lateFeeBody `json:"suggested_late_fee"`
+	// OwedToday is everything owed today: the principal still open with the
+	// interest and penalty; zero once paid.
+	OwedToday domain.Money `json:"owed_today"`
 }
 
 func presentRentView(r *usecase.RentView, today domain.Date) rentViewBody {
@@ -81,7 +101,8 @@ func presentRentView(r *usecase.RentView, today domain.Date) rentViewBody {
 			ID: r.ContractID.String(), Registry: r.Registry, Address: presentPropertyAddress(r.Address), TenantNames: names,
 		},
 		Sequence: r.Sequence, DueOn: r.DueOn, Amount: r.Amount, ChargesTotal: r.ChargesTotal, Due: r.Due(),
-		LateFee: r.LateFee, AmountPaid: r.AmountPaid, PaidOn: r.PaidOn, IncomeTaxWithheld: r.IncomeTaxWithheld, Status: status,
+		LateFee: r.LateFee, AmountPaid: r.AmountPaid, PaidOn: r.PaidOn, IncomeTaxWithheld: r.IncomeTaxWithheld,
+		PrincipalPaid: r.PrincipalPaid, Outstanding: r.Outstanding(), PartiallyPaid: r.PartiallyPaid(), Status: status,
 	}
 }
 
@@ -89,7 +110,15 @@ func writeRent(w http.ResponseWriter, s *Server, status int, d *usecase.RentDeta
 	out := rentDetailBody{
 		rentViewBody:     presentRentView(d.Rent, d.Today),
 		Charges:          make([]chargeBody, 0, len(d.Rent.Charges)),
+		Payments:         make([]rentPaymentBody, 0, len(d.Rent.Payments)),
 		SuggestedLateFee: presentLateFee(d.Suggested),
+		OwedToday:        d.Standing.Total(),
+	}
+	for _, p := range d.Rent.Payments {
+		out.Payments = append(out.Payments, rentPaymentBody{
+			ID: p.ID.String(), PaidOn: p.PaidOn, Amount: p.Amount, LateFee: p.LateFee, Waived: p.Waived,
+			Principal: p.Principal, IncomeTax: p.IncomeTax,
+		})
 	}
 	for _, c := range d.Rent.Charges {
 		out.Charges = append(out.Charges, chargeBody{
@@ -196,12 +225,16 @@ func (s *Server) handleGetRent(w http.ResponseWriter, r *http.Request) {
 }
 
 type paymentRequest struct {
-	PaidOn  string `json:"paid_on"`
+	PaidOn string `json:"paid_on"`
+	// Amount is what came in, for a partial payment; empty settles everything
+	// owed on the day, computed.
+	Amount  string `json:"amount"`
 	LateFee string `json:"late_fee"`
 	// IncomeTaxWithheld is what a company tenant kept; empty is none.
 	IncomeTaxWithheld string `json:"income_tax_withheld"`
-	// AmountPaid is no longer accepted: it is computed. It stays in the shape
-	// so a client that still sends it is told so rather than ignored.
+	// AmountPaid is not accepted: a payment in full is computed, and a partial
+	// one is sent as amount. It stays in the shape so a client that still
+	// sends it is told so rather than ignored.
 	AmountPaid string `json:"amount_paid"`
 }
 
@@ -214,7 +247,14 @@ func (body paymentRequest) toInput() (usecase.PaymentInput, error) {
 		v.Add("paid_on", "is required")
 	}
 	if body.AmountPaid != "" {
-		v.Add("amount_paid", "is computed: the rent, its charges and the late fee, less the tax withheld")
+		v.Add("amount_paid", "is computed: the rent, its charges and the late fee, less the tax withheld; send amount for a partial payment")
+	}
+	if body.Amount != "" {
+		if m, err := domain.ParseMoney(body.Amount); err == nil {
+			in.Amount = &m
+		} else {
+			v.Add("amount", "must be an amount such as 1500.00")
+		}
 	}
 	if body.LateFee != "" {
 		if m, err := domain.ParseMoney(body.LateFee); err == nil {
@@ -234,8 +274,9 @@ func (body paymentRequest) toInput() (usecase.PaymentInput, error) {
 }
 
 type paymentPreviewBody struct {
-	LateFee lateFeeBody  `json:"late_fee"`
-	Total   domain.Money `json:"total"`
+	LateFee   lateFeeBody  `json:"late_fee"`
+	Principal domain.Money `json:"principal"`
+	Total     domain.Money `json:"total"`
 }
 
 func (s *Server) handlePreviewPayment(w http.ResponseWriter, r *http.Request) {
@@ -258,7 +299,7 @@ func (s *Server) handlePreviewPayment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, s.logger, err)
 		return
 	}
-	writeJSON(w, s.logger, http.StatusOK, paymentPreviewBody{LateFee: presentLateFee(preview.LateFee), Total: preview.Total})
+	writeJSON(w, s.logger, http.StatusOK, paymentPreviewBody{LateFee: presentLateFee(preview.LateFee), Principal: preview.Principal, Total: preview.Total})
 }
 
 func (s *Server) handlePayRent(w http.ResponseWriter, r *http.Request) {

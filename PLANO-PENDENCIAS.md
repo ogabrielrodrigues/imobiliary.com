@@ -86,14 +86,19 @@ linha. O proprietário recebe cada parcial no próximo repasse.
 
 ### 2.5 API
 
-- `POST /v1/rents/{id}/payments` `{ paid_on, amount?, interest?, penalty?,
-  income_tax }`: sem `amount`, quita.
-- `POST /v1/rents/{id}/payments/preview`: o que falta num dia, dividido em
+As rotas continuam as de antes, o que evita duas formas de pagar (decidido
+na implementação):
+
+- `POST /v1/rents/{id}/payment` `{ paid_on, amount?, late_fee?,
+  income_tax_withheld }`: sem `amount`, quita; com `amount`, é um parcial.
+- `POST /v1/rents/{id}/payment/preview`: o que falta num dia, dividido em
   principal, juros e multa.
-- `DELETE /v1/rents/{id}/payments/{paymentID}`: estorna o último.
-- `POST /v1/rents/{id}/payment` e `/reversal` continuam, como atalhos
-  equivalentes, até o web deixar de usá-los; depois são removidos.
-- O aluguel ganha `payments`, `outstanding` e `partially_paid`.
+- `DELETE /v1/rents/{id}/payment`: estorna o último pagamento.
+- O aluguel ganha `payments`, `principal_paid`, `outstanding`,
+  `partially_paid` e `owed_today`; o status continua `pending`, `overdue` ou
+  `paid`.
+- Um novo pagamento não pode ter data anterior à do último, porque os
+  pagamentos são repassados em ordem de data.
 - Dashboard: "recebido no mês" soma os pagamentos pelo dia de cada um, e "em
   aberto" e "em atraso" usam o que falta, não o valor cheio.
 

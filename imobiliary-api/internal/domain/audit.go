@@ -45,6 +45,7 @@ const (
 	ActionContractAmended       AuditAction = "contract.amended"
 	ActionAmendmentUndone       AuditAction = "contract.amendment_undone"
 	ActionRentPaid              AuditAction = "rent.paid"
+	ActionRentPartiallyPaid     AuditAction = "rent.partially_paid"
 	ActionRentPaymentReversed   AuditAction = "rent.payment_reversed"
 	ActionRentChargeAdded       AuditAction = "rent.charge_added"
 	ActionRentChargeRemoved     AuditAction = "rent.charge_removed"

@@ -50,6 +50,8 @@ type rentBody struct {
 	PaidOn       *domain.Date  `json:"paid_on"`
 	// Status is computed on the office's calendar, never stored.
 	Status string `json:"status"`
+	// PartiallyPaid: money came in and something is still open.
+	PartiallyPaid bool `json:"partially_paid"`
 }
 
 type acknowledgementBody struct {
@@ -139,6 +141,7 @@ func presentContract(v *usecase.ContractView) contractBody {
 		out.Rents = append(out.Rents, rentBody{
 			ID: r.ID.String(), Sequence: r.Sequence, DueOn: r.DueOn, Amount: r.Amount, ChargesTotal: r.ChargesTotal, LateFee: r.LateFee,
 			AmountPaid: r.AmountPaid, PaidOn: r.PaidOn, Status: rentStatus(r, v.Today),
+			PartiallyPaid: r.AmountPaid != nil && r.PaidOn == nil,
 		})
 	}
 	return out

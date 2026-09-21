@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Imobiliary API
-  version: "0.9.0"
+  version: "0.10.0"
   summary: Rental property management for brokers, small agencies and owners.
   description: |
     The API behind the Imobiliary platform. It covers identity and the office
@@ -1695,12 +1695,14 @@ paths:
         schema: { $ref: "#/components/schemas/ID" }
     post:
       tags: [Rents]
-      summary: Compute the late fee for a payment day
+      summary: Compute what is owed on a payment day
       description: |
-        The penalty rate on the rent with its charges, plus the monthly
-        interest rate prorated over a thirty-day month for each day after the
-        due day, each rounded to the centavo. Paying on or before the due day
-        adds nothing. Records nothing.
+        Replays the payments already recorded up to that day. The penalty rate
+        is charged once, on the principal (the rent with its charges) still
+        open the day after the due day; the monthly interest rate, prorated
+        over a thirty-day month, runs each day on the principal still open.
+        Each part is rounded to the centavo, and neither earns interest.
+        Paying on or before the due day adds nothing. Records nothing.
       operationId: previewPayment
       requestBody:
         required: true
@@ -1713,14 +1715,15 @@ paths:
                 paid_on: { $ref: "#/components/schemas/Date" }
       responses:
         "200":
-          description: The late fee and the total.
+          description: The interest and penalty owed, the principal open and their total.
           content:
             application/json:
               schema:
                 type: object
-                required: [late_fee, total]
+                required: [late_fee, principal, total]
                 properties:
                   late_fee: { $ref: "#/components/schemas/LateFee" }
+                  principal: { $ref: "#/components/schemas/Money" }
                   total: { $ref: "#/components/schemas/Money" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -1738,15 +1741,22 @@ paths:
         schema: { $ref: "#/components/schemas/ID" }
     post:
       tags: [Rents]
-      summary: Record a payment in full
+      summary: Record a payment, in full or in part
       description: |
-        `late_fee` left out takes the computed one; a discount is given there.
-        The amount received is computed, never sent: the rent, its charges and
-        the late fee, less `income_tax_withheld`. Sending `amount_paid` is a
-        `422` on it. `paid_on` is not after today. The owners' ledger lines are
-        written in the same transaction. An instalment already paid answers
-        `409 conflict`, which is also what the second of two simultaneous
-        payments receives. Audited. There is no partial payment.
+        Without `amount`, the payment settles everything owed that day and its
+        amount is computed: the principal still open, the interest and
+        penalty, less `income_tax_withheld`. With `amount`, it is a partial
+        payment: together with the tax withheld it settles first the interest,
+        then the penalty, then the principal, divided between the rent and each
+        charge in proportion to what each has open (Código Civil art. 354).
+        More than is owed is a `422` on `amount`. `late_fee` below what is owed
+        forgives the difference. Sending `amount_paid` is a `422` on it.
+        `paid_on` is not after today nor before the last payment. The owners'
+        ledger lines of this payment are written in the same transaction. An
+        instalment already paid answers `409 conflict`, which is also what the
+        second of two simultaneous payments in full receives. Once a rent has
+        a payment its charges no longer change. Audited as `rent.paid` or
+        `rent.partially_paid`.
       operationId: payRent
       requestBody:
         required: true
@@ -1757,10 +1767,11 @@ paths:
               required: [paid_on]
               properties:
                 paid_on: { $ref: "#/components/schemas/Date" }
-                late_fee: { $ref: "#/components/schemas/Money", description: The late fee agreed. }
+                amount: { $ref: "#/components/schemas/Money", description: What came in, for a partial payment. Left out settles everything. }
+                late_fee: { $ref: "#/components/schemas/Money", description: "The interest and penalty charged, at most what is owed; less forgives the rest." }
                 income_tax_withheld:
                   $ref: "#/components/schemas/Money"
-                  description: What a company tenant withheld as income tax, at most the rent. The payout deducts it.
+                  description: What a company tenant withheld as income tax; with the earlier payments, at most the rent. The payout deducts it.
       responses:
         "200":
           description: Paid.
@@ -1777,12 +1788,12 @@ paths:
         "429": { $ref: "#/components/responses/RateLimited" }
     delete:
       tags: [Rents]
-      summary: Reverse a payment
+      summary: Reverse the last payment
       description: |
-        Puts the instalment back to unpaid, clearing the amount, the late fee
-        and the tax withheld, and removes the ledger lines it wrote. Refused on
-        `payment` when it is not paid, or when any of its lines is in a payout;
-        the message names the payout to undo. Audited.
+        Removes the instalment's last payment and the ledger lines it wrote;
+        the earlier payments stand, and the instalment is unpaid again.
+        Refused on `payment` when it has no payment, or when any line of that
+        payment is in a payout; the message names the payout to undo. Audited.
       operationId: reversePayment
       responses:
         "200":
@@ -2802,7 +2813,7 @@ components:
               type: array
               items:
                 type: object
-                required: [id, sequence, due_on, amount, late_fee, amount_paid, paid_on, status]
+                required: [id, sequence, due_on, amount, late_fee, amount_paid, paid_on, status, partially_paid]
                 properties:
                   id: { $ref: "#/components/schemas/ID" }
                   sequence: { type: integer, minimum: 1 }
@@ -2816,6 +2827,7 @@ components:
                     type: string
                     enum: [paid, overdue, pending]
                     description: Computed against today; never stored.
+                  partially_paid: { type: boolean, description: Money came in and something is still open. }
             amendments:
               type: array
               description: Rent adjustments, oldest first.
@@ -2873,7 +2885,7 @@ components:
 
     RentSummary:
       type: object
-      required: [id, contract, sequence, due_on, amount, charges_total, due, late_fee, amount_paid, paid_on, income_tax_withheld, status]
+      required: [id, contract, sequence, due_on, amount, charges_total, due, late_fee, amount_paid, paid_on, income_tax_withheld, principal_paid, outstanding, partially_paid, status]
       properties:
         id: { $ref: "#/components/schemas/ID" }
         contract:
@@ -2889,17 +2901,20 @@ components:
         amount: { $ref: "#/components/schemas/Money", description: The rent of the instalment. }
         charges_total: { $ref: "#/components/schemas/Money" }
         due: { $ref: "#/components/schemas/Money", description: The rent with its charges. }
-        late_fee: { $ref: "#/components/schemas/Money", description: As recorded with the payment; zero while unpaid. }
-        amount_paid: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
-        paid_on: { oneOf: [{ $ref: "#/components/schemas/Date" }, { type: "null" }] }
-        income_tax_withheld: { $ref: "#/components/schemas/Money", description: What a company tenant withheld; zero otherwise. }
+        late_fee: { $ref: "#/components/schemas/Money", description: The interest and penalty the payments settled; zero before any. }
+        amount_paid: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }], description: The sum of the payments; null before any. }
+        paid_on: { oneOf: [{ $ref: "#/components/schemas/Date" }, { type: "null" }], description: The day the principal was settled; null while anything is open. }
+        income_tax_withheld: { $ref: "#/components/schemas/Money", description: What a company tenant withheld, over all payments; zero otherwise. }
+        principal_paid: { $ref: "#/components/schemas/Money", description: The part of the rent and charges settled. }
+        outstanding: { $ref: "#/components/schemas/Money", description: The part of the rent and charges still open. }
+        partially_paid: { type: boolean, description: "Money came in and something is still open; status stays pending or overdue." }
         status: { type: string, enum: [paid, overdue, pending] }
 
     RentDetail:
       allOf:
         - $ref: "#/components/schemas/RentSummary"
         - type: object
-          required: [charges, suggested_late_fee]
+          required: [charges, payments, suggested_late_fee, owed_today]
           properties:
             charges:
               type: array
@@ -2912,7 +2927,22 @@ components:
                   description: { type: string }
                   amount: { $ref: "#/components/schemas/Money" }
                   destination: { $ref: "#/components/schemas/ChargeDestination" }
-            suggested_late_fee: { $ref: "#/components/schemas/LateFee" }
+            payments:
+              type: array
+              description: In the order they settle, by day.
+              items:
+                type: object
+                required: [id, paid_on, amount, late_fee, waived, principal, income_tax_withheld]
+                properties:
+                  id: { $ref: "#/components/schemas/ID" }
+                  paid_on: { $ref: "#/components/schemas/Date" }
+                  amount: { $ref: "#/components/schemas/Money", description: What came in. }
+                  late_fee: { $ref: "#/components/schemas/Money", description: Interest and penalty settled. }
+                  waived: { $ref: "#/components/schemas/Money", description: Interest and penalty forgiven. }
+                  principal: { $ref: "#/components/schemas/Money", description: Rent and charges settled. }
+                  income_tax_withheld: { $ref: "#/components/schemas/Money" }
+            suggested_late_fee: { $ref: "#/components/schemas/LateFee", description: The interest and penalty owed today; zero once paid. }
+            owed_today: { $ref: "#/components/schemas/Money", description: Everything owed today; zero once paid. }
 
     Administrator:
       type: object

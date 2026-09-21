@@ -35,18 +35,18 @@ func (r *ledgerRepository) Insert(ctx context.Context, entries []domain.LedgerEn
 	for i := range entries {
 		e := &entries[i]
 		base := len(args)
-		ph := make([]string, 13)
+		ph := make([]string, 14)
 		for j := range ph {
 			ph[j] = fmt.Sprintf("$%d", base+j+1)
 		}
 		rows = append(rows, "("+strings.Join(ph, ", ")+")")
 		args = append(args, pgUUID(e.ID), pgUUID(r.organizationID), pgUUID(e.PersonID), string(e.Kind),
 			signedAmount(e), pgDate(e.OccurredOn), e.Description, pgNullUUID(e.PropertyID), pgNullUUID(e.ContractID),
-			pgNullUUID(e.RentID), pgNullUUID(e.ChargeID), pgNullUUID(e.CreatedBy), e.CreatedAt)
+			pgNullUUID(e.RentID), pgNullUUID(e.ChargeID), pgNullUUID(e.CreatedBy), e.CreatedAt, pgNullUUID(e.PaymentID))
 	}
 	_, err := r.q.Exec(ctx,
 		`INSERT INTO owner_entries (id, organization_id, person_id, kind, amount, occurred_on, description,
-		        property_id, contract_id, rent_id, charge_id, created_by, created_at)
+		        property_id, contract_id, rent_id, charge_id, created_by, created_at, payment_id)
 		 VALUES `+strings.Join(rows, ", "), args...)
 	if err != nil {
 		if isForeignKeyViolation(err) {
@@ -60,19 +60,19 @@ func (r *ledgerRepository) Insert(ctx context.Context, entries []domain.LedgerEn
 }
 
 const entryColumns = `e.id, e.person_id, e.kind, e.amount, e.occurred_on, e.description, e.property_id,
-	e.contract_id, e.rent_id, e.charge_id, e.payout_id, e.created_by, e.created_at`
+	e.contract_id, e.rent_id, e.charge_id, e.payout_id, e.created_by, e.created_at, e.payment_id`
 
 func scanEntry(row pgx.Row, extra ...any) (domain.LedgerEntry, error) {
 	var (
 		e                                            domain.LedgerEntry
 		id, person, property, contract, rent, charge pgtype.UUID
-		payout, author                               pgtype.UUID
+		payout, author, payment                      pgtype.UUID
 		kind                                         string
 		amount                                       int64
 		on                                           pgtype.Date
 	)
 	dst := append([]any{&id, &person, &kind, &amount, &on, &e.Description, &property, &contract, &rent, &charge,
-		&payout, &author, &e.CreatedAt}, extra...)
+		&payout, &author, &e.CreatedAt, &payment}, extra...)
 	if err := row.Scan(dst...); err != nil {
 		return e, err
 	}
@@ -83,6 +83,7 @@ func scanEntry(row pgx.Row, extra ...any) (domain.LedgerEntry, error) {
 	e.Amount = domain.Money(amount)
 	e.PropertyID, e.ContractID, e.RentID = toNullUUID(property), toNullUUID(contract), toNullUUID(rent)
 	e.ChargeID, e.PayoutID, e.CreatedBy = toNullUUID(charge), toNullUUID(payout), toNullUUID(author)
+	e.PaymentID = toNullUUID(payment)
 	return e, nil
 }
 
@@ -106,6 +107,13 @@ func (r *ledgerRepository) RentEntries(ctx context.Context, rentID uuid.UUID) ([
 func (r *ledgerRepository) DeleteRentEntries(ctx context.Context, rentID uuid.UUID) error {
 	if _, err := r.q.Exec(ctx, `DELETE FROM owner_entries WHERE rent_id = $1`, pgUUID(rentID)); err != nil {
 		return fmt.Errorf("postgres: delete rent lines: %w", paidOut(err))
+	}
+	return nil
+}
+
+func (r *ledgerRepository) DeletePaymentEntries(ctx context.Context, paymentID uuid.UUID) error {
+	if _, err := r.q.Exec(ctx, `DELETE FROM owner_entries WHERE payment_id = $1`, pgUUID(paymentID)); err != nil {
+		return fmt.Errorf("postgres: delete payment lines: %w", paidOut(err))
 	}
 	return nil
 }

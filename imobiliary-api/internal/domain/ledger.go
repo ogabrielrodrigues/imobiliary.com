@@ -50,10 +50,12 @@ type LedgerEntry struct {
 	PropertyID  *uuid.UUID
 	ContractID  *uuid.UUID
 	RentID      *uuid.UUID
-	ChargeID    *uuid.UUID
-	PayoutID    *uuid.UUID
-	CreatedBy   *uuid.UUID
-	CreatedAt   time.Time
+	// PaymentID is the rent payment the line came from.
+	PaymentID *uuid.UUID
+	ChargeID  *uuid.UUID
+	PayoutID  *uuid.UUID
+	CreatedBy *uuid.UUID
+	CreatedAt time.Time
 }
 
 // Signed is the line's effect on the balance: positive for a credit.
@@ -205,9 +207,11 @@ func Split(amount Money, shares []Beneficiary) ([]Money, error) {
 	return out, nil
 }
 
-// Receipt is a rent as it was received: what the ledger is fed from.
+// Receipt is one payment of a rent as it was received: what the ledger is fed
+// from. Rent and each charge's Amount are the parts this payment settled.
 type Receipt struct {
 	RentID     uuid.UUID
+	PaymentID  uuid.UUID
 	ContractID uuid.UUID
 	PropertyID uuid.UUID
 	PaidOn     Date
@@ -269,7 +273,7 @@ func ReceiptEntries(r *Receipt, shares []Beneficiary) ([]LedgerEntry, error) {
 		component{kind: EntryAdminFee, amount: fee},
 		component{kind: EntryIncomeTax, amount: r.IncomeTax})
 
-	rentID, contractID, propertyID := r.RentID, r.ContractID, r.PropertyID
+	rentID, paymentID, contractID, propertyID := r.RentID, r.PaymentID, r.ContractID, r.PropertyID
 	var out []LedgerEntry
 	for _, c := range components {
 		parts, err := Split(c.amount, shares)
@@ -282,7 +286,7 @@ func ReceiptEntries(r *Receipt, shares []Beneficiary) ([]LedgerEntry, error) {
 			}
 			e := LedgerEntry{
 				PersonID: shares[i].PersonID, Kind: c.kind, Amount: part, OccurredOn: r.PaidOn,
-				RentID: &rentID, ContractID: &contractID, PropertyID: &propertyID,
+				RentID: &rentID, PaymentID: &paymentID, ContractID: &contractID, PropertyID: &propertyID,
 			}
 			if c.charge != nil {
 				chargeID := c.charge.ID
@@ -419,14 +423,6 @@ func ValidatePayout(p *Payout, entries []LedgerEntry, today Date) error {
 		v.Add("entry_ids", "add up to more than an amount can hold")
 	}
 	return v.OrNil()
-}
-
-// ValidateIncomeTax checks the tax a tenant withheld against the rent it was
-// withheld from.
-func ValidateIncomeTax(v *ValidationError, tax, rent Money) {
-	if tax < 0 || tax > rent {
-		v.Add("income_tax_withheld", "must be between zero and the rent")
-	}
 }
 
 // IsKnownEntryKind reports whether k is a kind the ledger records.

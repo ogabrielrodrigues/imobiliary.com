@@ -72,8 +72,8 @@ func (c *Contracts) prepareAmendment(ctx context.Context, repos ScopedRepositori
 	}
 	stored := make([]domain.TerminationRent, len(rents))
 	for i, r := range rents {
-		stored[i] = domain.TerminationRent{Sequence: r.Sequence, Amount: r.Amount, Paid: r.PaidOn != nil}
-		if r.Sequence >= preview.FirstSequence && r.PaidOn == nil {
+		stored[i] = domain.TerminationRent{Sequence: r.Sequence, Amount: r.Amount, Paid: r.Touched()}
+		if r.Sequence >= preview.FirstSequence && !r.Touched() {
 			preview.AffectedRents++
 			if preview.FirstDueOn == nil {
 				due := r.DueOn
@@ -180,7 +180,7 @@ func (c *Contracts) UndoAmendment(ctx context.Context, caller *Caller, contractI
 		first := domain.FirstAdjustedSequence(contract, a.AmendedOn)
 		stored := make([]domain.TerminationRent, len(rents))
 		for j, r := range rents {
-			stored[j] = domain.TerminationRent{Sequence: r.Sequence, Amount: r.Amount, Paid: r.PaidOn != nil}
+			stored[j] = domain.TerminationRent{Sequence: r.Sequence, Amount: r.Amount, Paid: r.Touched()}
 		}
 		switch {
 		case i != len(list)-1:

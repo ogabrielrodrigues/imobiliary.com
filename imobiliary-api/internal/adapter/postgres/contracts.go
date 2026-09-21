@@ -338,7 +338,7 @@ func (r *contractRepository) List(ctx context.Context, q usecase.ContractQuery) 
 func (r *contractRepository) HasPayments(ctx context.Context, id uuid.UUID) (bool, error) {
 	var paid bool
 	err := r.q.QueryRow(ctx,
-		`SELECT EXISTS (SELECT 1 FROM rents WHERE contract_id = $1 AND paid_on IS NOT NULL)`, pgUUID(id)).Scan(&paid)
+		`SELECT EXISTS (SELECT 1 FROM rents WHERE contract_id = $1 AND amount_paid IS NOT NULL)`, pgUUID(id)).Scan(&paid)
 	if err != nil {
 		return false, fmt.Errorf("postgres: contract payments: %w", err)
 	}
@@ -357,13 +357,13 @@ func (r *contractRepository) Terminate(ctx context.Context, id uuid.UUID, on dom
 		return fmt.Errorf("postgres: terminate contract: %w", domain.ErrPreconditionFailed)
 	}
 	if _, err := r.q.Exec(ctx,
-		`DELETE FROM rents WHERE contract_id = $1 AND paid_on IS NULL AND sequence > $2`,
+		`DELETE FROM rents WHERE contract_id = $1 AND amount_paid IS NULL AND sequence > $2`,
 		pgUUID(id), plan.LastSequence); err != nil {
 		return fmt.Errorf("postgres: remove rents after termination: %w", err)
 	}
 	if plan.ProratedAmount != nil {
 		if _, err := r.q.Exec(ctx,
-			`UPDATE rents SET rent_amount = $3 WHERE contract_id = $1 AND sequence = $2 AND paid_on IS NULL`,
+			`UPDATE rents SET rent_amount = $3 WHERE contract_id = $1 AND sequence = $2 AND amount_paid IS NULL`,
 			pgUUID(id), plan.LastSequence, int64(*plan.ProratedAmount)); err != nil {
 			return fmt.Errorf("postgres: prorate the last rent: %w", err)
 		}

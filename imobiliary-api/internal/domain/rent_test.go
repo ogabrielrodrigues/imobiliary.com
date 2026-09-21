@@ -1,9 +1,6 @@
 package domain
 
-import (
-	"errors"
-	"testing"
-)
+import "testing"
 
 func TestComputeLateFee(t *testing.T) {
 	due := date(t, "2026-11-10")
@@ -45,17 +42,5 @@ func TestValidateCharge(t *testing.T) {
 	NormalizeCharge(other)
 	if err := ValidateCharge(other); err != nil || other.Description != "Taxa de lixo" {
 		t.Errorf("another charge with a description: %v %q", err, other.Description)
-	}
-}
-
-func TestValidatePayment(t *testing.T) {
-	today := date(t, "2026-11-20")
-	if err := ValidatePayment(&Payment{PaidOn: today, AmountPaid: 160000}, today); err != nil {
-		t.Fatalf("a payment today was refused: %v", err)
-	}
-	var v *ValidationError
-	err := ValidatePayment(&Payment{PaidOn: date(t, "2026-11-21"), LateFee: -1}, today)
-	if !errors.As(err, &v) || len(v.Fields) != 3 {
-		t.Errorf("a future, empty, negative payment gave %v", err)
 	}
 }

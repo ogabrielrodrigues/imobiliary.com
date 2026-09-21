@@ -182,9 +182,6 @@ func TestIncomeTaxIsDeducted(t *testing.T) {
 	if b := PayoutTotal(got); b != 150000-15000-11250 {
 		t.Errorf("balance = %d", b)
 	}
-	if received, _ := AmountReceived(150000, 0, 11250); received != 138750 {
-		t.Errorf("received = %d", received)
-	}
 }
 
 func TestValidatePayout(t *testing.T) {

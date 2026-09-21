@@ -352,6 +352,10 @@ type RentRecord struct {
 	PaidOn       *domain.Date
 }
 
+// Touched reports whether any money was received for the rent, which is what
+// keeps it out of a termination's and an adjustment's reach.
+func (r *RentRecord) Touched() bool { return r.AmountPaid != nil }
+
 // ContractRepository stores contracts, bound to an organisation-scoped
 // transaction like the others.
 type ContractRepository interface {
@@ -389,25 +393,49 @@ type ScopedRepositories struct {
 
 // RentView is one instalment with what identifies its contract.
 type RentView struct {
-	ID               uuid.UUID
-	ContractID       uuid.UUID
-	Registry         string
-	Address          domain.Address
-	TenantNames      []string
-	Sequence         int
-	DueOn            domain.Date
-	Amount           domain.Money
-	ChargesTotal     domain.Money
-	LateFee          domain.Money
-	AmountPaid       *domain.Money
-	PaidOn           *domain.Date
+	ID           uuid.UUID
+	ContractID   uuid.UUID
+	Registry     string
+	Address      domain.Address
+	TenantNames  []string
+	Sequence     int
+	DueOn        domain.Date
+	Amount       domain.Money
+	ChargesTotal domain.Money
+	// LateFee, AmountPaid and IncomeTaxWithheld sum the payments; AmountPaid
+	// is nil while there is none. PaidOn is the day the principal was settled,
+	// nil while anything is open, so a partially paid rent has AmountPaid and
+	// no PaidOn.
+	LateFee    domain.Money
+	AmountPaid *domain.Money
+	PaidOn     *domain.Date
+	// PrincipalPaid is the part of the rent and charges already settled.
+	PrincipalPaid    domain.Money
 	LatePenaltyRate  domain.Rate
 	LateInterestRate domain.Rate
 	// IncomeTaxWithheld is what a company tenant kept, recorded with the
 	// payment; zero otherwise.
 	IncomeTaxWithheld domain.Money
-	// Charges is filled by Get only.
-	Charges []domain.Charge
+	// Charges and Payments are filled by Get only. Payments are in the order
+	// they settle: by day, then as recorded.
+	Charges  []domain.Charge
+	Payments []domain.RentPayment
+}
+
+// Touched reports whether any money was received for the rent. Such a rent
+// counts as paid for the contract: a termination keeps it and an adjustment
+// leaves it alone.
+func (r *RentView) Touched() bool { return r.AmountPaid != nil }
+
+// PartiallyPaid reports whether money came in and something is still open.
+func (r *RentView) PartiallyPaid() bool { return r.AmountPaid != nil && r.PaidOn == nil }
+
+// Outstanding is the principal still open.
+func (r *RentView) Outstanding() domain.Money { return r.Due() - r.PrincipalPaid }
+
+// Terms is what the rent's standing is computed from.
+func (r *RentView) Terms() domain.RentTerms {
+	return domain.RentTerms{Due: r.Due(), DueOn: r.DueOn, PenaltyRate: r.LatePenaltyRate, InterestRate: r.LateInterestRate}
 }
 
 // Due is the rent with its charges, what a payment settles before any late fee.
@@ -444,11 +472,15 @@ type RentRepository interface {
 	List(ctx context.Context, q RentQuery) ([]RentView, error)
 	// Get is one instalment with its charges.
 	Get(ctx context.Context, id uuid.UUID) (*RentView, error)
-	// Pay settles an unpaid instalment; one already paid is ErrConflict, so
-	// of two concurrent payments one fails.
-	Pay(ctx context.Context, id uuid.UUID, p domain.Payment) error
-	// Reverse puts a paid instalment back to unpaid; an unpaid one is ErrConflict.
-	Reverse(ctx context.Context, id uuid.UUID) error
+	// Lock holds the instalment's row until the transaction ends, so two
+	// payments of one rent are planned one after the other.
+	Lock(ctx context.Context, id uuid.UUID) error
+	// AddPayment stores a payment and brings the rent's sums up to date;
+	// settledOn is the day the principal closed, when it did.
+	AddPayment(ctx context.Context, p *domain.RentPayment, settledOn *domain.Date) error
+	// DeletePayment removes a payment and brings the rent's sums up to date,
+	// leaving the rent unpaid.
+	DeletePayment(ctx context.Context, rentID, paymentID uuid.UUID) error
 	// AddCharge adds a charge to an unpaid instalment; a paid one is ErrConflict.
 	AddCharge(ctx context.Context, c *domain.Charge, at time.Time) error
 	// RemoveCharge removes a charge from an unpaid instalment.
@@ -457,8 +489,8 @@ type RentRepository interface {
 	HasCharges(ctx context.Context, contractID uuid.UUID) (bool, error)
 	// SetChargeDestination changes where a charge goes, paid rent or not.
 	SetChargeDestination(ctx context.Context, rentID, chargeID uuid.UUID, d domain.ChargeDestination) error
-	// PaidWithoutEntries is every paid instalment whose lines were never
-	// written: the rents received before the ledger existed.
+	// PaidWithoutEntries is every instalment with a payment whose lines were
+	// never written: the rents received before the ledger existed.
 	PaidWithoutEntries(ctx context.Context) ([]uuid.UUID, error)
 }
 
@@ -517,6 +549,8 @@ type LedgerRepository interface {
 	RentEntries(ctx context.Context, rentID uuid.UUID) ([]domain.LedgerEntry, error)
 	// DeleteRentEntries removes a rent's lines; one inside a payout refuses.
 	DeleteRentEntries(ctx context.Context, rentID uuid.UUID) error
+	// DeletePaymentEntries removes one payment's lines, with the same refusal.
+	DeletePaymentEntries(ctx context.Context, paymentID uuid.UUID) error
 	Entry(ctx context.Context, id uuid.UUID) (*domain.LedgerEntry, error)
 	DeleteEntry(ctx context.Context, id uuid.UUID) error
 	// Entries are lines by ID, locked until the transaction ends. An ID that
@@ -543,7 +577,8 @@ type MonthFigures struct {
 	// Received is what came in during the month, whatever the due day.
 	Received      domain.Money
 	ReceivedCount int
-	// Open is what is due in the month and not paid.
+	// Open is what is due in the month and still open, less what partial
+	// payments settled. ReceivedCount counts payments, not rents.
 	Open      domain.Money
 	OpenCount int
 	// OfficeFee is the administration fee on the rents received in the month,

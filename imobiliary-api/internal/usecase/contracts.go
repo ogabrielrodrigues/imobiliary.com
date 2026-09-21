@@ -408,7 +408,7 @@ func (c *Contracts) Terminate(ctx context.Context, caller *Caller, id uuid.UUID,
 		}
 		stored := make([]domain.TerminationRent, len(rents))
 		for i, r := range rents {
-			stored[i] = domain.TerminationRent{Sequence: r.Sequence, Amount: r.Amount, Paid: r.PaidOn != nil}
+			stored[i] = domain.TerminationRent{Sequence: r.Sequence, Amount: r.Amount, Paid: r.Touched()}
 		}
 		plan, err := domain.PlanTermination(contract, on, stored)
 		if err != nil {
