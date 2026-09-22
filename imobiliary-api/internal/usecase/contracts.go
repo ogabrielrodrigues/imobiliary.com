@@ -100,6 +100,7 @@ func (c *Contracts) Preview(ctx context.Context, caller *Caller, contract *domai
 func (c *Contracts) prepare(ctx context.Context, repos ScopedRepositories, contract *domain.Contract) (*ContractPreview, error) {
 	domain.NormalizeContract(contract)
 	contract.CurrentRent = contract.Rent
+	var owners []domain.PropertyOwner
 
 	if contract.PropertyID != (uuid.UUID{}) {
 		property, _, err := repos.Properties.Get(ctx, contract.PropertyID)
@@ -119,10 +120,19 @@ func (c *Contracts) prepare(ctx context.Context, repos ScopedRepositories, contr
 			}
 			contract.Parties = append(landlords, contract.Parties...)
 		}
+		owners = property.Owners
+		domain.NormalizeLandlordShares(contract.Parties, owners)
 	}
 
 	if err := domain.ValidateContract(contract); err != nil {
 		return nil, err
+	}
+	if contract.PropertyID != (uuid.UUID{}) {
+		v := &domain.ValidationError{}
+		domain.ValidateLandlordShares(v, contract.Parties, owners)
+		if err := v.OrNil(); err != nil {
+			return nil, err
+		}
 	}
 
 	ids := make([]uuid.UUID, 0, len(contract.Parties))
@@ -398,7 +408,7 @@ func (c *Contracts) Terminate(ctx context.Context, caller *Caller, id uuid.UUID,
 		}
 		stored := make([]domain.TerminationRent, len(rents))
 		for i, r := range rents {
-			stored[i] = domain.TerminationRent{Sequence: r.Sequence, Amount: r.Amount, Paid: r.PaidOn != nil}
+			stored[i] = domain.TerminationRent{Sequence: r.Sequence, Amount: r.Amount, Paid: r.Touched()}
 		}
 		plan, err := domain.PlanTermination(contract, on, stored)
 		if err != nil {

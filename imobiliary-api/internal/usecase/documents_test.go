@@ -37,26 +37,46 @@ func TestEveryFieldIsDocumented(t *testing.T) {
 			t.Errorf("docs/campos.md does not document the role field %q", suffix)
 		}
 	}
+
+	// A payout statement's own fields, its numbered properties by the first,
+	// and the beneficiary by the prefix, since the suffixes are the parties'.
+	for _, name := range payoutFieldNames {
+		if !strings.Contains(text, "`"+name+"`") {
+			t.Errorf("docs/campos.md does not document the payout field %q", name)
+		}
+	}
+	for _, suffix := range payoutPropertySuffixes {
+		if !strings.Contains(text, "`imovel_1_"+suffix+"`") {
+			t.Errorf("docs/campos.md does not document the payout property field %q", suffix)
+		}
+	}
+	if !strings.Contains(text, "`proprietario_nome`") {
+		t.Error("docs/campos.md does not document the beneficiary's fields")
+	}
 }
 
 // The names themselves must be what the document service accepts, or a model
 // marked from this catalogue is refused at upload.
 func TestFieldNamesAreValidPlaceholders(t *testing.T) {
-	seen := map[string]bool{}
-	for _, name := range DocumentFieldNames {
-		if seen[name] {
-			t.Errorf("field %q is listed twice", name)
-		}
-		seen[name] = true
+	// A contract and a payout statement are separate documents: each list has
+	// no name twice, and the two may share one, such as hoje.
+	for what, names := range map[string][]string{"contract": DocumentFieldNames, "payout": PayoutFieldNames} {
+		seen := map[string]bool{}
+		for _, name := range names {
+			if seen[name] {
+				t.Errorf("%s field %q is listed twice", what, name)
+			}
+			seen[name] = true
 
-		if name == "" || name[0] < 'a' || name[0] > 'z' {
-			t.Errorf("field %q does not start with a lowercase letter", name)
-			continue
-		}
-		for _, r := range name {
-			if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '_' {
-				t.Errorf("field %q holds %q, which the document service rejects", name, r)
-				break
+			if name == "" || name[0] < 'a' || name[0] > 'z' {
+				t.Errorf("field %q does not start with a lowercase letter", name)
+				continue
+			}
+			for _, r := range name {
+				if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '_' {
+					t.Errorf("field %q holds %q, which the document service rejects", name, r)
+					break
+				}
 			}
 		}
 	}

@@ -28,7 +28,8 @@ const rentSelect = `SELECT r.id, r.contract_id, c.registry,
 	              WHERE cp.contract_id = c.id AND cp.role = 'tenant' ORDER BY cp.position),
 	       r.sequence, r.due_on, r.rent_amount,
 	       COALESCE((SELECT sum(rc.amount) FROM rent_charges rc WHERE rc.rent_id = r.id), 0)::bigint,
-	       r.late_fee, r.amount_paid, r.paid_on, c.late_penalty_rate, c.late_interest_rate
+	       r.late_fee, r.amount_paid, r.paid_on, c.late_penalty_rate, c.late_interest_rate, r.income_tax_withheld,
+	       r.principal_paid
 	  FROM rents r
 	  JOIN contracts c ON c.id = r.contract_id
 	  JOIN properties pr ON pr.id = c.property_id
@@ -42,16 +43,18 @@ func scanRent(row pgx.Row) (*usecase.RentView, error) {
 		amount, charges, fee int64
 		amountPaid           pgtype.Int8
 		penalty, interest    int32
+		tax, principalPaid   int64
 	)
 	err := row.Scan(&id, &contract, &v.Registry, &v.Address.Street, &v.Address.Number, &v.Address.Complement,
 		&v.Address.District, &v.Address.City, &v.Address.State, &v.TenantNames, &v.Sequence, &due, &amount,
-		&charges, &fee, &amountPaid, &paid, &penalty, &interest)
+		&charges, &fee, &amountPaid, &paid, &penalty, &interest, &tax, &principalPaid)
 	if err != nil {
 		return nil, err
 	}
 	v.ID, v.ContractID, v.DueOn, v.PaidOn = toUUID(id), toUUID(contract), toDate(due), toNullDate(paid)
 	v.Amount, v.ChargesTotal, v.LateFee = domain.Money(amount), domain.Money(charges), domain.Money(fee)
 	v.LatePenaltyRate, v.LateInterestRate = domain.Rate(penalty), domain.Rate(interest)
+	v.IncomeTaxWithheld, v.PrincipalPaid = domain.Money(tax), domain.Money(principalPaid)
 	if amountPaid.Valid {
 		m := domain.Money(amountPaid.Int64)
 		v.AmountPaid = &m
@@ -129,7 +132,7 @@ func (r *rentRepository) Get(ctx context.Context, id uuid.UUID) (*usecase.RentVi
 		return nil, noRows(err, "postgres: rent")
 	}
 	rows, err := r.q.Query(ctx,
-		`SELECT id, kind, description, amount FROM rent_charges WHERE rent_id = $1 ORDER BY created_at, id`, pgUUID(id))
+		`SELECT id, kind, description, amount, destination FROM rent_charges WHERE rent_id = $1 ORDER BY created_at, id`, pgUUID(id))
 	if err != nil {
 		return nil, fmt.Errorf("postgres: rent charges: %w", err)
 	}
@@ -139,13 +142,37 @@ func (r *rentRepository) Get(ctx context.Context, id uuid.UUID) (*usecase.RentVi
 			cid    pgtype.UUID
 			kind   string
 			amount int64
+			dest   string
 		)
-		err := row.Scan(&cid, &kind, &c.Description, &amount)
+		err := row.Scan(&cid, &kind, &c.Description, &amount, &dest)
 		c.ID, c.RentID, c.Kind, c.Amount = toUUID(cid), id, domain.ChargeKind(kind), domain.Money(amount)
+		c.Destination = domain.ChargeDestination(dest)
 		return c, err
 	})
 	if err != nil {
 		return nil, fmt.Errorf("postgres: rent charges: %w", err)
+	}
+	rows, err = r.q.Query(ctx,
+		`SELECT id, paid_on, amount, late_fee, waived, principal, income_tax, created_by, created_at
+		   FROM rent_payments WHERE rent_id = $1 ORDER BY paid_on, id`, pgUUID(id))
+	if err != nil {
+		return nil, fmt.Errorf("postgres: rent payments: %w", err)
+	}
+	v.Payments, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.RentPayment, error) {
+		var (
+			p                                         domain.RentPayment
+			pid, author                               pgtype.UUID
+			on                                        pgtype.Date
+			amount, fee, waived, principal, incomeTax int64
+		)
+		err := row.Scan(&pid, &on, &amount, &fee, &waived, &principal, &incomeTax, &author, &p.CreatedAt)
+		p.ID, p.RentID, p.PaidOn, p.CreatedBy = toUUID(pid), id, toDate(on), toNullUUID(author)
+		p.Amount, p.LateFee, p.Waived = domain.Money(amount), domain.Money(fee), domain.Money(waived)
+		p.Principal, p.IncomeTax = domain.Money(principal), domain.Money(incomeTax)
+		return p, err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("postgres: rent payments: %w", err)
 	}
 	return v, nil
 }
@@ -163,37 +190,64 @@ func (r *rentRepository) settled(ctx context.Context, id uuid.UUID, what string)
 	return fmt.Errorf("postgres: %s: %w", what, domain.ErrConflict)
 }
 
-func (r *rentRepository) Pay(ctx context.Context, id uuid.UUID, p domain.Payment) error {
-	tag, err := r.q.Exec(ctx,
-		`UPDATE rents SET paid_on = $2, amount_paid = $3, late_fee = $4 WHERE id = $1 AND paid_on IS NULL`,
-		pgUUID(id), pgDate(p.PaidOn), int64(p.AmountPaid), int64(p.LateFee))
+func (r *rentRepository) Lock(ctx context.Context, id uuid.UUID) error {
+	var found pgtype.UUID
+	err := r.q.QueryRow(ctx, `SELECT id FROM rents WHERE id = $1 FOR UPDATE`, pgUUID(id)).Scan(&found)
+	return noRows(err, "postgres: lock rent")
+}
+
+// resum writes a rent's sums from its payments.
+const resum = `UPDATE rents r
+	   SET amount_paid         = s.amount,
+	       late_fee            = COALESCE(s.late_fee, 0),
+	       income_tax_withheld = COALESCE(s.income_tax, 0),
+	       principal_paid      = COALESCE(s.principal, 0),
+	       paid_on             = $2
+	  FROM (SELECT sum(amount)::bigint AS amount, sum(late_fee)::bigint AS late_fee,
+	               sum(income_tax)::bigint AS income_tax, sum(principal)::bigint AS principal
+	          FROM rent_payments WHERE rent_id = $1) s
+	 WHERE r.id = $1`
+
+func (r *rentRepository) AddPayment(ctx context.Context, p *domain.RentPayment, settledOn *domain.Date) error {
+	_, err := r.q.Exec(ctx,
+		`INSERT INTO rent_payments (id, organization_id, rent_id, paid_on, amount, late_fee, waived, principal,
+		        income_tax, created_by, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		pgUUID(p.ID), pgUUID(r.organizationID), pgUUID(p.RentID), pgDate(p.PaidOn), int64(p.Amount), int64(p.LateFee),
+		int64(p.Waived), int64(p.Principal), int64(p.IncomeTax), pgNullUUID(p.CreatedBy), p.CreatedAt)
 	if err != nil {
-		return fmt.Errorf("postgres: pay rent: %w", err)
+		if isForeignKeyViolation(err) {
+			return fmt.Errorf("postgres: add payment: %w", domain.ErrNotFound)
+		}
+		return fmt.Errorf("postgres: add payment: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return r.settled(ctx, id, "pay rent")
+	var settled pgtype.Date
+	if settledOn != nil {
+		settled = pgDate(*settledOn)
+	}
+	if _, err := r.q.Exec(ctx, resum, pgUUID(p.RentID), settled); err != nil {
+		return fmt.Errorf("postgres: add payment: %w", err)
 	}
 	return nil
 }
 
-func (r *rentRepository) Reverse(ctx context.Context, id uuid.UUID) error {
-	tag, err := r.q.Exec(ctx,
-		`UPDATE rents SET paid_on = NULL, amount_paid = NULL, late_fee = 0 WHERE id = $1 AND paid_on IS NOT NULL`,
-		pgUUID(id))
-	if err != nil {
-		return fmt.Errorf("postgres: reverse payment: %w", err)
+func (r *rentRepository) DeletePayment(ctx context.Context, rentID, paymentID uuid.UUID) error {
+	tag, err := r.q.Exec(ctx, `DELETE FROM rent_payments WHERE rent_id = $1 AND id = $2`, pgUUID(rentID), pgUUID(paymentID))
+	if err := affected(tag, err, "postgres: delete payment"); err != nil {
+		return err
 	}
-	if tag.RowsAffected() == 0 {
-		return r.settled(ctx, id, "reverse payment")
+	if _, err := r.q.Exec(ctx, resum, pgUUID(rentID), pgtype.Date{}); err != nil {
+		return fmt.Errorf("postgres: delete payment: %w", err)
 	}
 	return nil
 }
 
 func (r *rentRepository) AddCharge(ctx context.Context, c *domain.Charge, at time.Time) error {
 	tag, err := r.q.Exec(ctx,
-		`INSERT INTO rent_charges (id, organization_id, rent_id, kind, description, amount, created_at)
-		 SELECT $1, $2, $3, $4, $5, $6, $7 WHERE EXISTS (SELECT 1 FROM rents WHERE id = $3 AND paid_on IS NULL)`,
-		pgUUID(c.ID), pgUUID(r.organizationID), pgUUID(c.RentID), string(c.Kind), c.Description, int64(c.Amount), at)
+		`INSERT INTO rent_charges (id, organization_id, rent_id, kind, description, amount, destination, created_at)
+		 SELECT $1, $2, $3, $4, $5, $6, $7, $8 WHERE EXISTS (SELECT 1 FROM rents WHERE id = $3 AND amount_paid IS NULL)`,
+		pgUUID(c.ID), pgUUID(r.organizationID), pgUUID(c.RentID), string(c.Kind), c.Description, int64(c.Amount),
+		string(c.Destination), at)
 	if err != nil {
 		return fmt.Errorf("postgres: add charge: %w", err)
 	}
@@ -206,7 +260,7 @@ func (r *rentRepository) AddCharge(ctx context.Context, c *domain.Charge, at tim
 func (r *rentRepository) RemoveCharge(ctx context.Context, rentID, chargeID uuid.UUID) error {
 	tag, err := r.q.Exec(ctx,
 		`DELETE FROM rent_charges rc USING rents r
-		  WHERE rc.id = $2 AND rc.rent_id = $1 AND r.id = rc.rent_id AND r.paid_on IS NULL`,
+		  WHERE rc.id = $2 AND rc.rent_id = $1 AND r.id = rc.rent_id AND r.amount_paid IS NULL`,
 		pgUUID(rentID), pgUUID(chargeID))
 	if err != nil {
 		return fmt.Errorf("postgres: remove charge: %w", err)
@@ -228,6 +282,32 @@ func (r *rentRepository) HasCharges(ctx context.Context, contractID uuid.UUID) (
 	return has, nil
 }
 
+func (r *rentRepository) SetChargeDestination(ctx context.Context, rentID, chargeID uuid.UUID, d domain.ChargeDestination) error {
+	tag, err := r.q.Exec(ctx, `UPDATE rent_charges SET destination = $3 WHERE rent_id = $1 AND id = $2`,
+		pgUUID(rentID), pgUUID(chargeID), string(d))
+	return affected(tag, err, "postgres: charge destination")
+}
+
+func (r *rentRepository) PaidWithoutEntries(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := r.q.Query(ctx,
+		`SELECT r.id FROM rents r
+		  WHERE EXISTS (SELECT 1 FROM rent_payments p WHERE p.rent_id = r.id
+		                   AND NOT EXISTS (SELECT 1 FROM owner_entries e WHERE e.payment_id = p.id))
+		  ORDER BY r.due_on, r.id`)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: rents without lines: %w", err)
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[pgtype.UUID])
+	if err != nil {
+		return nil, fmt.Errorf("postgres: rents without lines: %w", err)
+	}
+	out := make([]uuid.UUID, len(ids))
+	for i, id := range ids {
+		out[i] = toUUID(id)
+	}
+	return out, nil
+}
+
 // --- dashboard ------------------------------------------------------------------
 
 type dashboardRepository struct {
@@ -241,35 +321,38 @@ const runningContract = `c.terminated_on IS NULL AND $1::date BETWEEN c.starts_o
 
 func (d *dashboardRepository) Month(ctx context.Context, from, to domain.Date) (usecase.MonthFigures, error) {
 	var (
-		f                             usecase.MonthFigures
-		expected, received, open, fee int64
+		f                                      usecase.MonthFigures
+		expected, received, open, fee, paidOut int64
 	)
 	err := d.q.QueryRow(ctx,
 		`WITH due AS (
-		     SELECT r.paid_on, r.rent_amount
+		     SELECT r.paid_on, r.principal_paid, r.rent_amount
 		            + COALESCE((SELECT sum(rc.amount) FROM rent_charges rc WHERE rc.rent_id = r.id), 0) AS amount
 		       FROM rents r WHERE r.due_on BETWEEN $1 AND $2
 		 ), paid AS (
-		     -- The administration fee is charged on the whole rent: the rent and
-		     -- its charges, never the late fee (user's rule, 2026-09-16).
-		     SELECT r.amount_paid,
-		            round((r.rent_amount + COALESCE((SELECT sum(rc.amount) FROM rent_charges rc WHERE rc.rent_id = r.id), 0))::numeric
-		                  * c.admin_fee / 1000000)::bigint AS fee
-		       FROM rents r JOIN contracts c ON c.id = r.contract_id
-		      WHERE r.paid_on BETWEEN $1 AND $2
+		     -- Every payment on its own day: a partial counts in the month it
+		     -- came in, whatever the rent's due day.
+		     SELECT p.amount FROM rent_payments p WHERE p.paid_on BETWEEN $1 AND $2
 		 )
 		 SELECT (SELECT COALESCE(sum(amount), 0)::bigint FROM due),
 		        (SELECT count(*) FROM due),
-		        (SELECT COALESCE(sum(amount_paid), 0)::bigint FROM paid),
+		        (SELECT COALESCE(sum(amount), 0)::bigint FROM paid),
 		        (SELECT count(*) FROM paid),
-		        (SELECT COALESCE(sum(amount), 0)::bigint FROM due WHERE paid_on IS NULL),
+		        (SELECT COALESCE(sum(amount - principal_paid), 0)::bigint FROM due WHERE paid_on IS NULL),
 		        (SELECT count(*) FROM due WHERE paid_on IS NULL),
-		        (SELECT COALESCE(sum(fee), 0)::bigint FROM paid)`,
-		pgDate(from), pgDate(to)).Scan(&expected, &f.ExpectedCount, &received, &f.ReceivedCount, &open, &f.OpenCount, &fee)
+		        -- The fee is what the ledger charged the owners on the rents
+		        -- received in the month: the rent and the owner's charges.
+		        (SELECT COALESCE(-sum(e.amount), 0)::bigint FROM owner_entries e
+		          WHERE e.kind = 'admin_fee' AND e.occurred_on BETWEEN $1 AND $2),
+		        (SELECT COALESCE(sum(total), 0)::bigint FROM payouts WHERE paid_on BETWEEN $1 AND $2),
+		        (SELECT count(*) FROM payouts WHERE paid_on BETWEEN $1 AND $2)`,
+		pgDate(from), pgDate(to)).Scan(&expected, &f.ExpectedCount, &received, &f.ReceivedCount, &open, &f.OpenCount, &fee,
+		&paidOut, &f.PaidOutCount)
 	if err != nil {
 		return f, fmt.Errorf("postgres: month figures: %w", err)
 	}
 	f.Expected, f.Received, f.Open, f.OfficeFee = domain.Money(expected), domain.Money(received), domain.Money(open), domain.Money(fee)
+	f.PaidOut = domain.Money(paidOut)
 	return f, nil
 }
 
@@ -279,7 +362,7 @@ func (d *dashboardRepository) Overdue(ctx context.Context, today domain.Date) (i
 		amount int64
 	)
 	err := d.q.QueryRow(ctx,
-		`SELECT count(*), COALESCE(sum(r.rent_amount
+		`SELECT count(*), COALESCE(sum(r.rent_amount - r.principal_paid
 		        + COALESCE((SELECT sum(rc.amount) FROM rent_charges rc WHERE rc.rent_id = r.id), 0)), 0)::bigint
 		   FROM rents r WHERE r.paid_on IS NULL AND r.due_on < $1`, pgDate(today)).Scan(&count, &amount)
 	if err != nil {
@@ -353,4 +436,20 @@ func (d *dashboardRepository) AdjustmentsDue(ctx context.Context, today, until d
 		  WHERE due <= $2
 		  ORDER BY due, id LIMIT $3`,
 		pgDate(today), pgDate(until), limit)
+}
+
+func (d *dashboardRepository) Payouts(ctx context.Context) (usecase.PayoutFigures, error) {
+	var (
+		f       usecase.PayoutFigures
+		pending int64
+	)
+	err := d.q.QueryRow(ctx,
+		`SELECT COALESCE(sum(balance), 0)::bigint, count(*)
+		   FROM (SELECT sum(amount) AS balance FROM owner_entries WHERE payout_id IS NULL GROUP BY person_id) b
+		  WHERE balance > 0`).Scan(&pending, &f.Beneficiaries)
+	if err != nil {
+		return f, fmt.Errorf("postgres: payout figures: %w", err)
+	}
+	f.Pending = domain.Money(pending)
+	return f, nil
 }

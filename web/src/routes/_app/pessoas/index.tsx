@@ -16,9 +16,9 @@ const KIND_OF: Record<KindFilter, PersonKind> = { fisica: "individual", juridica
 export const Route = createFileRoute("/_app/pessoas/")({
   // The search and the filter live in the address, so a reload or a shared
   // link shows the same list.
-  validateSearch: (search: Record<string, unknown>): { q?: string; tipo?: KindFilter } => ({
-    ...(typeof search["q"] === "string" && search["q"] !== "" ? { q: search["q"] } : {}),
-    ...(search["tipo"] === "fisica" || search["tipo"] === "juridica" ? { tipo: search["tipo"] } : {}),
+  validateSearch: (search: Record<string, unknown>): PeopleSearch => ({
+    q: typeof search["q"] === "string" && search["q"] !== "" ? search["q"] : undefined,
+    tipo: search["tipo"] === "fisica" || search["tipo"] === "juridica" ? search["tipo"] : undefined,
   }),
   loaderDeps: ({ search }) => ({ q: search.q, tipo: search.tipo }),
   loader: ({ deps }) =>
@@ -27,7 +27,7 @@ export const Route = createFileRoute("/_app/pessoas/")({
   component: PeoplePage,
 });
 
-type PeopleSearch = { q?: string; tipo?: KindFilter };
+type PeopleSearch = { q?: string | undefined; tipo?: KindFilter | undefined };
 
 /** Sets or removes one search key; an absent key, never an undefined one. */
 function withSearch<K extends keyof PeopleSearch>(

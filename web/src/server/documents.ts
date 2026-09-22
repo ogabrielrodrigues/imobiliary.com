@@ -20,8 +20,9 @@ import type { FileContent } from "../application/ports.ts";
 import { ValidationError } from "../domain/errors.ts";
 import {
   cleanDocumentName,
-  contractReference,
+  subjectReference,
   type DocumentField,
+  type DocumentSubject,
   type GeneratedDocument,
   type Template,
 } from "../domain/document.ts";
@@ -60,14 +61,19 @@ export interface DocumentDraft {
 
 /** Everything the review screen needs: the template, its text, and the values. */
 export const getDocumentDraft = createServerFn({ method: "GET" })
-  .validator((input: { contractId: string; templateId: string }) => input)
+  .validator((input: { subject: DocumentSubject; templateId: string }) => input)
   .handler(async ({ data }): Promise<Result<DocumentDraft>> =>
     attempt(async () => {
       const manager = sessions();
       const ctx = callContext();
 
       const [fields, template] = await Promise.all([
-        manager.authorize(ctx, (c) => api().contracts.documentFields(c, data.contractId)),
+        // A contract answers its lease fields; a payout, its statement's.
+        manager.authorize(ctx, (c) =>
+          data.subject.kind === "payout"
+            ? api().payouts.documentFields(c, data.subject.id)
+            : api().contracts.documentFields(c, data.subject.id),
+        ),
         manager.authorizeDocuments(ctx, (c) =>
           documents().getTemplate(c, data.templateId),
         ),
@@ -92,16 +98,16 @@ export const getDocumentDraft = createServerFn({ method: "GET" })
     }),
   );
 
-export interface GenerateContractDocumentInput {
-  readonly contractId: string;
+export interface GenerateDocumentInput {
+  readonly subject: DocumentSubject;
   readonly templateId: string;
   readonly filename: string;
   readonly values: Record<string, string>;
 }
 
-/** Renders the document and ties it to the contract. */
-export const generateContractDocument = createServerFn({ method: "POST" })
-  .validator((input: GenerateContractDocumentInput) => input)
+/** Renders the document and files it under its record. */
+export const generateDocument = createServerFn({ method: "POST" })
+  .validator((input: GenerateDocumentInput) => input)
   .handler(async ({ data }): Promise<Result<GeneratedDocument>> =>
     attempt(async () => {
       assertSameOrigin();
@@ -146,7 +152,7 @@ export const generateContractDocument = createServerFn({ method: "POST" })
           ...(template.version === undefined ? {} : { version: template.version.version }),
           filename,
           data: values,
-          reference: contractReference(data.contractId),
+          reference: subjectReference(data.subject),
         }),
       );
     }),
@@ -158,7 +164,7 @@ export const listContractDocuments = createServerFn({ method: "GET" })
   .handler(async ({ data }): Promise<Result<GeneratedDocument[]>> =>
     attempt(() =>
       sessions().authorizeDocuments(callContext(), (ctx) =>
-        documents().listByReference(ctx, contractReference(data)),
+        documents().listByReference(ctx, subjectReference({ kind: "contract", id: data })),
       ),
     ),
   );
@@ -201,4 +207,15 @@ export const deleteDocument = createServerFn({ method: "POST" })
       );
       return null;
     }),
+  );
+
+/** The documents already generated for one payout, newest first. */
+export const listPayoutDocuments = createServerFn({ method: "GET" })
+  .validator((payoutId: string) => payoutId)
+  .handler(async ({ data }): Promise<Result<GeneratedDocument[]>> =>
+    attempt(() =>
+      sessions().authorizeDocuments(callContext(), (ctx) =>
+        documents().listByReference(ctx, subjectReference({ kind: "payout", id: data })),
+      ),
+    ),
   );

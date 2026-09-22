@@ -15,7 +15,11 @@ import { listRents } from "@/server/rents";
 
 type StatusFilter = "em-atraso" | "em-aberto" | "pagos";
 
-type RentsSearch = { q?: string; situacao?: StatusFilter; mes?: string };
+type RentsSearch = {
+  q?: string | undefined;
+  situacao?: StatusFilter | undefined;
+  mes?: string | undefined;
+};
 
 const STATUS_OF: Record<StatusFilter, "overdue" | "open" | "paid"> = {
   "em-atraso": "overdue",
@@ -25,13 +29,12 @@ const STATUS_OF: Record<StatusFilter, "overdue" | "open" | "paid"> = {
 
 export const Route = createFileRoute("/_app/alugueis/")({
   validateSearch: (search: Record<string, unknown>): RentsSearch => {
-    const out: RentsSearch = {};
-    if (typeof search["q"] === "string" && search["q"] !== "") out.q = search["q"];
-    if (typeof search["situacao"] === "string" && search["situacao"] in STATUS_OF) {
-      out.situacao = search["situacao"] as StatusFilter;
-    }
-    if (typeof search["mes"] === "string" && monthRange(search["mes"]) !== null) out.mes = search["mes"];
-    return out;
+    const { q, situacao, mes } = search;
+    return {
+      q: typeof q === "string" && q !== "" ? q : undefined,
+      situacao: typeof situacao === "string" && situacao in STATUS_OF ? (situacao as StatusFilter) : undefined,
+      mes: typeof mes === "string" && monthRange(mes) !== null ? mes : undefined,
+    };
   },
   loaderDeps: ({ search }) => search,
   loader: ({ deps }) => listRents({ data: queryOf(deps) }),
@@ -211,10 +214,10 @@ function RentsPage() {
                   </span>
                 </Link>
                 <span className="flex flex-col items-end gap-1 tabular-nums">
-                  <span className="font-medium">{formatMoney(rent.amountPaid ?? rent.due)}</span>
+                  <span className="font-medium">{formatMoney(rent.status === "paid" ? (rent.amountPaid ?? rent.due) : rent.outstanding)}</span>
                   <span className="text-caption text-muted-foreground">{rentStatusNote(rent, today)}</span>
                 </span>
-                <RentStatusBadge status={rent.status} />
+                <RentStatusBadge status={rent.status} partial={rent.partiallyPaid} />
                 {rent.status !== "paid" && <PaymentDialog rent={rent} />}
               </li>
             ))}

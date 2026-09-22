@@ -286,7 +286,7 @@ here because that access may not survive.
 
 Three themes since 2026-09-11: **Escuro** (the default, reproduced below),
 **Claro** and **Papel** (`... -claro-.dc.html`, `... -papel-.dc.html` in the
-same project). Their values live in `docs/src/styles/app.css`, one block per
+same project). Their values live in `packages/ui/src/tokens.css`, one block per
 `data-scheme`. **The token block at the end of both light files is out of
 date** — it repeats the dark accents; the swatches and components are right.
 Four places where the light designs fail WCAG AA were changed on purpose, and
@@ -368,7 +368,7 @@ code. Nothing there to port.
 
 _Update this section as work proceeds. It is what a fresh session reads first._
 
-**Last updated:** 2026-09-17: phase 7 complete (the docgen integration: identity moved to the platform, documents generated from a contract, verified in the browser); phase 8 (docs on packages/ui) is next
+**Last updated:** 2026-09-21: partial payments, the carnê-leão report and anonymisation at the end of the retention built (PLANO-PENDENCIAS.md, item 51); payouts to owners built (PLANO-REPASSE.md, item 50); phase 8 complete, so every phase of `PLANO.md` is done; phase 7 complete (the docgen integration: identity moved to the platform, documents generated from a contract, verified in the browser); phase 8 (docs on packages/ui) is next
 
 ### Done
 
@@ -1141,8 +1141,8 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       `docs` keeps `imobiliary_docs_accessibility` when it migrates.
     - **A third font, Inter Variable**, as `--font-reading` (`font-reading`),
       for text that is read rather than scanned and for columns of money.
-    - **`docs` still has its own copies**, untouched. Its migration is phase 8
-      and must be proved with the computed-style hash at 1280px.
+    - `docs` had its own copies until phase 8 (item 48), which replaced them
+      with the package.
     - **`shadcn init` asks for a project name even with `-y`**, and it creates
       the project in a subdirectory of that name. Piping answers in gives the
       directory a name made of the piped text; the contents were moved up and
@@ -1516,7 +1516,8 @@ _Update this section as work proceeds. It is what a fresh session reads first._
     - **`GET /v1/dashboard`** as of today: month expected/received/open and
       the administration fee (`round((rent_amount + charges) × admin_fee)`
       on rents received this month; **the user ruled on 2026-09-16 that the
-      fee is charged on the rent with its charges, never on the late fee**),
+      fee is charged on the rent with its charges, never on the late fee**;
+      narrowed on 2026-09-21 to the charges that go to the owner, item 50),
       overdue totals, portfolio (properties,
       leased, running contracts, rent roll), contracts ending within 60 days,
       adjustments due within 30 days (index set, twelve months from start or
@@ -1614,12 +1615,16 @@ _Update this section as work proceeds. It is what a fresh session reads first._
       said the qualification paragraph was the wrong shape: a paragraph
       written by the API fits one model and no other. Every role now also
       answers `locador_1_nome`, `locador_1_cpf`, `locatario_2_estado_civil`
-      and so on, numbered to `MaxPartiesPerRole` (4) with the 28 suffixes in
+      and so on, numbered to `MaxPartiesPerRole` (4) with the 30 suffixes in
       `domain/person_fields.go`; the paragraph stays for whoever wants it.
       The contract gained the property's address line by line, its utility
       accounts and owners, the office's name, the guarantee kind, plain-number
       variants of money and rates, long dates, `hoje`, and the rent as it
-      stands after adjustments: 419 fields. **`imobiliary-api/docs/campos.md`
+      stands after adjustments: 443 fields. Each person also has `_o` and `_a`,
+      the endings that agree with that person alone ("inscrit{{.locatario_1_o}}",
+      "portador{{.locatario_1_a}}"), and the marked model in `modelos/` is
+      written field by field with them; the docgen engine filled it and Word
+      read it back. **`imobiliary-api/docs/campos.md`
       is the catalogue**, in Portuguese, and `TestEveryFieldIsDocumented`
       fails when a field is added without being written there. The same
       catalogue is published for the user at
@@ -1628,13 +1633,168 @@ _Update this section as work proceeds. It is what a fresh session reads first._
     - **Not verified here:** the signed-in half of Docs against the new
       service (templates, generation, history), which needs the user's own
       password, and the marked model uploaded as a template, which is an
-      upload on Docs.
+      upload on Docs. The model was filled with contract 2026/001's real
+      fields (fetched through the platform) by the docgen engine on
+      2026-09-21, and read correctly.
+
+48. **Phase 8: `docs` on `packages/ui`**, in a commit of its own.
+    - `docs/src/styles/app.css` now imports `@imobiliary/ui/tokens.css` after
+      Tailwind, exactly as `web` does, and keeps only the block editor's rules.
+      `lib/utils.ts` re-exports `cn` from the package, and
+      `lib/accessibility-storage.ts` builds the storage with
+      `accessibilityStorage("imobiliary_docs_accessibility")`, the key the
+      privacy policy names; changing it would drop every reader's saved
+      preferences. The settings panels import `@imobiliary/ui/accessibility`.
+    - Removed as copies: `domain/accessibility.ts` and its test,
+      `lib/accessibility-storage.test.ts`, `lib/utils.test.ts`,
+      `styles/contrast.test.ts`. The package holds and tests all of them, so
+      the notes in items 18 and 20 about those files now mean
+      `packages/ui/src/`. `docs` lost its direct `cn` and font dependencies;
+      the Open Graph source reads the font files from the package.
+    - **Proof:** before touching anything, the computed style of every
+      element and pseudo-element of `/`, `/entrar`, `/privacidade`, `/termos`
+      and the 404 page, at 1280px, in Escuro, Claro and Papel, was hashed (15
+      hashes, the first repeated to show it is stable). After the change, with
+      the dev server restarted on a cleared `node_modules/.vite`, all 15 were
+      identical. The package's only addition, Inter, is declared and emitted
+      by the build but never downloaded, since no `docs` page uses
+      `font-reading`.
+    - **An iframe cannot do this measurement**: `frame-ancestors 'none'` blocks
+      it. The hashes were taken by navigating the tab itself, with the
+      snapshot function kept in `sessionStorage`.
+    - Checks: `pnpm check` in `docs` (117 tests), the production build, and the
+      two settings panels and `AppearanceSync` loaded in the browser. Ajustes
+      was then seen signed in (2026-09-21): theme, "Seguir o sistema", high
+      contrast, text size and "Restaurar padrões" all apply and are saved
+      under the old key.
+
+49. **A search validator must name every key it owns** (found checking Docs'
+    Ajustes). TanStack Router merges a route's validated search over its
+    parent's, and the root keeps the raw parameters, so a validator that
+    merely leaves a refused key out lets the raw value through:
+    `/ajustes?aba=conta` selected no tab and showed an empty page, and an
+    invalid `?mes=` or `?versao=` reached the loader as text. Every
+    validator in both apps now returns each key, `undefined` when refused,
+    and the types say `?: T | undefined` (`exactOptionalPropertyTypes` is
+    on). The router leaves undefined keys out of the address. **Write every
+    new `validateSearch` this way.**
+
+50. **Payouts to owners** (PLANO-REPASSE.md, decided with the user on
+    2026-09-21; `a47eea6` domain, `1b0c7bd` API, `c3fa892` administrator,
+    `9e78e0c` and `53c098f` web, `cf301b6` and `a32fc0b` statement documents,
+    `6d91572` numbering).
+    - **The owner's ledger** (`owner_entries`): a received rent writes, in the
+      payment's transaction, a line per landlord for their part of the rent,
+      the late fee (all the owner's), each charge whose destination is the
+      owner, less their part of the fee and of the IRRF. `domain.Split` gives
+      the remainder to the last landlord, with a 128-bit product. Lines are
+      never updated except their `payout_id` (the app role has UPDATE on that
+      column only) and a line in a payout cannot be deleted (trigger).
+    - **Beneficiaries** are the contract's landlords: the property's shares on
+      the day when they are exactly the owners, else `contract_parties.share`
+      (required then, a deferred trigger keeps 100%). The web asks for shares
+      only then; a single such landlord is 100% without typing.
+    - **Two rules replaced older ones, by the user:** the fee is on the rent
+      and the **owner's** charges only (a charge has `destination` owner or
+      third_party), and **`amount_paid` is computed** (rent + charges + late
+      fee − IRRF): sending it is a 422, a discount goes in the late fee. The
+      dashboard's fee now reads the ledger's fee lines.
+    - Reversal is refused while a line is in a payout (the message names the
+      payout); a paid rent's charge can change destination until then, and
+      its lines are rewritten.
+    - **Payout numbers never repeat** (`payout_numbers`, migration 0014): the
+      first version took max+1, so undoing the last payout freed its number,
+      found in the browser. A printed receipt may carry it.
+    - **Rents paid before the ledger get their lines at every start of the
+      service** (`backfillLedger` in `main.go`), not by a command as the plan
+      said: idempotent, and nobody has to remember it. The user's rent
+      2026/000 was backfilled; its fan charge stayed third_party.
+    - **Administrator** (`GET/PUT /v1/organization/administrator`, migration
+      0013 fixed 0012's text column to bytea): person or company, CPF or
+      CNPJ sealed, CRECI. Ajustes › Escritório; the user is a member, so they
+      see it read-only.
+    - **Web:** `/repasses`, `/repasses/pessoa/$personId`,
+      `/repasses/$payoutId`, `/repasses/$payoutId/recibo?tipo=repasse|taxa`
+      (a `data-scheme="light"` sheet; the shell has `print:hidden`) and
+      `/repasses/$payoutId/documento`. The document flow now takes a subject,
+      contract or payout (`components/documents/`), filed as `payout:<id>`.
+      `GET /v1/payouts/{id}/document-fields` answers 123 fields; `campos.md`
+      section 9 and the published catalogue list them.
+    - OpenAPI 0.9.0; reference and catalogue republished at their URLs.
+      `PRIVACIDADE.md` has the ledger (5-year fiscal retention, CTN art. 173),
+      the administrator, and two new gaps.
+    - **Verified in the browser** on test records, deleted after: a rent with
+      an owner's IPTU and a condominium passed on, late fee and IRRF (R$
+      2.400,00 received), balance R$ 1.885,00, a typed debit, payout
+      2026/0001 by PIX, both receipts, the refused reversal, undo, a payout's
+      document draft with 123 fields.
+    - Renaming the office was audited as `organization.created`; it is
+      `organization.renamed` now, and the audit-trail integration test
+      counts one creation. No rename had been recorded in the development
+      database, so no row carries the old label.
+
+51. **Partial payments, the carnê-leão report, anonymisation**
+    (PLANO-PENDENCIAS.md, decided with the user on 2026-09-21; `b2a48e8`
+    statement model, `4332db7` and `c77d532` partial payments, `5c18035`
+    report, `b9605cd` and `7fb14d6` anonymisation).
+    - **A marked payout statement model** is in `modelos/`, written with
+      `packages/docx`; the docgen engine filled it and Word read it back.
+    - **A rent is paid by one payment or several** (`rent_payments`,
+      migration 0015). Each settles interest, then penalty, then the
+      principal, split between the rent and each charge by what each has
+      open (CC art. 354; `PrincipalParts`, randomised test). Interest runs on
+      the principal still open; the penalty is charged once, on what was
+      open the day after the due day. `RentStanding` replays the payments to
+      a day; with none it equals the old late fee exactly (tested). The rent
+      keeps the sums (`amount_paid`, `late_fee`, `income_tax_withheld`,
+      `principal_paid`) and `paid_on` only once settled, so "paid" still
+      means settled; **"touched" (`amount_paid IS NOT NULL`) is what keeps a
+      rent from terminations, adjustments and charge changes.**
+    - The payment routes stayed; `amount` makes a payment partial, and
+      `DELETE .../payment` reverses the last one. A payment cannot be dated
+      before the last. Each payment writes its own ledger lines
+      (`owner_entries.payment_id`), from a replay of all of them, so writing
+      one alone gives the lines writing all would.
+    - **Forced row security binds the migration owner too.** A migration
+      that reads or backfills rows must lift it (`NO FORCE`) and force it
+      again, as 0015 does; otherwise it sees nothing. **0012's backfill of
+      landlord shares therefore did nothing**; no contract in the
+      development database needed it, which was checked.
+    - `pg_dump` fails for the same reason; the migration was rehearsed on
+      the development database inside a rolled-back transaction instead.
+    - **Carnê-leão report**: `GET /v1/people/{id}/income-report?year=`,
+      individuals only, sums the ledger by month and by tenant kind (a
+      contract with any company tenant counts as a company's); no tax, no
+      judgement of deductions. Web: `/repasses/pessoa/$personId/carne-leao`
+      (file `pessoa.$personId_.carne-leao.tsx`), printable sheet and a CSV for
+      Excel in Brazil.
+    - **Anonymisation** (migration 0016): candidates own no property, are in
+      no running contract, have no pending line, and their last contract end,
+      ledger line and payout are past `domain.RetentionEnds` (five years
+      from the next 1 January, CTN art. 173, I); a spouse or representative
+      of someone not listed stays out. Any member sees the list in Ajustes ›
+      Escritório; an administrator confirms. The web server function erases
+      the person's payout documents and the documents of contracts whose
+      other parties go too, **after checking the session's role**, then calls
+      the API. The record stays as "Pessoa anonimizada" and is never edited.
+    - OpenAPI 0.12.0; reference republished. `PRIVACIDADE.md` has a section
+      on the end of the retention; privacy policy 1.2.
+    - Verified in the browser on test data, deleted after: a partial of
+      900.00 ten days late on 1800.00, the rest a month later, the owner's
+      ledger, reversal of the last payment; the report on the user's own
+      owner (read only); the retention list as a member.
 
 ### Next step
 
-Phase 8 of `PLANO.md` §7: `docs` consumes `packages/ui`, in a commit of its
-own, proved with the computed-style hash of the public pages at 1280px in the
-three themes, before and after.
+Every phase of `PLANO.md` §7 is done, payouts to owners (`PLANO-REPASSE.md`)
+are built (item 50), and so is `PLANO-PENDENCIAS.md` (item 51). The user has
+not yet seen payouts, partial payments or the report in their own browser; the
+office's administrator is still unrecorded, which an admin fills in Ajustes;
+the statement model in `modelos/` is waiting to be uploaded to Docs.
+
+Left out on purpose: the DIMOB file and the fee invoice (the user chose the
+carnê-leão report only). Still to plan: deployment, encryption at rest, and
+CI. The open items below still stand.
 
 Not in the editor on purpose, for now: fonts, colours, highlight, tables,
 images, headers and footers. Tables are the costly one: the block model,

@@ -8,11 +8,11 @@ import { Input } from "@/components/ui/input";
 import { addressLine, addressPlace, type PropertySummary } from "@/domain/property";
 import { listProperties } from "@/server/properties";
 
-type PropertiesSearch = { q?: string };
+type PropertiesSearch = { q?: string | undefined };
 
 export const Route = createFileRoute("/_app/imoveis/")({
   validateSearch: (search: Record<string, unknown>): PropertiesSearch =>
-    typeof search["q"] === "string" && search["q"] !== "" ? { q: search["q"] } : {},
+    ({ q: typeof search["q"] === "string" && search["q"] !== "" ? search["q"] : undefined }),
   loaderDeps: ({ search }) => ({ q: search.q }),
   loader: ({ deps }) => listProperties({ data: { q: deps.q } }),
   head: () => ({ meta: [{ title: "Imóveis | Imobiliary" }] }),

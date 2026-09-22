@@ -1,31 +1,10 @@
-import { createCn } from "cn/config";
-
 /**
- * The type scale's names, as declared in `styles/app.css` (`--text-<name>`).
+ * `cn` merges class names, and has to be told the type scale's names, or it
+ * reads `text-small` as a colour and silently drops it next to
+ * `text-foreground`. It comes from the shared package, where the scale and its
+ * test live together.
  *
- * The class merger has to be told them. Out of the box it only recognises
- * Tailwind's own sizes, so it reads `text-small` as a text colour: next to
- * `text-foreground` it keeps the later one and silently drops the size. That
- * already happened once, to every field label. `utils.test.ts` fails if a token
- * is added to the stylesheet without being listed here.
+ * Generated shadcn components import `cn` from `@/lib/utils`, which is why
+ * this file exists rather than each component importing the package.
  */
-export const FONT_SIZES = [
-  "micro",
-  "label",
-  "meta",
-  "fine",
-  "caption",
-  "small",
-  "control",
-  "lead",
-  "title-sm",
-  "title-md",
-  "title",
-  "title-lg",
-  "headline",
-  "display",
-] as const;
-
-export const cn = createCn({
-  extend: { classGroups: { "font-size": [{ text: [...FONT_SIZES] }] } },
-});
+export { cn, FONT_SIZES } from "@imobiliary/ui/cn";

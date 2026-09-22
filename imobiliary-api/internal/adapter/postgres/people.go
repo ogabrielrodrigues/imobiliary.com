@@ -26,6 +26,7 @@ func (db *DB) InOrganization(ctx context.Context, organizationID uuid.UUID, fn f
 			Contracts:  &contractRepository{q: tx, organizationID: organizationID},
 			Amendments: &amendmentRepository{q: tx, organizationID: organizationID},
 			Rents:      &rentRepository{q: tx, organizationID: organizationID},
+			Ledger:     &ledgerRepository{q: tx, organizationID: organizationID},
 			Dashboard:  &dashboardRepository{q: tx},
 			Audit:      &auditRepository{tx},
 		})
@@ -33,6 +34,25 @@ func (db *DB) InOrganization(ctx context.Context, organizationID uuid.UUID, fn f
 }
 
 var _ usecase.OrganizationScope = (*DB)(nil)
+
+// OrganizationIDs lists every office, for work done at start-up across all of
+// them. The organizations table carries no row-level security: it is read
+// before an office is known, at sign-in.
+func (db *DB) OrganizationIDs(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := db.pool.Query(ctx, `SELECT id FROM organizations ORDER BY id`)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: organizations: %w", err)
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[pgtype.UUID])
+	if err != nil {
+		return nil, fmt.Errorf("postgres: organizations: %w", err)
+	}
+	out := make([]uuid.UUID, len(ids))
+	for i, id := range ids {
+		out[i] = toUUID(id)
+	}
+	return out, nil
+}
 
 type personRepository struct {
 	q              querier
@@ -226,7 +246,7 @@ func (r *personRepository) Get(ctx context.Context, id uuid.UUID) (*usecase.Stor
 		marital, regime, gender, trade pgtype.Text
 	)
 	err := r.q.QueryRow(ctx,
-		`SELECT p.id, p.kind, p.name, p.email, p.phone, p.version, p.created_at, p.updated_at,
+		`SELECT p.id, p.kind, p.name, p.email, p.phone, p.version, p.created_at, p.updated_at, p.anonymized_at,
 		        i.cpf, i.cpf_index, i.nationality, i.marital_status, i.property_regime, i.spouse_id,
 		        i.occupation, i.birth_date, i.gender,
 		        c.trade_name, c.cnpj, c.cnpj_index
@@ -235,7 +255,7 @@ func (r *personRepository) Get(ctx context.Context, id uuid.UUID) (*usecase.Stor
 		   LEFT JOIN companies c ON c.person_id = p.id
 		  WHERE p.id = $1`, pgUUID(id),
 	).Scan(&pid, &kind, &sp.Person.Name, &sp.Email, &sp.Phone, &sp.Person.Version,
-		&sp.Person.CreatedAt, &sp.Person.UpdatedAt,
+		&sp.Person.CreatedAt, &sp.Person.UpdatedAt, &sp.Person.AnonymizedAt,
 		&sp.CPF, &sp.CPFIndex, &nationality, &marital, &regime, &spouse,
 		&occupation, &sp.BirthDate, &gender,
 		&trade, &sp.CNPJ, &sp.CNPJIndex)
@@ -417,4 +437,128 @@ func (r *personRepository) Delete(ctx context.Context, id uuid.UUID) error {
 		return fmt.Errorf("postgres: delete person: %w", domain.ErrInUse)
 	}
 	return affected(tag, err, "postgres: delete person")
+}
+
+func (r *personRepository) RetentionCandidates(ctx context.Context, today domain.Date) ([]usecase.RetentionCandidate, error) {
+	rows, err := r.q.Query(ctx,
+		`SELECT id, name, kind, last_on FROM (
+		     SELECT p.id, p.name, p.kind,
+		            GREATEST(
+		                (SELECT max(COALESCE(c.terminated_on, c.expires_on))
+		                   FROM contract_parties cp JOIN contracts c ON c.id = cp.contract_id
+		                  WHERE cp.person_id = p.id),
+		                (SELECT max(e.occurred_on) FROM owner_entries e WHERE e.person_id = p.id),
+		                (SELECT max(po.paid_on) FROM payouts po WHERE po.person_id = p.id)) AS last_on
+		       FROM people p
+		      WHERE p.anonymized_at IS NULL
+		        AND NOT EXISTS (SELECT 1 FROM property_owners o WHERE o.person_id = p.id)
+		        AND NOT EXISTS (SELECT 1 FROM contract_parties cp JOIN contracts c ON c.id = cp.contract_id
+		                         WHERE cp.person_id = p.id AND COALESCE(c.terminated_on, c.expires_on) >= $1)
+		        AND NOT EXISTS (SELECT 1 FROM owner_entries e WHERE e.person_id = p.id AND e.payout_id IS NULL)
+		 ) c
+		  WHERE last_on IS NOT NULL
+		  ORDER BY immutable_unaccent(lower(name)), id`, pgDate(today))
+	if err != nil {
+		return nil, fmt.Errorf("postgres: retention candidates: %w", err)
+	}
+	out, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (usecase.RetentionCandidate, error) {
+		var (
+			c    usecase.RetentionCandidate
+			id   pgtype.UUID
+			kind string
+			last pgtype.Date
+		)
+		err := row.Scan(&id, &c.Name, &kind, &last)
+		c.ID, c.Kind, c.LastActivity = toUUID(id), domain.PersonKind(kind), toDate(last)
+		return c, err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("postgres: retention candidates: %w", err)
+	}
+	return out, nil
+}
+
+func (r *personRepository) Edges(ctx context.Context) ([]usecase.PersonEdge, error) {
+	rows, err := r.q.Query(ctx,
+		`SELECT person_id, spouse_id FROM individuals WHERE spouse_id IS NOT NULL
+		 UNION ALL
+		 SELECT company_id, person_id FROM company_representatives`)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: person links: %w", err)
+	}
+	out, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (usecase.PersonEdge, error) {
+		var a, b pgtype.UUID
+		err := row.Scan(&a, &b)
+		return usecase.PersonEdge{A: toUUID(a), B: toUUID(b)}, err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("postgres: person links: %w", err)
+	}
+	return out, nil
+}
+
+func (r *personRepository) PartyContracts(ctx context.Context, personIDs []uuid.UUID) ([]usecase.PartyContract, error) {
+	if len(personIDs) == 0 {
+		return nil, nil
+	}
+	ids := make([]pgtype.UUID, len(personIDs))
+	for i, id := range personIDs {
+		ids[i] = pgUUID(id)
+	}
+	rows, err := r.q.Query(ctx,
+		`SELECT c.id, c.registry, ARRAY(SELECT DISTINCT person_id FROM contract_parties WHERE contract_id = c.id)
+		   FROM contracts c
+		  WHERE EXISTS (SELECT 1 FROM contract_parties cp WHERE cp.contract_id = c.id AND cp.person_id = ANY($1))
+		  ORDER BY c.starts_on, c.id`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: party contracts: %w", err)
+	}
+	out, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (usecase.PartyContract, error) {
+		var (
+			c       usecase.PartyContract
+			id      pgtype.UUID
+			parties []pgtype.UUID
+		)
+		err := row.Scan(&id, &c.Registry, &parties)
+		c.ID = toUUID(id)
+		for _, p := range parties {
+			c.Parties = append(c.Parties, toUUID(p))
+		}
+		return c, err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("postgres: party contracts: %w", err)
+	}
+	return out, nil
+}
+
+// anonymizedName replaces the name, which the table requires.
+const anonymizedName = "Pessoa anonimizada"
+
+func (r *personRepository) Anonymize(ctx context.Context, id uuid.UUID, at time.Time) error {
+	steps := []struct {
+		what, sql string
+	}{
+		{"person", `UPDATE people SET name = $2, email = NULL, phone = NULL, anonymized_at = $3,
+		                   updated_at = $3, version = version + 1
+		             WHERE id = $1`},
+		{"individual", `UPDATE individuals SET cpf = NULL, cpf_index = NULL, anonymized = true, nationality = '',
+		                       marital_status = NULL, property_regime = NULL, spouse_id = NULL, occupation = '',
+		                       birth_date = NULL, gender = NULL
+		                 WHERE person_id = $1`},
+		{"spouse", `UPDATE individuals SET spouse_id = NULL WHERE spouse_id = $1`},
+		{"company", `UPDATE companies SET trade_name = '', cnpj = NULL, cnpj_index = NULL WHERE person_id = $1`},
+		{"representatives", `DELETE FROM company_representatives WHERE company_id = $1 OR person_id = $1`},
+		{"addresses", `DELETE FROM addresses WHERE id IN (SELECT address_id FROM person_addresses WHERE person_id = $1)`},
+	}
+	for _, step := range steps {
+		args := []any{pgUUID(id)}
+		if step.what == "person" {
+			args = append(args, anonymizedName, at)
+		}
+		if _, err := r.q.Exec(ctx, step.sql, args...); err != nil {
+			return fmt.Errorf("postgres: anonymize %s: %w", step.what, err)
+		}
+	}
+	return nil
 }

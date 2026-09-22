@@ -63,7 +63,7 @@ import { deleteTemplate, publishTemplateVersion } from "@/server/templates";
 /** The search parameters this screen understands. */
 interface TemplateSearch {
   /** Pins a version. Absent means the latest, which keeps the URL canonical. */
-  readonly versao?: number;
+  readonly versao?: number | undefined;
 }
 
 export const Route = createFileRoute("/_app/templates/$templateId")({
@@ -77,7 +77,7 @@ export const Route = createFileRoute("/_app/templates/$templateId")({
    */
   validateSearch: (search: Record<string, unknown>): TemplateSearch => {
     const raw = Number(search["versao"]);
-    return Number.isInteger(raw) && raw >= 1 ? { versao: raw } : {};
+    return { versao: Number.isInteger(raw) && raw >= 1 ? raw : undefined };
   },
   // Without this the router treats a change of search as the same match and
   // serves the cached data, so the loader would never see the new version.

@@ -72,6 +72,13 @@ func repositoriesOn(q querier) usecase.Repositories {
 // that would otherwise depend on the driver's reflection rules.
 func pgUUID(id uuid.UUID) pgtype.UUID { return pgtype.UUID{Bytes: id, Valid: true} }
 
+func pgNullRate(r *domain.Rate) pgtype.Int4 {
+	if r == nil {
+		return pgtype.Int4{}
+	}
+	return pgtype.Int4{Int32: int32(*r), Valid: true}
+}
+
 func pgNullUUID(id *uuid.UUID) pgtype.UUID {
 	if id == nil {
 		return pgtype.UUID{}
@@ -372,4 +379,30 @@ func prefixed(columns, alias string) string {
 		parts[i] = alias + "." + strings.TrimSpace(column)
 	}
 	return strings.Join(parts, ", ")
+}
+
+func (r *organizationRepository) Administrator(ctx context.Context, id uuid.UUID) (*usecase.StoredAdministrator, error) {
+	var (
+		kind  pgtype.Text
+		doc   []byte
+		creci string
+	)
+	err := r.q.QueryRow(ctx,
+		`SELECT administrator_kind, administrator_document, administrator_creci FROM organizations WHERE id = $1`,
+		pgUUID(id)).Scan(&kind, &doc, &creci)
+	if err != nil {
+		return nil, noRows(err, "postgres: administrator")
+	}
+	if !kind.Valid {
+		return nil, nil
+	}
+	return &usecase.StoredAdministrator{Kind: domain.AdministratorKind(kind.String), DocumentSealed: doc, CRECI: creci}, nil
+}
+
+func (r *organizationRepository) SetAdministrator(ctx context.Context, id uuid.UUID, a *usecase.StoredAdministrator, at time.Time) error {
+	tag, err := r.q.Exec(ctx,
+		`UPDATE organizations SET administrator_kind = $2, administrator_document = $3, administrator_creci = $4, updated_at = $5
+		  WHERE id = $1`,
+		pgUUID(id), string(a.Kind), a.DocumentSealed, a.CRECI, at)
+	return affected(tag, err, "postgres: set administrator")
 }

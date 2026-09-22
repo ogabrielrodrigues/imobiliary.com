@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactElement } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
 import {
@@ -51,17 +51,21 @@ function formatMoment(at: Date): string {
 }
 
 /**
- * The documents generated from this contract.
+ * The documents generated from one record, a contract or a payout.
  *
  * They live in the document service, and this is the same list the Docs
  * platform shows in its history: one document, one place, read from both.
  */
-export function ContractDocuments({
-  contractId,
+export function GeneratedDocuments({
+  generate,
+  empty,
   documents,
   failure,
 }: {
-  readonly contractId: string;
+  /** The link to generate a new one, drawn as the section's button. */
+  readonly generate: ReactElement;
+  /** What the section says while there is none. */
+  readonly empty: string;
   readonly documents: readonly GeneratedDocument[];
   readonly failure: Failure | null;
 }) {
@@ -69,15 +73,7 @@ export function ContractDocuments({
     <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-3">
         <h2 className="text-title-sm font-semibold">Documentos</h2>
-        <Button
-          size="sm"
-          variant="secondary"
-          className="ml-auto"
-          nativeButton={false}
-          render={
-            <Link to="/contratos/$contractId/documento" params={{ contractId }} />
-          }
-        >
+        <Button size="sm" variant="secondary" className="ml-auto" nativeButton={false} render={generate}>
           <IconFilePlus data-icon="inline-start" aria-hidden="true" />
           Gerar documento
         </Button>
@@ -91,9 +87,7 @@ export function ContractDocuments({
           })}
         </p>
       ) : documents.length === 0 ? (
-        <p className="text-small text-muted-foreground">
-          Nenhum documento gerado a partir deste contrato.
-        </p>
+        <p className="text-small text-muted-foreground">{empty}</p>
       ) : (
         <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
           {documents.map((document) => (
@@ -115,6 +109,26 @@ export function ContractDocuments({
         </ul>
       )}
     </section>
+  );
+}
+
+/** The documents generated from this contract. */
+export function ContractDocuments({
+  contractId,
+  documents,
+  failure,
+}: {
+  readonly contractId: string;
+  readonly documents: readonly GeneratedDocument[];
+  readonly failure: Failure | null;
+}) {
+  return (
+    <GeneratedDocuments
+      generate={<Link to="/contratos/$contractId/documento" params={{ contractId }} />}
+      empty="Nenhum documento gerado a partir deste contrato."
+      documents={documents}
+      failure={failure}
+    />
   );
 }
 

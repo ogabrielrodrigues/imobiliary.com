@@ -104,19 +104,25 @@ func (u *Rents) List(ctx context.Context, caller *Caller, q RentQuery) (*RentsPa
 // RentDetail is one instalment with what the payment screen needs.
 type RentDetail struct {
 	Rent *RentView
-	// Suggested is the late fee for paying today; zero once paid.
+	// Standing is what the rent owes today; zero once paid.
+	Standing domain.Standing
+	// Suggested is the interest and penalty owed today; zero once paid.
 	Suggested domain.LateFee
 	Today     domain.Date
+}
+
+func lateFeeOf(s domain.Standing) domain.LateFee {
+	return domain.LateFee{DaysLate: s.DaysLate, Penalty: s.Penalty, Interest: s.Interest, Total: s.LateFee()}
 }
 
 func (u *Rents) detail(rent *RentView, today domain.Date) (*RentDetail, error) {
 	d := &RentDetail{Rent: rent, Today: today}
 	if rent.PaidOn == nil {
-		fee, err := domain.ComputeLateFee(rent.Due(), rent.DueOn, today, rent.LatePenaltyRate, rent.LateInterestRate)
+		s, err := domain.RentStanding(rent.Terms(), rent.Payments, today)
 		if err != nil {
 			return nil, err
 		}
-		d.Suggested = fee
+		d.Standing, d.Suggested = s, lateFeeOf(s)
 	}
 	return d, nil
 }
@@ -135,34 +141,25 @@ func (u *Rents) Get(ctx context.Context, caller *Caller, id uuid.UUID) (*RentDet
 	return out, err
 }
 
-// PaymentInput is a payment as the office records it. Nil fields take the
-// suggestion: the late fee computed for the day, and the amount due with it.
+// PaymentInput is a payment as the office records it. A nil amount settles
+// everything owed on the day, computed rather than typed; an amount is a
+// partial payment. A nil late fee charges the interest and penalty owed.
 type PaymentInput struct {
-	PaidOn     domain.Date
-	AmountPaid *domain.Money
-	LateFee    *domain.Money
+	PaidOn    domain.Date
+	Amount    *domain.Money
+	LateFee   *domain.Money
+	IncomeTax domain.Money
 }
 
-// PaymentPreview is what a payment on a day would be.
+// PaymentPreview is what a rent owes on a day.
 type PaymentPreview struct {
-	LateFee domain.LateFee
-	// Total is the rent, its charges and the suggested late fee.
+	LateFee   domain.LateFee
+	Principal domain.Money
+	// Total is the principal still open with the interest and penalty owed.
 	Total domain.Money
 }
 
-func paymentTotals(rent *RentView, paidOn domain.Date) (*PaymentPreview, error) {
-	fee, err := domain.ComputeLateFee(rent.Due(), rent.DueOn, paidOn, rent.LatePenaltyRate, rent.LateInterestRate)
-	if err != nil {
-		return nil, err
-	}
-	total, err := rent.Due().Add(fee.Total)
-	if err != nil {
-		return nil, err
-	}
-	return &PaymentPreview{LateFee: fee, Total: total}, nil
-}
-
-// PreviewPayment answers the late fee and total for paying on a day.
+// PreviewPayment answers what paying on a day would settle.
 func (u *Rents) PreviewPayment(ctx context.Context, caller *Caller, id uuid.UUID, paidOn domain.Date) (*PaymentPreview, error) {
 	if paidOn.IsZero() {
 		v := &domain.ValidationError{}
@@ -175,18 +172,26 @@ func (u *Rents) PreviewPayment(ctx context.Context, caller *Caller, id uuid.UUID
 		if err != nil {
 			return err
 		}
-		out, err = paymentTotals(rent, paidOn)
-		return err
+		s, err := domain.RentStanding(rent.Terms(), rent.Payments, paidOn)
+		if err != nil {
+			return err
+		}
+		out = &PaymentPreview{LateFee: lateFeeOf(s), Principal: s.Principal, Total: s.Total()}
+		return nil
 	})
 	return out, err
 }
 
-// Pay records an instalment as received in full. Paying one already paid is
-// a conflict, which is what two concurrent payments come to.
+// Pay records a payment: the whole of what is owed, or a part. A rent already
+// paid is a conflict, which is what two concurrent payments in full come to;
+// the rent's row is locked, so two partial payments are planned in turn.
 func (u *Rents) Pay(ctx context.Context, caller *Caller, id uuid.UUID, in PaymentInput) (*RentDetail, error) {
 	today := u.Today()
 	var out *RentDetail
 	err := u.scope.InOrganization(ctx, caller.Organization.ID, func(repos ScopedRepositories) error {
+		if err := repos.Rents.Lock(ctx, id); err != nil {
+			return err
+		}
 		rent, err := repos.Rents.Get(ctx, id)
 		if err != nil {
 			return err
@@ -194,38 +199,49 @@ func (u *Rents) Pay(ctx context.Context, caller *Caller, id uuid.UUID, in Paymen
 		if rent.PaidOn != nil {
 			return fmt.Errorf("pay rent: %w", domain.ErrConflict)
 		}
-		payment := domain.Payment{PaidOn: in.PaidOn}
-		if !in.PaidOn.IsZero() {
-			totals, err := paymentTotals(rent, in.PaidOn)
-			if err != nil {
-				return err
-			}
-			payment.LateFee, payment.AmountPaid = totals.LateFee.Total, totals.Total
+		// Payments are replayed in order of day, so a new one cannot go
+		// before the last: it would change what the earlier ones settled.
+		if n := len(rent.Payments); n > 0 && !in.PaidOn.IsZero() && in.PaidOn.Before(rent.Payments[n-1].PaidOn) {
+			v := &domain.ValidationError{}
+			v.Addf("paid_on", "must not be before the last payment, on %s", rent.Payments[n-1].PaidOn.String())
+			return v
 		}
-		if in.LateFee != nil {
-			payment.LateFee = *in.LateFee
-			if due, err := rent.Due().Add(payment.LateFee); err == nil {
-				payment.AmountPaid = due
-			}
-		}
-		if in.AmountPaid != nil {
-			payment.AmountPaid = *in.AmountPaid
-		}
-		if err := domain.ValidatePayment(&payment, today); err != nil {
+		standing, err := domain.RentStanding(rent.Terms(), rent.Payments, in.PaidOn)
+		if err != nil {
 			return err
 		}
-		if err := repos.Rents.Pay(ctx, id, payment); err != nil {
+		payment, err := domain.PlanPayment(standing, domain.PaymentRequest{
+			PaidOn: in.PaidOn, Amount: in.Amount, LateFee: in.LateFee, IncomeTax: in.IncomeTax,
+		}, rent.Amount, rent.IncomeTaxWithheld, today)
+		if err != nil {
 			return err
+		}
+		payment.ID, payment.RentID, payment.CreatedBy, payment.CreatedAt = uuid.NewV7(), id, &caller.User.ID, u.now().UTC()
+		var settledOn *domain.Date
+		action := domain.ActionRentPartiallyPaid
+		if payment.Principal == standing.Principal {
+			settledOn, action = &payment.PaidOn, domain.ActionRentPaid
+		}
+		if err := repos.Rents.AddPayment(ctx, &payment, settledOn); err != nil {
+			return err
+		}
+		fields := []string{"paid_on", "amount_paid", "late_fee"}
+		if payment.IncomeTax > 0 {
+			fields = append(fields, "income_tax_withheld")
 		}
 		if err := u.audit.recordWith(ctx, repos.Audit, AuditEntry{
 			OrganizationID: &caller.Organization.ID, ActorID: &caller.User.ID,
-			Action: domain.ActionRentPaid, EntityType: "rent", EntityID: &id,
-			Fields: []string{"paid_on", "amount_paid", "late_fee"},
+			Action: action, EntityType: "rent", EntityID: &id,
+			Fields: fields,
 		}); err != nil {
 			return err
 		}
 		rent, err = repos.Rents.Get(ctx, id)
 		if err != nil {
+			return err
+		}
+		// What the owners are owed is written with the payment, or neither is.
+		if err := writeReceipt(ctx, repos, rent, &payment.ID, &caller.User.ID, u.now().UTC()); err != nil {
 			return err
 		}
 		out, err = u.detail(rent, today)
@@ -234,27 +250,34 @@ func (u *Rents) Pay(ctx context.Context, caller *Caller, id uuid.UUID, in Paymen
 	return out, err
 }
 
-// Reverse puts a paid instalment back to unpaid, for a payment recorded by
-// mistake or returned.
+// Reverse undoes a rent's last payment, recorded by mistake or returned. The
+// rent is unpaid again, with the earlier payments still standing.
 func (u *Rents) Reverse(ctx context.Context, caller *Caller, id uuid.UUID) (*RentDetail, error) {
 	var out *RentDetail
 	err := u.scope.InOrganization(ctx, caller.Organization.ID, func(repos ScopedRepositories) error {
+		if err := repos.Rents.Lock(ctx, id); err != nil {
+			return err
+		}
 		rent, err := repos.Rents.Get(ctx, id)
 		if err != nil {
 			return err
 		}
-		if rent.PaidOn == nil {
+		if len(rent.Payments) == 0 {
 			v := &domain.ValidationError{}
 			v.Add("payment", "the rent is not paid")
 			return v
 		}
-		if err := repos.Rents.Reverse(ctx, id); err != nil {
+		last := rent.Payments[len(rent.Payments)-1]
+		if err := clearReceipt(ctx, repos, id, &last.ID, "payment"); err != nil {
+			return err
+		}
+		if err := repos.Rents.DeletePayment(ctx, id, last.ID); err != nil {
 			return err
 		}
 		if err := u.audit.recordWith(ctx, repos.Audit, AuditEntry{
 			OrganizationID: &caller.Organization.ID, ActorID: &caller.User.ID,
 			Action: domain.ActionRentPaymentReversed, EntityType: "rent", EntityID: &id,
-			Fields: []string{"paid_on", "amount_paid", "late_fee"},
+			Fields: []string{"paid_on", "amount_paid", "late_fee", "income_tax_withheld"},
 		}); err != nil {
 			return err
 		}
@@ -268,8 +291,10 @@ func (u *Rents) Reverse(ctx context.Context, caller *Caller, id uuid.UUID) (*Ren
 	return out, err
 }
 
+// refuseChargesOnPaid keeps a rent's charges as they were once money came in:
+// every payment's split between the rent and the charges depends on them.
 func refuseChargesOnPaid(rent *RentView) error {
-	if rent.PaidOn == nil {
+	if !rent.Touched() {
 		return nil
 	}
 	v := &domain.ValidationError{}
@@ -353,6 +378,60 @@ func (u *Rents) RemoveCharge(ctx context.Context, caller *Caller, rentID, charge
 	return out, err
 }
 
+// SetChargeDestination changes where a charge goes. On a paid rent it is the
+// one change a charge still allows: the rent's lines are written again with
+// the new destination, which is how the charges recorded before the ledger are
+// put right. Refused once the rent is in a payout.
+func (u *Rents) SetChargeDestination(ctx context.Context, caller *Caller, rentID, chargeID uuid.UUID, d domain.ChargeDestination) (*RentDetail, error) {
+	if d != domain.DestinationOwner && d != domain.DestinationThirdParty {
+		v := &domain.ValidationError{}
+		v.Add("destination", "must be owner or third_party")
+		return nil, v
+	}
+	var out *RentDetail
+	err := u.scope.InOrganization(ctx, caller.Organization.ID, func(repos ScopedRepositories) error {
+		rent, err := repos.Rents.Get(ctx, rentID)
+		if err != nil {
+			return err
+		}
+		i := slices.IndexFunc(rent.Charges, func(c domain.Charge) bool { return c.ID == chargeID })
+		if i < 0 {
+			return fmt.Errorf("charge destination: %w", domain.ErrNotFound)
+		}
+		if rent.Charges[i].Destination == d {
+			out, err = u.detail(rent, u.Today())
+			return err
+		}
+		if rent.Touched() {
+			if err := clearReceipt(ctx, repos, rentID, nil, "destination"); err != nil {
+				return err
+			}
+		}
+		if err := repos.Rents.SetChargeDestination(ctx, rentID, chargeID, d); err != nil {
+			return err
+		}
+		if err := u.audit.recordWith(ctx, repos.Audit, AuditEntry{
+			OrganizationID: &caller.Organization.ID, ActorID: &caller.User.ID,
+			Action: domain.ActionRentChargeDestination, EntityType: "rent", EntityID: &rentID,
+			Fields: []string{string(rent.Charges[i].Kind), string(d)},
+		}); err != nil {
+			return err
+		}
+		rent, err = repos.Rents.Get(ctx, rentID)
+		if err != nil {
+			return err
+		}
+		if rent.Touched() {
+			if err := writeReceipt(ctx, repos, rent, nil, &caller.User.ID, u.now().UTC()); err != nil {
+				return err
+			}
+		}
+		out, err = u.detail(rent, u.Today())
+		return err
+	})
+	return out, err
+}
+
 // DashboardView is the office's day at a glance.
 type DashboardView struct {
 	Today      domain.Date
@@ -370,6 +449,8 @@ type DashboardView struct {
 	Adjustments []ContractDeadline
 	DueToday    []RentView
 	Overdue     []RentView
+	// Payouts is what the office still owes its owners.
+	Payouts PayoutFigures
 }
 
 const (
@@ -393,6 +474,9 @@ func (u *Rents) Dashboard(ctx context.Context, caller *Caller) (*DashboardView, 
 			return err
 		}
 		if view.Portfolio, err = repos.Dashboard.Portfolio(ctx, today); err != nil {
+			return err
+		}
+		if view.Payouts, err = repos.Dashboard.Payouts(ctx); err != nil {
 			return err
 		}
 		if view.Expiring, err = repos.Dashboard.Expiring(ctx, today, today.AddDays(expiringHorizonDays), dashboardList); err != nil {

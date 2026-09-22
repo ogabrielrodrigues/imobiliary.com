@@ -35,7 +35,7 @@ import { dashboardQuery } from "@/queries/options";
 import { downloadDocument } from "@/server/documents";
 
 interface DashboardSearch {
-  readonly periodo?: StatsPeriod;
+  readonly periodo?: StatsPeriod | undefined;
 }
 
 /**
@@ -51,7 +51,7 @@ export const Route = createFileRoute("/_app/dashboard")({
   /** The window lives in the address, like the tab in Ajustes. */
   validateSearch: (search: Record<string, unknown>): DashboardSearch => {
     const days = Number(search["periodo"]);
-    return isStatsPeriod(days) && days !== DEFAULT_STATS_PERIOD ? { periodo: days } : {};
+    return { periodo: isStatsPeriod(days) && days !== DEFAULT_STATS_PERIOD ? days : undefined };
   },
   // Without this the router treats a new window as the same match and serves
   // the cached figures.

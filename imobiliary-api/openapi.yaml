@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Imobiliary API
-  version: "0.8.0"
+  version: "0.12.0"
   summary: Rental property management for brokers, small agencies and owners.
   description: |
     The API behind the Imobiliary platform. It covers identity and the office
@@ -130,6 +130,13 @@ tags:
       acknowledged and the schedule of rents.
   - name: Rents
     description: Instalments across contracts, payments, charges and the dashboard.
+  - name: Payouts
+    description: |
+      The owners' ledger and the payouts the office records. A received rent
+      writes a line per landlord for their part of the rent, of the late fee
+      and of each charge that is theirs, less their part of the office's fee
+      and of the tax a company tenant withheld. The platform moves no money:
+      a payout says the office already transferred.
   - name: Operations
     description: Probes for the orchestrator.
 
@@ -665,6 +672,48 @@ paths:
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /v1/organization/administrator:
+    get:
+      tags: [Office]
+      summary: Who signs the receipts
+      description: |
+        Whether the office administers as a person (a self-employed broker,
+        with a CPF) or as a company (a CNPJ), and its CRECI. `204` while the
+        office has not said. The document is sealed at rest.
+      operationId: getAdministrator
+      responses:
+        "200":
+          description: The administrator.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Administrator" }
+        "204": { description: Not recorded yet. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    put:
+      tags: [Office]
+      summary: Record who signs the receipts
+      description: Administrators only. The document must be a valid CPF for `individual` and CNPJ for `company`. Audited.
+      operationId: setAdministrator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Administrator" }
+      responses:
+        "200":
+          description: Recorded, the document formatted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Administrator" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
   /v1/organization/members:
     get:
       tags: [Office]
@@ -936,6 +985,88 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/people/anonymization-candidates:
+    get:
+      tags: [People]
+      summary: Who is past the legal retention
+      description: |
+        People not yet anonymised who own no property, are party to no
+        contract running today or later, have no ledger line waiting for a
+        payout, and whose last contract end, ledger line and payout are past
+        five years counted from the first day of the following year (Código
+        Tributário Nacional art. 173, I). Someone linked as a spouse or a
+        representative to a person who is not listed stays out. Each comes
+        with the contracts they were party to, saying whether every other party
+        is listed too (so the contract's generated documents can go), and the
+        payouts made to them. Any member may read it.
+      operationId: listAnonymizationCandidates
+      responses:
+        "200":
+          description: The candidates, by name.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [candidates]
+                properties:
+                  candidates:
+                    type: array
+                    items:
+                      type: object
+                      required: [person, last_activity_on, retention_ended_on, contracts, payouts]
+                      properties:
+                        person: { $ref: "#/components/schemas/PersonRef" }
+                        last_activity_on: { $ref: "#/components/schemas/Date" }
+                        retention_ended_on: { $ref: "#/components/schemas/Date" }
+                        contracts:
+                          type: array
+                          items:
+                            type: object
+                            required: [id, registry, documents_can_go]
+                            properties:
+                              id: { $ref: "#/components/schemas/ID" }
+                              registry: { type: string }
+                              documents_can_go: { type: boolean }
+                        payouts:
+                          type: array
+                          items:
+                            type: object
+                            required: [id, number]
+                            properties:
+                              id: { $ref: "#/components/schemas/ID" }
+                              number: { type: string, examples: ["2019/0004"] }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/people/{personID}/anonymization:
+    parameters:
+      - name: personID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+    post:
+      tags: [People]
+      summary: Anonymise a person past the retention
+      description: |
+        Only a person still listed as a candidate. The name becomes "Pessoa
+        anonimizada"; the CPF or CNPJ and its lookup index, e-mail, phone,
+        birth date, nationality, occupation, marital details, trade name,
+        addresses and representative links are cleared, so the document can
+        be registered again as someone else. The record stays, so contracts,
+        rents and the ledger still point at it. Administrators only; audited
+        as `person.anonymized` without values. Anything else is a `422` on
+        `person`. Generated documents live in the document service and are
+        cleared there.
+      operationId: anonymizePerson
+      responses:
+        "204": { description: Anonymised. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
@@ -1414,7 +1545,9 @@ paths:
         * each party, field by field and numbered from 1 to 4:
           `locador_1_nome`, `locador_1_cpf`, `locador_1_estado_civil`,
           `locador_1_endereco_cidade`, `locatario_2_nome`, and so on, with the
-          same suffixes for `locatario_*` and `fiador_*`.
+          same suffixes for `locatario_*` and `fiador_*`. `locador_1_o` and
+          `locador_1_a` are the endings that agree with that person alone
+          ("inscrit{{.locador_1_o}}", "portador{{.locador_1_a}}").
 
         A qualification writes the CIN with the CPF's number, and the field
         `..._rg` repeats it for a model still written for the old document.
@@ -1644,12 +1777,14 @@ paths:
         schema: { $ref: "#/components/schemas/ID" }
     post:
       tags: [Rents]
-      summary: Compute the late fee for a payment day
+      summary: Compute what is owed on a payment day
       description: |
-        The penalty rate on the rent with its charges, plus the monthly
-        interest rate prorated over a thirty-day month for each day after the
-        due day, each rounded to the centavo. Paying on or before the due day
-        adds nothing. Records nothing.
+        Replays the payments already recorded up to that day. The penalty rate
+        is charged once, on the principal (the rent with its charges) still
+        open the day after the due day; the monthly interest rate, prorated
+        over a thirty-day month, runs each day on the principal still open.
+        Each part is rounded to the centavo, and neither earns interest.
+        Paying on or before the due day adds nothing. Records nothing.
       operationId: previewPayment
       requestBody:
         required: true
@@ -1662,14 +1797,15 @@ paths:
                 paid_on: { $ref: "#/components/schemas/Date" }
       responses:
         "200":
-          description: The late fee and the total.
+          description: The interest and penalty owed, the principal open and their total.
           content:
             application/json:
               schema:
                 type: object
-                required: [late_fee, total]
+                required: [late_fee, principal, total]
                 properties:
                   late_fee: { $ref: "#/components/schemas/LateFee" }
+                  principal: { $ref: "#/components/schemas/Money" }
                   total: { $ref: "#/components/schemas/Money" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -1687,13 +1823,22 @@ paths:
         schema: { $ref: "#/components/schemas/ID" }
     post:
       tags: [Rents]
-      summary: Record a payment in full
+      summary: Record a payment, in full or in part
       description: |
-        `late_fee` left out takes the computed one; `amount_paid` left out is
-        the rent, its charges and the late fee. `paid_on` is not after today.
-        An instalment already paid answers `409 conflict`, which is also what
-        the second of two simultaneous payments receives. Audited. There is no
-        partial payment.
+        Without `amount`, the payment settles everything owed that day and its
+        amount is computed: the principal still open, the interest and
+        penalty, less `income_tax_withheld`. With `amount`, it is a partial
+        payment: together with the tax withheld it settles first the interest,
+        then the penalty, then the principal, divided between the rent and each
+        charge in proportion to what each has open (Código Civil art. 354).
+        More than is owed is a `422` on `amount`. `late_fee` below what is owed
+        forgives the difference. Sending `amount_paid` is a `422` on it.
+        `paid_on` is not after today nor before the last payment. The owners'
+        ledger lines of this payment are written in the same transaction. An
+        instalment already paid answers `409 conflict`, which is also what the
+        second of two simultaneous payments in full receives. Once a rent has
+        a payment its charges no longer change. Audited as `rent.paid` or
+        `rent.partially_paid`.
       operationId: payRent
       requestBody:
         required: true
@@ -1704,8 +1849,11 @@ paths:
               required: [paid_on]
               properties:
                 paid_on: { $ref: "#/components/schemas/Date" }
-                amount_paid: { $ref: "#/components/schemas/Money", description: What actually came in. }
-                late_fee: { $ref: "#/components/schemas/Money", description: The late fee agreed. }
+                amount: { $ref: "#/components/schemas/Money", description: What came in, for a partial payment. Left out settles everything. }
+                late_fee: { $ref: "#/components/schemas/Money", description: "The interest and penalty charged, at most what is owed; less forgives the rest." }
+                income_tax_withheld:
+                  $ref: "#/components/schemas/Money"
+                  description: What a company tenant withheld as income tax; with the earlier payments, at most the rent. The payout deducts it.
       responses:
         "200":
           description: Paid.
@@ -1722,8 +1870,12 @@ paths:
         "429": { $ref: "#/components/responses/RateLimited" }
     delete:
       tags: [Rents]
-      summary: Reverse a payment
-      description: Puts the instalment back to unpaid, clearing the amount and the late fee. Refused on `payment` when it is not paid. Audited.
+      summary: Reverse the last payment
+      description: |
+        Removes the instalment's last payment and the ledger lines it wrote;
+        the earlier payments stand, and the instalment is unpaid again.
+        Refused on `payment` when it has no payment, or when any line of that
+        payment is in a payout; the message names the payout to undo. Audited.
       operationId: reversePayment
       responses:
         "200":
@@ -1748,9 +1900,12 @@ paths:
       summary: Bill a charge with an unpaid instalment
       description: |
         Condominium, IPTU, water, energy or another charge, which needs a
-        description. At most 20 per instalment. Refused on `charges` once the
-        instalment is paid. Once any instalment of a contract has a charge,
-        replacing the contract's terms is refused on `rents`.
+        description. `destination` says where the money goes: `owner` enters
+        the payout and pays the administration fee; `third_party` is paid on by
+        the office (the condominium, the utility) and does neither. At most 20
+        per instalment. Refused on `charges` once the instalment is paid. Once
+        any instalment of a contract has a charge, replacing the contract's
+        terms is refused on `rents`.
       operationId: addCharge
       requestBody:
         required: true
@@ -1758,11 +1913,12 @@ paths:
           application/json:
             schema:
               type: object
-              required: [kind, amount]
+              required: [kind, amount, destination]
               properties:
                 kind: { type: string, enum: [condominium, property_tax, water, energy, other] }
                 description: { type: string, maxLength: 120 }
                 amount: { $ref: "#/components/schemas/Money" }
+                destination: { $ref: "#/components/schemas/ChargeDestination" }
       responses:
         "201":
           description: Added; the instalment as it is now.
@@ -1787,6 +1943,37 @@ paths:
         in: path
         required: true
         schema: { $ref: "#/components/schemas/ID" }
+    patch:
+      tags: [Rents]
+      summary: Change where a charge goes
+      description: |
+        The one change a charge still allows once the instalment is paid: its
+        ledger lines are written again with the new destination, which is how
+        charges recorded before the ledger are put right. Refused on
+        `destination` once the instalment is in a payout. Audited.
+      operationId: setChargeDestination
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [destination]
+              properties:
+                destination: { $ref: "#/components/schemas/ChargeDestination" }
+      responses:
+        "200":
+          description: Changed; the instalment as it is now.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RentDetail" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
     delete:
       tags: [Rents]
       summary: Remove a charge from an unpaid instalment
@@ -1810,9 +1997,11 @@ paths:
       description: |
         As of today in America/Sao_Paulo. `month`: every instalment due this
         month (rent and charges), what came in this month whatever the due
-        day, what is due this month and unpaid, and the administration fee on
-        the rents received this month, taken on the rent with its charges and
-        not on the late fee. `overdue`: every unpaid instalment past
+        day, what is due this month and unpaid, the administration fee on the
+        rents received this month (read from the ledger: the rent and the
+        charges that go to the owner, never the late fee), and what was paid
+        out to owners this month. `payouts`: what the office owes its owners
+        today and to how many. `overdue`: every unpaid instalment past
         due. `portfolio`: properties, those with a running contract, running
         contracts and the sum of their current rents. `expiring`: running
         contracts ending within sixty days. `adjustments`: running contracts
@@ -1828,6 +2017,295 @@ paths:
               schema: { $ref: "#/components/schemas/Dashboard" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  # --- payouts ----------------------------------------------------------------
+
+  /v1/payouts/balances:
+    get:
+      tags: [Payouts]
+      summary: Who is owed what
+      description: Everyone with lines waiting for a payout, the oldest line first. A balance can be below zero when debits wait for the next rent.
+      operationId: listBalances
+      responses:
+        "200":
+          description: The balances.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [balances]
+                properties:
+                  balances:
+                    type: array
+                    items:
+                      type: object
+                      required: [person, pending, lines, oldest_on]
+                      properties:
+                        person: { $ref: "#/components/schemas/PersonRef" }
+                        pending: { $ref: "#/components/schemas/SignedMoney" }
+                        lines: { type: integer }
+                        oldest_on: { $ref: "#/components/schemas/Date" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/people/{personID}/ledger:
+    parameters:
+      - name: personID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+    get:
+      tags: [Payouts]
+      summary: A person's pending lines
+      description: Every line without a payout, oldest first, and their sum. A person with none has an empty ledger.
+      operationId: getLedger
+      responses:
+        "200":
+          description: The pending ledger.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [person, balance, pending, today]
+                properties:
+                  person: { $ref: "#/components/schemas/PersonRef" }
+                  balance: { $ref: "#/components/schemas/SignedMoney" }
+                  pending: { type: array, items: { $ref: "#/components/schemas/LedgerEntry" } }
+                  today: { $ref: "#/components/schemas/Date" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    post:
+      tags: [Payouts]
+      summary: Type a debit or a credit
+      description: An expense the office paid for the person, or anything it owes them. Not in the future. Audited.
+      operationId: addLedgerEntry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, amount, description, occurred_on]
+              properties:
+                kind: { type: string, enum: [debit, credit] }
+                amount: { $ref: "#/components/schemas/Money" }
+                description: { type: string, minLength: 1, maxLength: 120 }
+                occurred_on: { $ref: "#/components/schemas/Date" }
+                property_id: { $ref: "#/components/schemas/ID" }
+      responses:
+        "201":
+          description: Recorded.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LedgerEntry" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/people/{personID}/income-report:
+    parameters:
+      - name: personID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+    get:
+      tags: [Payouts]
+      summary: A year of an individual owner's receipts, for the carnê-leão
+      description: |
+        The person's ledger lines of the year, paid out or not, added up by
+        the month the office received them. Rents paid by an individual tenant
+        and by a company (a contract with any company among its tenants) are
+        kept apart, since only the first goes in the carnê-leão. Typed debits
+        and credits are informative. Nothing is computed beyond the sums: no
+        tax, and no judgement of what is deductible. A company is a `422` on
+        `person_id`.
+      operationId: getIncomeReport
+      parameters:
+        - name: year
+          in: query
+          required: true
+          schema: { type: integer, minimum: 2000, maximum: 9999 }
+      responses:
+        "200":
+          description: The twelve months, January first, and the year's total.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [person, year, months, total]
+                properties:
+                  person: { $ref: "#/components/schemas/PersonRef" }
+                  year: { type: integer }
+                  months: { type: array, minItems: 12, maxItems: 12, items: { $ref: "#/components/schemas/IncomeMonth" } }
+                  total: { $ref: "#/components/schemas/IncomeMonth" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/ledger/{entryID}:
+    parameters:
+      - name: entryID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+    delete:
+      tags: [Payouts]
+      summary: Remove a typed line
+      description: Only a debit or credit still pending. A rent's lines go with its payment's reversal; a line in a payout, after the payout is undone. Audited.
+      operationId: deleteLedgerEntry
+      responses:
+        "204": { description: Removed. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/payouts:
+    get:
+      tags: [Payouts]
+      summary: List payouts
+      description: Newest first, paged with `next_cursor`, optionally one person's.
+      operationId: listPayouts
+      parameters:
+        - { name: person_id, in: query, schema: { $ref: "#/components/schemas/ID" } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: A page of payouts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [payouts]
+                properties:
+                  payouts: { type: array, items: { $ref: "#/components/schemas/Payout" } }
+                  next_cursor: { type: string, description: Absent on the last page. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    post:
+      tags: [Payouts]
+      summary: Record a payout
+      description: |
+        Closes the named lines of one person on the day the office
+        transferred. Every line must be that person's, pending and not later
+        than `paid_on`, and the total above zero. A line another payout took
+        meanwhile is `409` or `422`. Numbered per office and year. Audited.
+      operationId: createPayout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [person_id, paid_on, entry_ids]
+              properties:
+                person_id: { $ref: "#/components/schemas/ID" }
+                paid_on: { $ref: "#/components/schemas/Date" }
+                entry_ids: { type: array, minItems: 1, maxItems: 2000, items: { $ref: "#/components/schemas/ID" } }
+                method: { $ref: "#/components/schemas/PayoutMethod" }
+                note: { type: string, maxLength: 280 }
+      responses:
+        "201":
+          description: Recorded.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutDetail" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/payouts/{payoutID}:
+    parameters:
+      - name: payoutID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+    get:
+      tags: [Payouts]
+      summary: A payout and its lines
+      description: The statement, lines ordered by property, then by day.
+      operationId: getPayout
+      responses:
+        "200":
+          description: The payout.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      tags: [Payouts]
+      summary: Undo a payout
+      description: For a payout recorded by mistake or returned; its lines are pending again. Audited.
+      operationId: undoPayout
+      responses:
+        "204": { description: Undone. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/payouts/{payoutID}/document-fields:
+    parameters:
+      - name: payoutID
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ID" }
+    get:
+      tags: [Payouts]
+      summary: What a payout statement template is filled with
+      description: |
+        123 fields, always in the same order, for a template in the document
+        service: the payout (`repasse_numero`, `repasse_total` with `_numero`
+        and `_extenso`, `repasse_forma`), the beneficiary field by field with
+        the parties' 30 suffixes under `proprietario_`, the administrator
+        (`administrador_nome`, `_documento`, `_creci`, `_tipo`), totals by kind
+        (`total_alugueis`, `total_taxa`, `total_irrf`, `total_debitos`...), and
+        each property numbered from 1 to 10 (`imovel_1_endereco`,
+        `imovel_1_liquido`...). Nothing is stored. The catalogue is
+        `docs/campos.md`, section 9.
+      operationId: getPayoutDocumentFields
+      responses:
+        "200":
+          description: The fields.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [fields]
+                properties:
+                  fields:
+                    type: array
+                    items:
+                      type: object
+                      required: [name, value]
+                      properties:
+                        name: { type: string, pattern: "^[a-z][a-z0-9_]*$" }
+                        value: { type: string, description: Empty when the register does not hold it. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
   # --- operations -------------------------------------------------------------
@@ -2244,6 +2722,9 @@ components:
             version: { type: integer, minimum: 1 }
             created_at: { $ref: "#/components/schemas/Instant" }
             updated_at: { $ref: "#/components/schemas/Instant" }
+            anonymized_at:
+              oneOf: [{ $ref: "#/components/schemas/Instant" }, { type: "null" }]
+              description: When the office anonymised the record at the end of the legal retention. An anonymised record is never edited.
 
     PersonSummary:
       type: object
@@ -2360,6 +2841,14 @@ components:
       properties:
         person_id: { $ref: "#/components/schemas/ID" }
         role: { type: string, enum: [landlord, tenant, guarantor, guarantor_spouse] }
+        share:
+          type: string
+          description: |
+            A landlord's part of each rent, as a percentage ("50", "33.3333").
+            Required on every landlord when the landlords are not exactly the
+            property's owners, adding up to 100; dropped when they are, since
+            the property's shares on the day of each receipt decide. Only a
+            landlord has one.
 
     ContractInput:
       type: object
@@ -2451,7 +2940,7 @@ components:
               type: array
               items:
                 type: object
-                required: [id, sequence, due_on, amount, late_fee, amount_paid, paid_on, status]
+                required: [id, sequence, due_on, amount, late_fee, amount_paid, paid_on, status, partially_paid]
                 properties:
                   id: { $ref: "#/components/schemas/ID" }
                   sequence: { type: integer, minimum: 1 }
@@ -2465,6 +2954,7 @@ components:
                     type: string
                     enum: [paid, overdue, pending]
                     description: Computed against today; never stored.
+                  partially_paid: { type: boolean, description: Money came in and something is still open. }
             amendments:
               type: array
               description: Rent adjustments, oldest first.
@@ -2522,7 +3012,7 @@ components:
 
     RentSummary:
       type: object
-      required: [id, contract, sequence, due_on, amount, charges_total, due, late_fee, amount_paid, paid_on, status]
+      required: [id, contract, sequence, due_on, amount, charges_total, due, late_fee, amount_paid, paid_on, income_tax_withheld, principal_paid, outstanding, partially_paid, status]
       properties:
         id: { $ref: "#/components/schemas/ID" }
         contract:
@@ -2538,28 +3028,155 @@ components:
         amount: { $ref: "#/components/schemas/Money", description: The rent of the instalment. }
         charges_total: { $ref: "#/components/schemas/Money" }
         due: { $ref: "#/components/schemas/Money", description: The rent with its charges. }
-        late_fee: { $ref: "#/components/schemas/Money", description: As recorded with the payment; zero while unpaid. }
-        amount_paid: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
-        paid_on: { oneOf: [{ $ref: "#/components/schemas/Date" }, { type: "null" }] }
+        late_fee: { $ref: "#/components/schemas/Money", description: The interest and penalty the payments settled; zero before any. }
+        amount_paid: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }], description: The sum of the payments; null before any. }
+        paid_on: { oneOf: [{ $ref: "#/components/schemas/Date" }, { type: "null" }], description: The day the principal was settled; null while anything is open. }
+        income_tax_withheld: { $ref: "#/components/schemas/Money", description: What a company tenant withheld, over all payments; zero otherwise. }
+        principal_paid: { $ref: "#/components/schemas/Money", description: The part of the rent and charges settled. }
+        outstanding: { $ref: "#/components/schemas/Money", description: The part of the rent and charges still open. }
+        partially_paid: { type: boolean, description: "Money came in and something is still open; status stays pending or overdue." }
         status: { type: string, enum: [paid, overdue, pending] }
 
     RentDetail:
       allOf:
         - $ref: "#/components/schemas/RentSummary"
         - type: object
-          required: [charges, suggested_late_fee]
+          required: [charges, payments, suggested_late_fee, owed_today]
           properties:
             charges:
               type: array
               items:
                 type: object
-                required: [id, kind, description, amount]
+                required: [id, kind, description, amount, destination]
                 properties:
                   id: { $ref: "#/components/schemas/ID" }
                   kind: { type: string, enum: [condominium, property_tax, water, energy, other] }
                   description: { type: string }
                   amount: { $ref: "#/components/schemas/Money" }
-            suggested_late_fee: { $ref: "#/components/schemas/LateFee" }
+                  destination: { $ref: "#/components/schemas/ChargeDestination" }
+            payments:
+              type: array
+              description: In the order they settle, by day.
+              items:
+                type: object
+                required: [id, paid_on, amount, late_fee, waived, principal, income_tax_withheld]
+                properties:
+                  id: { $ref: "#/components/schemas/ID" }
+                  paid_on: { $ref: "#/components/schemas/Date" }
+                  amount: { $ref: "#/components/schemas/Money", description: What came in. }
+                  late_fee: { $ref: "#/components/schemas/Money", description: Interest and penalty settled. }
+                  waived: { $ref: "#/components/schemas/Money", description: Interest and penalty forgiven. }
+                  principal: { $ref: "#/components/schemas/Money", description: Rent and charges settled. }
+                  income_tax_withheld: { $ref: "#/components/schemas/Money" }
+            suggested_late_fee: { $ref: "#/components/schemas/LateFee", description: The interest and penalty owed today; zero once paid. }
+            owed_today: { $ref: "#/components/schemas/Money", description: Everything owed today; zero once paid. }
+
+    Administrator:
+      type: object
+      required: [kind, document]
+      properties:
+        kind: { type: string, enum: [individual, company] }
+        document: { type: string, description: "A CPF or a CNPJ, with or without punctuation; returned formatted.", examples: ["529.982.247-25"] }
+        creci: { type: string, maxLength: 30, examples: ["CRECI 12345-F/SP"] }
+
+    ChargeDestination:
+      type: string
+      enum: [owner, third_party]
+      description: Where a charge's money goes once paid.
+
+    SignedMoney:
+      type: string
+      description: Reais with two decimal places and an optional minus sign.
+      pattern: '^-?[0-9]+\.[0-9]{2}$'
+      examples: ["1038.10", "-38.10"]
+
+    IncomeFigures:
+      type: object
+      required: [rent, late_fee, charges, admin_fee, income_tax]
+      properties:
+        rent: { $ref: "#/components/schemas/Money" }
+        late_fee: { $ref: "#/components/schemas/Money", description: Interest and penalty. }
+        charges: { $ref: "#/components/schemas/Money", description: The owner's charges, such as the IPTU. }
+        admin_fee: { $ref: "#/components/schemas/Money", description: The office's fee, deducted. }
+        income_tax: { $ref: "#/components/schemas/Money", description: Withheld by a company tenant. }
+
+    IncomeMonth:
+      type: object
+      required: [individual, company, debits, credits]
+      properties:
+        month: { type: integer, minimum: 1, maximum: 12, description: Left out in the year's total. }
+        individual: { $ref: "#/components/schemas/IncomeFigures" }
+        company: { $ref: "#/components/schemas/IncomeFigures" }
+        debits: { $ref: "#/components/schemas/Money" }
+        credits: { $ref: "#/components/schemas/Money" }
+
+    PersonRef:
+      type: object
+      required: [id, name, kind]
+      properties:
+        id: { $ref: "#/components/schemas/ID" }
+        name: { type: string }
+        kind: { $ref: "#/components/schemas/PersonKind" }
+
+    LedgerEntry:
+      type: object
+      required: [id, person_id, kind, amount, signed, occurred_on, description, property_id, contract_id, rent_id, charge_id, payout_id]
+      properties:
+        id: { $ref: "#/components/schemas/ID" }
+        person_id: { $ref: "#/components/schemas/ID" }
+        kind:
+          type: string
+          enum: [rent, late_fee, charge, admin_fee, income_tax, debit, credit]
+          description: rent, late_fee, charge and credit add to the balance; admin_fee, income_tax and debit deduct.
+        amount: { $ref: "#/components/schemas/Money", description: Always positive. }
+        signed: { $ref: "#/components/schemas/SignedMoney", description: The line's effect on the balance. }
+        occurred_on: { $ref: "#/components/schemas/Date", description: "The day the rent was received, or the day typed." }
+        description: { type: string }
+        property_id: { oneOf: [{ $ref: "#/components/schemas/ID" }, { type: "null" }] }
+        address: { oneOf: [{ $ref: "#/components/schemas/PropertyAddress" }, { type: "null" }] }
+        contract_id: { oneOf: [{ $ref: "#/components/schemas/ID" }, { type: "null" }] }
+        registry: { type: string, description: "The contract's number, when the line came from a rent." }
+        rent_id: { oneOf: [{ $ref: "#/components/schemas/ID" }, { type: "null" }] }
+        rent:
+          type: object
+          required: [sequence, due_on]
+          properties:
+            sequence: { type: integer }
+            due_on: { $ref: "#/components/schemas/Date" }
+        charge_id: { oneOf: [{ $ref: "#/components/schemas/ID" }, { type: "null" }] }
+        charge:
+          type: object
+          required: [kind, description]
+          properties:
+            kind: { type: string, enum: [condominium, property_tax, water, energy, other] }
+            description: { type: string }
+        payout_id: { oneOf: [{ $ref: "#/components/schemas/ID" }, { type: "null" }], description: Null while pending. }
+
+    PayoutMethod:
+      type: string
+      enum: ["", pix, transfer, cash, check, other]
+      description: How the office transferred. Informative only.
+
+    Payout:
+      type: object
+      required: [id, number, person, paid_on, total, method, note, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/ID" }
+        number: { type: string, description: "Per office and year, for the receipt.", examples: ["2026/0001"] }
+        person: { $ref: "#/components/schemas/PersonRef" }
+        paid_on: { $ref: "#/components/schemas/Date" }
+        total: { $ref: "#/components/schemas/Money" }
+        method: { $ref: "#/components/schemas/PayoutMethod" }
+        note: { type: string }
+        created_at: { $ref: "#/components/schemas/Instant" }
+
+    PayoutDetail:
+      allOf:
+        - $ref: "#/components/schemas/Payout"
+        - type: object
+          required: [entries]
+          properties:
+            entries: { type: array, items: { $ref: "#/components/schemas/LedgerEntry" } }
 
     ContractDeadline:
       type: object
@@ -2572,14 +3189,14 @@ components:
 
     Dashboard:
       type: object
-      required: [today, month_start, month_end, month, overdue, portfolio, expiring, adjustments, due_today, overdue_rents]
+      required: [today, month_start, month_end, month, payouts, overdue, portfolio, expiring, adjustments, due_today, overdue_rents]
       properties:
         today: { $ref: "#/components/schemas/Date" }
         month_start: { $ref: "#/components/schemas/Date" }
         month_end: { $ref: "#/components/schemas/Date" }
         month:
           type: object
-          required: [expected, expected_count, received, received_count, open, open_count, office_fee]
+          required: [expected, expected_count, received, received_count, open, open_count, office_fee, paid_out, paid_out_count]
           properties:
             expected: { $ref: "#/components/schemas/Money" }
             expected_count: { type: integer }
@@ -2588,6 +3205,14 @@ components:
             open: { $ref: "#/components/schemas/Money" }
             open_count: { type: integer }
             office_fee: { $ref: "#/components/schemas/Money" }
+            paid_out: { $ref: "#/components/schemas/Money" }
+            paid_out_count: { type: integer }
+        payouts:
+          type: object
+          required: [pending, beneficiaries]
+          properties:
+            pending: { $ref: "#/components/schemas/Money", description: The sum of every balance above zero. }
+            beneficiaries: { type: integer, description: How many people have a balance above zero. }
         overdue:
           type: object
           required: [count, amount]

@@ -4,7 +4,7 @@ import { IconArrowLeft, IconBan, IconPencil, IconTrash } from "@tabler/icons-rea
 
 import { messageFor, summaryOf, type Failure } from "@/application/result";
 import { ContractAmendments } from "@/components/contracts/amendments";
-import { ContractDocuments } from "@/components/contracts/documents";
+import { ContractDocuments } from "@/components/documents/generated-documents";
 import { ContractStatusBadge } from "@/components/contracts/status-badge";
 import { FormField } from "@/components/form-field";
 import {
@@ -78,7 +78,8 @@ function ContractPage() {
   }
 
   const contract = result.value;
-  const paid = contract.rents.some((r) => r.status === "paid");
+  // A rent with any payment, whole or partial, keeps the contract from being edited or deleted.
+  const paid = contract.rents.some((r) => r.amountPaid !== null);
   const terminated = contract.terminatedOn !== null;
 
   return (
@@ -233,6 +234,7 @@ function ContractPage() {
                     >
                       {RENT_STATUS_LABELS[rent.status]}
                       {rent.paidOn !== null && ` em ${formatDate(rent.paidOn)}`}
+                      {rent.partiallyPaid && ", parcial"}
                     </td>
                   </tr>
                 ))}

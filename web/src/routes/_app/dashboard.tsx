@@ -111,13 +111,19 @@ function MonthCards({ d }: { readonly d: Dashboard }) {
         {overdue.count === 1 ? "1 aluguel" : `${overdue.count} aluguéis`}, sem multa e juros
       </Card>
       <Card label="Taxa de administração do mês" value={formatMoney(month.officeFee)}>
-        sobre aluguéis e cobranças recebidos, sem multa e juros
+        sobre aluguéis e cobranças do proprietário recebidos, sem multa e juros
       </Card>
       <Card label="Imóveis" value={String(portfolio.properties)}>
         {portfolio.leasedProperties === 1 ? "1 locado" : `${portfolio.leasedProperties} locados`}
       </Card>
       <Card label="Contratos vigentes" value={String(portfolio.activeContracts)}>
         {formatMoney(portfolio.rentRoll)} em aluguéis por mês
+      </Card>
+      <Card label="A repassar" value={formatMoney(d.payouts.pending)} to="/repasses">
+        {d.payouts.beneficiaries === 1 ? "1 proprietário com saldo" : `${d.payouts.beneficiaries} proprietários com saldo`}
+      </Card>
+      <Card label="Repassado no mês" value={formatMoney(month.paidOut)}>
+        {month.paidOutCount === 1 ? "1 repasse" : `${month.paidOutCount} repasses`}
       </Card>
     </div>
   );
@@ -127,21 +133,31 @@ function Card({
   label,
   value,
   tone,
+  to,
   children,
 }: {
   readonly label: string;
   readonly value: string;
   readonly tone?: "alert" | undefined;
+  /** A card that leads to the screen where its figure is worked. */
+  readonly to?: "/repasses";
   readonly children: ReactNode;
 }) {
-  return (
-    <div className="flex flex-col gap-1 rounded-lg border border-border bg-card px-4 py-3">
+  const body = (
+    <>
       <span className="font-mono text-micro tracking-[0.1em] text-faint uppercase">{label}</span>
       <span className={tone === "alert" ? "font-reading text-title font-semibold text-destructive-soft tabular-nums" : "font-reading text-title font-semibold tabular-nums"}>
         {value}
       </span>
       <span className="text-caption text-muted-foreground">{children}</span>
-    </div>
+    </>
+  );
+  return to === undefined ? (
+    <div className="flex flex-col gap-1 rounded-lg border border-border bg-card px-4 py-3">{body}</div>
+  ) : (
+    <Link to={to} className="flex flex-col gap-1 rounded-lg border border-border bg-card px-4 py-3 hover:bg-row-hover">
+      {body}
+    </Link>
   );
 }
 
@@ -194,9 +210,10 @@ function RentTable({
                 <span className="truncate text-small font-medium">{addressLine(rent.contract.address)}</span>
                 <span className="truncate text-caption text-muted-foreground">
                   {rent.contract.tenantNames.join(", ")} · {rentStatusNote(rent, today)}
+                  {rent.partiallyPaid && ", pago em parte"}
                 </span>
               </Link>
-              <span className="text-small tabular-nums">{formatMoney(rent.due)}</span>
+              <span className="text-small tabular-nums">{formatMoney(rent.outstanding)}</span>
               <PaymentDialog rent={rent} />
             </li>
           ))}

@@ -21,11 +21,12 @@ import (
 // may manage people; the office is the controller of this data, and the
 // service processes it on the office's behalf.
 type People struct {
-	scope  OrganizationScope
-	sealer Sealer
-	now    Clock
-	logger *slog.Logger
-	audit  *Auditor
+	scope    OrganizationScope
+	sealer   Sealer
+	now      Clock
+	location *time.Location
+	logger   *slog.Logger
+	audit    *Auditor
 }
 
 // PeopleConfig collects the dependencies.
@@ -33,7 +34,9 @@ type PeopleConfig struct {
 	Scope  OrganizationScope
 	Sealer Sealer
 	Now    Clock
-	Logger *slog.Logger
+	// Location is where "today" is, for the retention. UTC when nil.
+	Location *time.Location
+	Logger   *slog.Logger
 }
 
 // NewPeople wires the use case.
@@ -44,12 +47,16 @@ func NewPeople(cfg PeopleConfig) *People {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
+	if cfg.Location == nil {
+		cfg.Location = time.UTC
+	}
 	return &People{
-		scope:  cfg.Scope,
-		sealer: cfg.Sealer,
-		now:    cfg.Now,
-		logger: cfg.Logger,
-		audit:  &Auditor{now: cfg.Now, logger: cfg.Logger},
+		scope:    cfg.Scope,
+		sealer:   cfg.Sealer,
+		now:      cfg.Now,
+		location: cfg.Location,
+		logger:   cfg.Logger,
+		audit:    &Auditor{now: cfg.Now, logger: cfg.Logger},
 	}
 }
 
@@ -206,6 +213,11 @@ func (p *People) Update(ctx context.Context, caller *Caller, person *domain.Pers
 		previous, err := p.open(previousStored)
 		if err != nil {
 			return err
+		}
+		if previous.AnonymizedAt != nil {
+			v := &domain.ValidationError{}
+			v.Add("person", "the person was anonymized")
+			return v
 		}
 		if previous.Kind != person.Kind {
 			v := &domain.ValidationError{}

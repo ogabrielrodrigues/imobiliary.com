@@ -20,6 +20,7 @@ type Organizations struct {
 	repos         Repositories
 	hasher        PasswordHasher
 	mailer        Mailer
+	sealer        Sealer
 	appURL        string
 	invitationTTL time.Duration
 	now           Clock
@@ -29,10 +30,13 @@ type Organizations struct {
 
 // OrganizationsConfig collects the dependencies.
 type OrganizationsConfig struct {
-	Identity      *Identity
-	Repositories  Repositories
-	Hasher        PasswordHasher
-	Mailer        Mailer
+	Identity     *Identity
+	Repositories Repositories
+	Hasher       PasswordHasher
+	Mailer       Mailer
+	// Sealer seals the administrator's document, a CPF for a self-employed
+	// broker.
+	Sealer        Sealer
 	AppURL        string
 	InvitationTTL time.Duration
 	Now           Clock
@@ -55,6 +59,7 @@ func NewOrganizations(cfg OrganizationsConfig) *Organizations {
 		repos:         cfg.Repositories,
 		hasher:        cfg.Hasher,
 		mailer:        cfg.Mailer,
+		sealer:        cfg.Sealer,
 		appURL:        cfg.AppURL,
 		invitationTTL: cfg.InvitationTTL,
 		now:           cfg.Now,
@@ -82,10 +87,58 @@ func (o *Organizations) Rename(ctx context.Context, caller *Caller, name string)
 		return o.audit.recordWith(ctx, repos.Audit, AuditEntry{
 			OrganizationID: &caller.Organization.ID,
 			ActorID:        &caller.User.ID,
-			Action:         domain.ActionOrganizationCreated,
+			Action:         domain.ActionOrganizationRenamed,
 			EntityType:     "organization",
 			EntityID:       &caller.Organization.ID,
 			Fields:         []string{"name"},
+		})
+	})
+}
+
+// Administrator reads who administers the office, for the receipts. Nil
+// when the office has not said yet. Every member may read it: it is printed on
+// what they hand to owners.
+func (o *Organizations) Administrator(ctx context.Context, caller *Caller) (*domain.Administrator, error) {
+	stored, err := o.repos.Organizations.Administrator(ctx, caller.Organization.ID)
+	if err != nil || stored == nil {
+		return nil, err
+	}
+	a := &domain.Administrator{Kind: stored.Kind, CRECI: stored.CRECI}
+	if len(stored.DocumentSealed) > 0 {
+		plain, err := o.sealer.Open(stored.DocumentSealed, "organizations", "administrator_document", caller.Organization.ID)
+		if err != nil {
+			return nil, fmt.Errorf("administrator: %w", err)
+		}
+		a.Document = string(plain)
+	}
+	return a, nil
+}
+
+// SetAdministrator records who administers the office. Administrators only.
+func (o *Organizations) SetAdministrator(ctx context.Context, caller *Caller, a *domain.Administrator) error {
+	if !caller.IsAdmin() {
+		return fmt.Errorf("set administrator: %w", domain.ErrPermissionDenied)
+	}
+	if err := domain.NormalizeAdministrator(a); err != nil {
+		return err
+	}
+	sealed, err := o.sealer.Seal([]byte(a.Document), "organizations", "administrator_document", caller.Organization.ID)
+	if err != nil {
+		return fmt.Errorf("set administrator: %w", err)
+	}
+	now := o.now().UTC()
+	return o.identity.tx.InTx(ctx, func(repos Repositories) error {
+		if err := repos.Organizations.SetAdministrator(ctx, caller.Organization.ID,
+			&StoredAdministrator{Kind: a.Kind, DocumentSealed: sealed, CRECI: a.CRECI}, now); err != nil {
+			return err
+		}
+		return o.audit.recordWith(ctx, repos.Audit, AuditEntry{
+			OrganizationID: &caller.Organization.ID,
+			ActorID:        &caller.User.ID,
+			Action:         domain.ActionAdministratorUpdated,
+			EntityType:     "organization",
+			EntityID:       &caller.Organization.ID,
+			Fields:         []string{"administrator_kind", "administrator_document", "administrator_creci"},
 		})
 	})
 }

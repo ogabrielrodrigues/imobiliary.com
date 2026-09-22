@@ -36,6 +36,24 @@ func (s *Server) handleContractDocumentFields(w http.ResponseWriter, r *http.Req
 	writeJSON(w, s.logger, http.StatusOK, out)
 }
 
+func (s *Server) handlePayoutDocumentFields(w http.ResponseWriter, r *http.Request) {
+	id, err := requiredUUID("payout_id", r.PathValue("payoutID"))
+	if err != nil {
+		writeError(w, s.logger, err)
+		return
+	}
+	fields, err := s.documents.PayoutFields(r.Context(), callerFrom(r.Context()), id)
+	if err != nil {
+		writeError(w, s.logger, err)
+		return
+	}
+	out := documentFieldsBody{Fields: make([]documentFieldBody, 0, len(fields))}
+	for _, f := range fields {
+		out.Fields = append(out.Fields, documentFieldBody{Name: f.Name, Value: f.Value})
+	}
+	writeJSON(w, s.logger, http.StatusOK, out)
+}
+
 type docgenTokenBody struct {
 	Token     string    `json:"token"`
 	ExpiresAt time.Time `json:"expires_at"`

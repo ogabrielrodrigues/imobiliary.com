@@ -20,22 +20,24 @@ const STATUS_OF: Record<StatusFilter, ContractStatus> = {
   rescindidos: "terminated",
 };
 
-type ContractsSearch = { q?: string; situacao?: StatusFilter; imovel?: string; pessoa?: string };
+type ContractsSearch = {
+  q?: string | undefined;
+  situacao?: StatusFilter | undefined;
+  imovel?: string | undefined;
+  pessoa?: string | undefined;
+};
 
 const text = (value: unknown) => (typeof value === "string" && value !== "" ? value : undefined);
 
 export const Route = createFileRoute("/_app/contratos/")({
   validateSearch: (search: Record<string, unknown>): ContractsSearch => {
-    const out: ContractsSearch = {};
-    const q = text(search["q"]);
     const situacao = text(search["situacao"]);
-    const imovel = text(search["imovel"]);
-    const pessoa = text(search["pessoa"]);
-    if (q !== undefined) out.q = q;
-    if (situacao !== undefined && situacao in STATUS_OF) out.situacao = situacao as StatusFilter;
-    if (imovel !== undefined) out.imovel = imovel;
-    if (pessoa !== undefined) out.pessoa = pessoa;
-    return out;
+    return {
+      q: text(search["q"]),
+      situacao: situacao !== undefined && situacao in STATUS_OF ? (situacao as StatusFilter) : undefined,
+      imovel: text(search["imovel"]),
+      pessoa: text(search["pessoa"]),
+    };
   },
   loaderDeps: ({ search }) => search,
   loader: ({ deps }) =>

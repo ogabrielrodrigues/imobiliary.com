@@ -113,9 +113,9 @@ func (r *contractRepository) writeChildren(ctx context.Context, c *domain.Contra
 	org, id := pgUUID(r.organizationID), pgUUID(c.ID)
 	for i, p := range c.Parties {
 		if _, err := r.q.Exec(ctx,
-			`INSERT INTO contract_parties (organization_id, contract_id, person_id, role, position)
-			 VALUES ($1, $2, $3, $4, $5)`,
-			org, id, pgUUID(p.PersonID), string(p.Role), i); err != nil {
+			`INSERT INTO contract_parties (organization_id, contract_id, person_id, role, position, share)
+			 VALUES ($1, $2, $3, $4, $5, $6)`,
+			org, id, pgUUID(p.PersonID), string(p.Role), i, pgNullRate(p.Share)); err != nil {
 			return fmt.Errorf("postgres: write party: %w", contractConflict(err))
 		}
 	}
@@ -184,7 +184,7 @@ func (r *contractRepository) Get(ctx context.Context, id uuid.UUID) (*domain.Con
 	}
 
 	rows, err := r.q.Query(ctx,
-		`SELECT cp.person_id, cp.role, p.name, p.kind
+		`SELECT cp.person_id, cp.role, p.name, p.kind, cp.share
 		   FROM contract_parties cp JOIN people p ON p.id = cp.person_id
 		  WHERE cp.contract_id = $1 ORDER BY cp.position`, pgUUID(id))
 	if err != nil {
@@ -195,16 +195,21 @@ func (r *contractRepository) Get(ctx context.Context, id uuid.UUID) (*domain.Con
 			v          usecase.ContractPartyView
 			pid        pgtype.UUID
 			role, kind string
+			share      pgtype.Int4
 		)
-		err := row.Scan(&pid, &role, &v.Name, &kind)
+		err := row.Scan(&pid, &role, &v.Name, &kind, &share)
 		v.PersonID, v.Role, v.Kind = toUUID(pid), domain.PartyRole(role), domain.PersonKind(kind)
+		if share.Valid {
+			rate := domain.Rate(share.Int32)
+			v.Share = &rate
+		}
 		return v, err
 	})
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("postgres: parties: %w", err)
 	}
 	for _, p := range parties {
-		c.Parties = append(c.Parties, domain.ContractParty{PersonID: p.PersonID, Role: p.Role})
+		c.Parties = append(c.Parties, domain.ContractParty{PersonID: p.PersonID, Role: p.Role, Share: p.Share})
 	}
 
 	rows, err = r.q.Query(ctx,
@@ -333,7 +338,7 @@ func (r *contractRepository) List(ctx context.Context, q usecase.ContractQuery) 
 func (r *contractRepository) HasPayments(ctx context.Context, id uuid.UUID) (bool, error) {
 	var paid bool
 	err := r.q.QueryRow(ctx,
-		`SELECT EXISTS (SELECT 1 FROM rents WHERE contract_id = $1 AND paid_on IS NOT NULL)`, pgUUID(id)).Scan(&paid)
+		`SELECT EXISTS (SELECT 1 FROM rents WHERE contract_id = $1 AND amount_paid IS NOT NULL)`, pgUUID(id)).Scan(&paid)
 	if err != nil {
 		return false, fmt.Errorf("postgres: contract payments: %w", err)
 	}
@@ -352,13 +357,13 @@ func (r *contractRepository) Terminate(ctx context.Context, id uuid.UUID, on dom
 		return fmt.Errorf("postgres: terminate contract: %w", domain.ErrPreconditionFailed)
 	}
 	if _, err := r.q.Exec(ctx,
-		`DELETE FROM rents WHERE contract_id = $1 AND paid_on IS NULL AND sequence > $2`,
+		`DELETE FROM rents WHERE contract_id = $1 AND amount_paid IS NULL AND sequence > $2`,
 		pgUUID(id), plan.LastSequence); err != nil {
 		return fmt.Errorf("postgres: remove rents after termination: %w", err)
 	}
 	if plan.ProratedAmount != nil {
 		if _, err := r.q.Exec(ctx,
-			`UPDATE rents SET rent_amount = $3 WHERE contract_id = $1 AND sequence = $2 AND paid_on IS NULL`,
+			`UPDATE rents SET rent_amount = $3 WHERE contract_id = $1 AND sequence = $2 AND amount_paid IS NULL`,
 			pgUUID(id), plan.LastSequence, int64(*plan.ProratedAmount)); err != nil {
 			return fmt.Errorf("postgres: prorate the last rent: %w", err)
 		}

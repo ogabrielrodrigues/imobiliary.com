@@ -42,6 +42,8 @@ var PersonFieldSuffixes = []string{
 	"endereco_cidade",
 	"endereco_uf",
 	"endereco_cep",
+	"o",
+	"a",
 }
 
 // PersonFields computes one party's fields, keyed by the suffixes above.
@@ -62,6 +64,11 @@ func PersonFields(p *Person, people map[string]*Person) map[string]string {
 	}
 
 	a := AgreementOf(p)
+	// The endings of words that agree with this person alone, as the role's
+	// `_o` does for the whole role: "inscrit{{.locador_1_o}}" and
+	// "portador{{.locador_1_a}}". Two people in one role may differ.
+	values["o"] = inflect(a, "o", "a")
+	values["a"] = inflect(a, "", "a")
 
 	if p.CPF != "" {
 		cpf := FormatCPF(p.CPF)

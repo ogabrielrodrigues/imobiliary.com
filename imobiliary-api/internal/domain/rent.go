@@ -20,6 +20,29 @@ const (
 
 var chargeKinds = []ChargeKind{ChargeCondominium, ChargePropertyTax, ChargeWater, ChargeEnergy, ChargeOther}
 
+// ChargeDestination is where a charge's money goes once the tenant pays it.
+type ChargeDestination string
+
+const (
+	// DestinationOwner: the charge is the owner's, such as an IPTU in the
+	// owner's name, and enters the payout. The administration fee is charged
+	// on it too.
+	DestinationOwner ChargeDestination = "owner"
+	// DestinationThirdParty: the office pays it on, to the condominium or the
+	// utility, and it never reaches the owner or pays a fee.
+	DestinationThirdParty ChargeDestination = "third_party"
+)
+
+// SuggestedDestination is what a new charge of a kind usually is: the
+// property tax is the owner's, the rest is paid on to a third party. The
+// office changes it at will.
+func SuggestedDestination(k ChargeKind) ChargeDestination {
+	if k == ChargePropertyTax {
+		return DestinationOwner
+	}
+	return DestinationThirdParty
+}
+
 // Charge is an amount billed with a rent besides the rent itself.
 type Charge struct {
 	ID          uuid.UUID
@@ -27,6 +50,7 @@ type Charge struct {
 	Kind        ChargeKind
 	Description string
 	Amount      Money
+	Destination ChargeDestination
 }
 
 // MaxChargesPerRent bounds the list a rent carries.
@@ -51,6 +75,9 @@ func ValidateCharge(c *Charge) error {
 	}
 	if c.Amount <= 0 || !c.Amount.Valid() {
 		v.Add("amount", "must be greater than zero")
+	}
+	if c.Destination != DestinationOwner && c.Destination != DestinationThirdParty {
+		v.Add("destination", "must be owner or third_party")
 	}
 	return v.OrNil()
 }
@@ -91,30 +118,4 @@ func ComputeLateFee(due Money, dueOn, paidOn Date, penaltyRate, interestRate Rat
 		return LateFee{}, err
 	}
 	return LateFee{DaysLate: days, Penalty: penalty, Interest: Money(v), Total: total}, nil
-}
-
-// Payment is a rent received in full. AmountPaid is what actually came in,
-// which the office types; LateFee is recorded as agreed.
-type Payment struct {
-	PaidOn     Date
-	AmountPaid Money
-	LateFee    Money
-}
-
-// ValidatePayment checks a payment against today, where the office is.
-func ValidatePayment(p *Payment, today Date) error {
-	v := &ValidationError{}
-	switch {
-	case p.PaidOn.IsZero():
-		v.Add("paid_on", "is required")
-	case p.PaidOn.After(today):
-		v.Add("paid_on", "must not be in the future")
-	}
-	if p.AmountPaid <= 0 || !p.AmountPaid.Valid() {
-		v.Add("amount_paid", "must be greater than zero")
-	}
-	if p.LateFee < 0 || !p.LateFee.Valid() {
-		v.Add("late_fee", "must not be negative")
-	}
-	return v.OrNil()
 }

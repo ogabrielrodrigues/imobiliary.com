@@ -10,6 +10,8 @@
  * screens away, and the mapping is where an instant becomes a Date.
  */
 
+import type { AnonymizationCandidate } from "../../domain/anonymization.ts";
+import type { Administrator } from "../../domain/administrator.ts";
 import type {
   CallContext,
   ContractsGateway,
@@ -24,9 +26,11 @@ import type {
   PeopleGateway,
   PrivacyGateway,
   PropertiesGateway,
+  PayoutsGateway,
   RentsGateway,
   SecondFactorGateway,
 } from "../../application/ports.ts";
+import { PayoutsClient } from "./payouts-client.ts";
 import type {
   Membership,
   Organization,
@@ -82,6 +86,7 @@ import {
   type RentStatus,
 } from "../../domain/contract.ts";
 import type {
+  ChargeDestination,
   ChargeInput,
   ChargeKind,
   ContractDeadline,
@@ -209,6 +214,7 @@ export function createGateways(transport: Transport): {
   properties: PropertiesGateway;
   contracts: ContractsGateway;
   rents: RentsGateway;
+  payouts: PayoutsGateway;
 } {
   return {
     identity: new IdentityClient(transport),
@@ -220,6 +226,7 @@ export function createGateways(transport: Transport): {
     properties: new PropertiesClient(transport),
     contracts: new ContractsClient(transport),
     rents: new RentsClient(transport),
+    payouts: new PayoutsClient(transport),
   };
 }
 
@@ -349,6 +356,7 @@ interface PersonBody {
   version: number;
   created_at: string;
   updated_at: string;
+  anonymized_at: string | null;
 }
 
 interface PeoplePageBody {
@@ -393,6 +401,7 @@ function toPerson(b: PersonBody): Person {
     version: b.version,
     createdAt: new Date(b.created_at),
     updatedAt: new Date(b.updated_at),
+    anonymizedAt: b.anonymized_at === null ? null : new Date(b.anonymized_at),
   };
 }
 
@@ -474,9 +483,32 @@ class PeopleClient implements PeopleGateway {
   async remove(ctx: CallContext, id: string): Promise<void> {
     await this.transport.send(ctx, "DELETE", `/v1/people/${encodeURIComponent(id)}`);
   }
+
+  async anonymizationCandidates(ctx: CallContext): Promise<AnonymizationCandidate[]> {
+    const body = await this.transport.json<{
+      candidates: {
+        person: { id: string; name: string; kind: PersonKind };
+        last_activity_on: string;
+        retention_ended_on: string;
+        contracts: { id: string; registry: string; documents_can_go: boolean }[];
+        payouts: { id: string; number: string }[];
+      }[];
+    }>(ctx, "GET", "/v1/people/anonymization-candidates");
+    return body.candidates.map((c) => ({
+      person: c.person,
+      lastActivityOn: c.last_activity_on,
+      retentionEndedOn: c.retention_ended_on,
+      contracts: c.contracts.map((k) => ({ id: k.id, registry: k.registry, documentsCanGo: k.documents_can_go })),
+      payouts: c.payouts,
+    }));
+  }
+
+  async anonymize(ctx: CallContext, id: string): Promise<void> {
+    await this.transport.send(ctx, "POST", `/v1/people/${encodeURIComponent(id)}/anonymization`);
+  }
 }
 
-interface PropertyAddressBody {
+export interface PropertyAddressBody {
   street: string;
   number: string;
   complement: string;
@@ -504,7 +536,7 @@ interface PropertiesPageBody {
   next_cursor?: string;
 }
 
-function toPropertyAddress(a: PropertyAddressBody): PropertyAddress {
+export function toPropertyAddress(a: PropertyAddressBody): PropertyAddress {
   return {
     street: a.street,
     number: a.number,
@@ -631,7 +663,7 @@ interface ContractTermsBody {
 interface ContractBody extends ContractTermsBody {
   id: string;
   property: { id: string; address: PropertyAddressBody };
-  parties: { person_id: string; role: PartyRole; name: string; kind: PersonKind }[];
+  parties: { person_id: string; role: PartyRole; name: string; kind: PersonKind; share?: string }[];
   acknowledgments: { code: NoticeCode; acknowledged_at: string }[];
   rents: {
     id: string;
@@ -643,6 +675,7 @@ interface ContractBody extends ContractTermsBody {
     amount_paid: string | null;
     paid_on: string | null;
     status: RentStatus;
+    partially_paid: boolean;
   }[];
   amendments: {
     id: string;
@@ -716,7 +749,7 @@ function toContract(b: ContractBody): Contract {
     ...toContractTerms(b),
     id: b.id,
     address: toPropertyAddress(b.property.address),
-    parties: b.parties.map((p) => ({ personId: p.person_id, role: p.role, name: p.name, kind: p.kind })),
+    parties: b.parties.map((p) => ({ personId: p.person_id, role: p.role, name: p.name, kind: p.kind, share: p.share ?? null })),
     acknowledgments: b.acknowledgments.map((a) => ({ code: a.code, acknowledgedAt: a.acknowledged_at })),
     rents: b.rents.map((r) => ({
       id: r.id,
@@ -728,6 +761,7 @@ function toContract(b: ContractBody): Contract {
       amountPaid: r.amount_paid,
       paidOn: r.paid_on,
       status: r.status,
+      partiallyPaid: r.partially_paid,
     })),
     amendments: b.amendments.map((a) => ({
       id: a.id,
@@ -771,7 +805,7 @@ function contractPayload(c: ContractInput): string {
     signed_on: c.signedOn,
     starts_on: c.startsOn,
     expires_on: c.expiresOn,
-    parties: partiesOf(c).map((p) => ({ person_id: p.personId, role: p.role })),
+    parties: partiesOf(c).map((p) => ({ person_id: p.personId, role: p.role, ...(p.share === undefined ? {} : { share: p.share }) })),
     acknowledgments: c.acknowledgments,
   });
 }
@@ -907,6 +941,10 @@ interface RentSummaryBody {
   late_fee: string;
   amount_paid: string | null;
   paid_on: string | null;
+  income_tax_withheld: string;
+  principal_paid: string;
+  outstanding: string;
+  partially_paid: boolean;
   status: RentViewStatus;
 }
 
@@ -918,8 +956,18 @@ interface LateFeeBody {
 }
 
 interface RentDetailBody extends RentSummaryBody {
-  charges: { id: string; kind: ChargeKind; description: string; amount: string }[];
+  charges: { id: string; kind: ChargeKind; description: string; amount: string; destination: ChargeDestination }[];
+  payments: {
+    id: string;
+    paid_on: string;
+    amount: string;
+    late_fee: string;
+    waived: string;
+    principal: string;
+    income_tax_withheld: string;
+  }[];
   suggested_late_fee: LateFeeBody;
+  owed_today: string;
 }
 
 interface DeadlineBody {
@@ -941,7 +989,10 @@ interface DashboardBody {
     open: string;
     open_count: number;
     office_fee: string;
+    paid_out: string;
+    paid_out_count: number;
   };
+  payouts: { pending: string; beneficiaries: number };
   overdue: { count: number; amount: string };
   portfolio: { properties: number; leased_properties: number; active_contracts: number; rent_roll: string };
   expiring: DeadlineBody[];
@@ -967,6 +1018,10 @@ function toRentSummary(b: RentSummaryBody): RentSummary {
     lateFee: b.late_fee,
     amountPaid: b.amount_paid,
     paidOn: b.paid_on,
+    incomeTaxWithheld: b.income_tax_withheld,
+    principalPaid: b.principal_paid,
+    outstanding: b.outstanding,
+    partiallyPaid: b.partially_paid,
     status: b.status,
   };
 }
@@ -978,8 +1033,24 @@ function toLateFee(b: LateFeeBody): LateFee {
 function toRentDetail(b: RentDetailBody): RentDetail {
   return {
     ...toRentSummary(b),
-    charges: b.charges.map((c) => ({ id: c.id, kind: c.kind, description: c.description, amount: c.amount })),
+    charges: b.charges.map((c) => ({
+      id: c.id,
+      kind: c.kind,
+      description: c.description,
+      amount: c.amount,
+      destination: c.destination,
+    })),
+    payments: b.payments.map((p) => ({
+      id: p.id,
+      paidOn: p.paid_on,
+      amount: p.amount,
+      lateFee: p.late_fee,
+      waived: p.waived,
+      principal: p.principal,
+      incomeTaxWithheld: p.income_tax_withheld,
+    })),
     suggestedLateFee: toLateFee(b.suggested_late_fee),
+    owedToday: b.owed_today,
   };
 }
 
@@ -987,7 +1058,10 @@ function toDeadline(b: DeadlineBody): ContractDeadline {
   return { contractId: b.contract_id, registry: b.registry, address: toPropertyAddress(b.address), on: b.on };
 }
 
-/** Typed amounts leave as the API reads money; empty ones are left out for the computation. */
+/**
+ * Typed amounts leave as the API reads money; an empty late fee is left out
+ * for the computation, and an empty amount settles everything, computed.
+ */
 function paymentPayload(p: PaymentInput): string {
   const money = (value: string) => {
     const cents = parseMoney(value);
@@ -995,8 +1069,9 @@ function paymentPayload(p: PaymentInput): string {
   };
   return JSON.stringify({
     paid_on: p.paidOn,
+    ...(p.amount.trim() === "" ? {} : { amount: money(p.amount) }),
     ...(p.lateFee.trim() === "" ? {} : { late_fee: money(p.lateFee) }),
-    ...(p.amountPaid.trim() === "" ? {} : { amount_paid: money(p.amountPaid) }),
+    ...(p.incomeTax.trim() === "" ? {} : { income_tax_withheld: money(p.incomeTax) }),
   });
 }
 
@@ -1041,8 +1116,8 @@ class RentsClient implements RentsGateway {
       body: JSON.stringify({ paid_on: paidOn }),
       contentType: "application/json",
     });
-    const b = (await response.json()) as { late_fee: LateFeeBody; total: string };
-    return { lateFee: toLateFee(b.late_fee), total: b.total };
+    const b = (await response.json()) as { late_fee: LateFeeBody; principal: string; total: string };
+    return { lateFee: toLateFee(b.late_fee), principal: b.principal, total: b.total };
   }
 
   async pay(ctx: CallContext, id: string, input: PaymentInput): Promise<RentDetail> {
@@ -1065,7 +1140,16 @@ class RentsClient implements RentsGateway {
         kind: input.kind,
         description: input.description.trim(),
         amount: cents === null ? input.amount : moneyForApi(cents),
+        destination: input.destination,
       }),
+      contentType: "application/json",
+    });
+    return toRentDetail((await response.json()) as RentDetailBody);
+  }
+
+  async setChargeDestination(ctx: CallContext, id: string, chargeId: string, destination: ChargeDestination): Promise<RentDetail> {
+    const response = await this.transport.send(ctx, "PATCH", this.path(id, `/charges/${encodeURIComponent(chargeId)}`), {
+      body: JSON.stringify({ destination }),
       contentType: "application/json",
     });
     return toRentDetail((await response.json()) as RentDetailBody);
@@ -1090,7 +1174,10 @@ class RentsClient implements RentsGateway {
         open: b.month.open,
         openCount: b.month.open_count,
         officeFee: b.month.office_fee,
+        paidOut: b.month.paid_out,
+        paidOutCount: b.month.paid_out_count,
       },
+      payouts: b.payouts,
       overdue: b.overdue,
       portfolio: {
         properties: b.portfolio.properties,
@@ -1198,6 +1285,20 @@ class OrganizationClient implements OrganizationGateway {
       body: JSON.stringify({ name }),
       contentType: "application/json",
     });
+  }
+
+  async administrator(ctx: CallContext): Promise<Administrator | null> {
+    const response = await this.transport.send(ctx, "GET", "/v1/organization/administrator");
+    if (response.status === 204) return null;
+    return (await response.json()) as Administrator;
+  }
+
+  async setAdministrator(ctx: CallContext, input: Administrator): Promise<Administrator> {
+    const response = await this.transport.send(ctx, "PUT", "/v1/organization/administrator", {
+      body: JSON.stringify({ kind: input.kind, document: input.document.trim(), creci: input.creci.trim() }),
+      contentType: "application/json",
+    });
+    return (await response.json()) as Administrator;
   }
 
   async members(ctx: CallContext): Promise<readonly Member[]> {

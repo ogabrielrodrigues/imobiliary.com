@@ -8,6 +8,18 @@
  * fake is a few lines rather than a mock framework.
  */
 
+import type { AnonymizationCandidate } from "../domain/anonymization.ts";
+import type { IncomeReport } from "../domain/income-report.ts";
+import type {
+  Balance,
+  LedgerEntry,
+  ManualEntryInput,
+  PayoutDetail,
+  PayoutInput,
+  PayoutsPage,
+  PersonLedger,
+} from "../domain/payout.ts";
+import type { Administrator } from "../domain/administrator.ts";
 import type {
   Membership,
   Organization,
@@ -27,6 +39,7 @@ import type {
 } from "../domain/person.ts";
 import type { PropertiesPage, Property, PropertyInput } from "../domain/property.ts";
 import type {
+  ChargeDestination,
   ChargeInput,
   Dashboard,
   PaymentInput,
@@ -145,6 +158,10 @@ export interface PeopleGateway {
   update(ctx: CallContext, id: string, version: number, input: PersonInput): Promise<Person>;
   /** A person something still links to is an InUseError. */
   remove(ctx: CallContext, id: string): Promise<void>;
+  /** Who is past the legal retention. */
+  anonymizationCandidates(ctx: CallContext): Promise<AnonymizationCandidate[]>;
+  /** Administrators only; a person no longer due is a ValidationError. */
+  anonymize(ctx: CallContext, id: string): Promise<void>;
 }
 
 /** The office's register of properties. */
@@ -231,6 +248,8 @@ export interface RentsGateway {
   reverse(ctx: CallContext, id: string): Promise<RentDetail>;
   addCharge(ctx: CallContext, id: string, input: ChargeInput): Promise<RentDetail>;
   removeCharge(ctx: CallContext, id: string, chargeId: string): Promise<RentDetail>;
+  /** Also on a paid rent, until it is in a payout. */
+  setChargeDestination(ctx: CallContext, id: string, chargeId: string, destination: ChargeDestination): Promise<RentDetail>;
   dashboard(ctx: CallContext): Promise<Dashboard>;
 }
 
@@ -273,6 +292,10 @@ export interface Invitation {
 
 export interface OrganizationGateway {
   rename(ctx: CallContext, name: string): Promise<void>;
+  /** Who signs the receipts; null until the office says. */
+  administrator(ctx: CallContext): Promise<Administrator | null>;
+  /** Administrators only. */
+  setAdministrator(ctx: CallContext, input: Administrator): Promise<Administrator>;
   members(ctx: CallContext): Promise<readonly Member[]>;
   changeRole(ctx: CallContext, userId: string, role: Role): Promise<void>;
   removeMember(ctx: CallContext, userId: string): Promise<void>;
@@ -290,4 +313,21 @@ export interface OrganizationGateway {
       termsVersion?: string | undefined;
     },
   ): Promise<void>;
+}
+
+/** The owners' ledger and the payouts the office records. */
+export interface PayoutsGateway {
+  balances(ctx: CallContext): Promise<readonly Balance[]>;
+  ledger(ctx: CallContext, personId: string): Promise<PersonLedger>;
+  addEntry(ctx: CallContext, personId: string, input: ManualEntryInput): Promise<LedgerEntry>;
+  deleteEntry(ctx: CallContext, entryId: string): Promise<void>;
+  /** A line another payout took meanwhile is a ConflictError or a ValidationError. */
+  create(ctx: CallContext, input: PayoutInput): Promise<PayoutDetail>;
+  get(ctx: CallContext, id: string): Promise<PayoutDetail>;
+  list(ctx: CallContext, query: { personId?: string; cursor?: string; limit?: number }): Promise<PayoutsPage>;
+  undo(ctx: CallContext, id: string): Promise<void>;
+  /** What a statement template is filled with. */
+  documentFields(ctx: CallContext, id: string): Promise<DocumentField[]>;
+  /** A year of an individual owner's receipts, for the carnê-leão. */
+  incomeReport(ctx: CallContext, personId: string, year: number): Promise<IncomeReport>;
 }

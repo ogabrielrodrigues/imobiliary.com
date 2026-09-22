@@ -136,7 +136,7 @@ func newAPI(t *testing.T) *api {
 	properties := usecase.NewProperties(usecase.PropertiesConfig{Scope: db, Logger: logger})
 	contracts := usecase.NewContracts(usecase.ContractsConfig{Scope: db, Logger: logger})
 	rents := usecase.NewRents(usecase.RentsConfig{Scope: db, Logger: logger})
-	documents := usecase.NewDocuments(usecase.DocumentsConfig{Scope: db, People: people})
+	payouts := usecase.NewPayouts(usecase.PayoutsConfig{Scope: db, Logger: logger})
 	privacy := usecase.NewPrivacy(usecase.PrivacyConfig{
 		Identity: identity, Repositories: repos, Hasher: hasher, Sealer: sealer, Mailer: box, Logger: logger,
 	})
@@ -145,9 +145,10 @@ func newAPI(t *testing.T) *api {
 		AppURL: "https://imobiliary.test", ResetTTL: 30 * time.Minute, Logger: logger,
 	})
 	organizations := usecase.NewOrganizations(usecase.OrganizationsConfig{
-		Identity: identity, Repositories: repos, Hasher: hasher, Mailer: box,
+		Identity: identity, Repositories: repos, Hasher: hasher, Mailer: box, Sealer: sealer,
 		AppURL: "https://imobiliary.test", InvitationTTL: 7 * 24 * time.Hour, Logger: logger,
 	})
+	documents := usecase.NewDocuments(usecase.DocumentsConfig{Scope: db, People: people, Organizations: organizations})
 
 	// The limits are real but generous: what they do is covered by their own
 	// test, and a suite that ran into them would fail for the wrong reason.
@@ -161,7 +162,7 @@ func newAPI(t *testing.T) *api {
 
 	server := httptest.NewServer(adapterhttp.NewServer(adapterhttp.Options{
 		Identity: identity, MFA: mfa, Passwords: passwords, Organizations: organizations,
-		Privacy: privacy, People: people, Properties: properties, Contracts: contracts, Rents: rents, Documents: documents,
+		Privacy: privacy, People: people, Properties: properties, Contracts: contracts, Rents: rents, Payouts: payouts, Documents: documents,
 		Auditor: usecase.NewAuditor(repos.Audit, time.Now, logger),
 		Signer:  signer, Logger: logger, Metrics: metrics.NewRegistry(),
 		Ready:    func(context.Context) error { return nil },
@@ -712,6 +713,8 @@ func TestTheAuditTrailIsWrittenAndCannotBeRewritten(t *testing.T) {
 	a := newAPI(t)
 	admin := a.register("ana@example.com", "Ana", "Central")
 	a.enrollTOTP(admin)
+	a.expect(http.StatusNoContent, http.MethodPatch, "/v1/organization", admin.access,
+		map[string]any{"name": "Central Imóveis"})
 
 	var actions []string
 	rows, err := a.db.QueryForTest(t.Context(),
@@ -730,10 +733,21 @@ func TestTheAuditTrailIsWrittenAndCannotBeRewritten(t *testing.T) {
 
 	for _, want := range []domain.AuditAction{
 		domain.ActionOrganizationCreated, domain.ActionUserRegistered, domain.ActionTOTPEnabled,
+		domain.ActionOrganizationRenamed,
 	} {
 		if !contains(actions, string(want)) {
 			t.Errorf("the trail has no %s: %v", want, actions)
 		}
+	}
+	// A rename is its own event, not a second creation.
+	created := 0
+	for _, action := range actions {
+		if action == string(domain.ActionOrganizationCreated) {
+			created++
+		}
+	}
+	if created != 1 {
+		t.Errorf("the office was created %d times: %v", created, actions)
 	}
 
 	// An audit row carries no secret and no personal value, only names.

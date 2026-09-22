@@ -20,7 +20,7 @@ import { TEMPLATE_LIST_CAP } from "@/server/templates";
 
 interface TemplatesSearch {
   /** What was typed in the search box. Absent when empty. */
-  readonly busca?: string;
+  readonly busca?: string | undefined;
 }
 
 export const Route = createFileRoute("/_app/templates/")({
@@ -31,7 +31,7 @@ export const Route = createFileRoute("/_app/templates/")({
    */
   validateSearch: (search: Record<string, unknown>): TemplatesSearch => {
     const query = search["busca"];
-    return typeof query === "string" && query.trim() !== "" ? { busca: query } : {};
+    return { busca: typeof query === "string" && query.trim() !== "" ? query : undefined };
   },
   head: () => ({ meta: [{ title: "Templates | Imobiliary Docs" }] }),
   loader: ({ context }) => context.queryClient.ensureQueryData(templateListQuery()),

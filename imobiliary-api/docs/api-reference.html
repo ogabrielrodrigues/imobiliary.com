@@ -77,7 +77,7 @@
   .op-card:first-of-type { border-top: 0; }
   .sig { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
   .m { font: 600 11px/1 var(--font-mono); letter-spacing: .06em; padding: 5px 7px; border-radius: 4px; border: 1px solid currentColor; min-width: 58px; text-align: center; }
-  .m.get { color: var(--get); } .m.post { color: var(--post); } .m.patch { color: var(--patch); } .m.delete { color: var(--delete); }
+  .m.get { color: var(--get); } .m.post { color: var(--post); } .m.patch, .m.put { color: var(--patch); } .m.delete { color: var(--delete); }
   .path { font: 500 15px var(--font-mono); overflow-wrap: anywhere; }
   .access { font: 11px var(--font-mono); color: var(--ink-faint); border: 1px dashed var(--rule-firm); padding: 3px 7px; border-radius: 999px; }
   .access.admin { color: var(--accent); border-style: solid; border-color: var(--accent); background: var(--accent-bg); }
@@ -112,7 +112,7 @@
 <div class="shell">
   <nav class="rail" aria-label="Sections">
     <div class="brand">imobiliary <span>api</span></div>
-    <div class="ver">v0.8.0 · phase 7</div>
+    <div class="ver">v0.12.0 · partial payments</div>
     <h3>Guide</h3>
     <ul>
       <li><a href="#auth">Authentication</a></li>
@@ -133,6 +133,7 @@
       <li><a href="#properties">Properties</a></li>
       <li><a href="#contracts">Contracts</a></li>
       <li><a href="#rents">Rents</a></li>
+      <li><a href="#payouts">Payouts</a></li>
       <li><a href="#operations">Operations</a></li>
     </ul>
   </nav>
@@ -367,6 +368,18 @@ If-Match: "3"
       </article>
 
       <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/organization/administrator</span><span class="access">session</span></div>
+        <p>Who signs the receipts: the office as a person (a self-employed broker, with a CPF) or a company (a CNPJ), and its CRECI. The document is sealed at rest.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>{ kind, document, creci }</code> · <code>204</code> while not recorded</dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m put">PUT</span><span class="path">/v1/organization/administrator</span><span class="access admin">admin</span></div>
+        <p>Records it. The document must be a valid CPF for <code>individual</code> and CNPJ for <code>company</code>; it comes back formatted. Audited.</p>
+        <dl class="io"><dt>Body</dt><dd><code>{ kind, document, creci }</code></dd><dt>Answers</dt><dd><code>200</code> · <code>422</code></dd></dl>
+      </article>
+
+      <article class="op-card">
         <div class="sig"><span class="m get">GET</span><span class="path">/v1/organization/members</span><span class="access">session</span></div>
         <p>Who works in the office, by name. Every member may read it.</p>
         <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>{ members }</code></dd></dl>
@@ -446,7 +459,7 @@ If-Match: "3"
 
       <article class="op-card">
         <div class="sig"><span class="m patch">PUT</span><span class="path">/v1/people/{personID}</span><span class="access">session · writes</span></div>
-        <p>Replaces the record, addresses and representatives included. The kind cannot change. Dropping or replacing the spouse clears the link on the former spouse's record.</p>
+        <p>Replaces the record, addresses and representatives included. The kind cannot change. Dropping or replacing the spouse clears the link on the former spouse's record. An anonymised record is a <code>422</code> on <code>person</code>.</p>
         <dl class="io"><dt>Headers</dt><dd><code>If-Match: "&lt;version&gt;"</code></dd><dt>Answers</dt><dd><code>200</code> · <code>404</code> · <code>412</code> · <code>422</code> · <code>428</code></dd></dl>
       </article>
 
@@ -454,6 +467,18 @@ If-Match: "3"
         <div class="sig"><span class="m delete">DELETE</span><span class="path">/v1/people/{personID}</span><span class="access">session · writes</span></div>
         <p>Permanent, with the person's addresses, audited without values. Refused while something links to the person, such as a company they represent. A spouse keeps their record and loses the link.</p>
         <dl class="io"><dt>Answers</dt><dd><code>204</code> · <code>404</code> · <code>409 in_use</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/people/anonymization-candidates</span><span class="access">session</span></div>
+        <p>Who is past the legal retention: no property owned, no contract running today or later, nothing waiting for a payout, and the last contract end, ledger line and payout past five years counted from the first day of the following year (CTN art. 173, I). A spouse or representative of someone not listed stays out. Each with the contracts they were party to, saying whether every other party is listed too, and their payouts.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>{ candidates: [{ person, last_activity_on, retention_ended_on, contracts, payouts }] }</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/people/{personID}/anonymization</span><span class="access admin">admin</span></div>
+        <p>Anonymises a person still listed: the name becomes "Pessoa anonimizada", and the CPF or CNPJ with its lookup index, contacts, personal details, addresses and representative links go. The record stays, marked <code>anonymized_at</code>, so contracts, rents and the ledger still point at it. Audited as <code>person.anonymized</code>. The documents generated about the person live in the document service; the platform clears them first.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>204</code> · <code>404</code> · <code>422</code> on <code>person</code> when not listed</dd></dl>
       </article>
     </section>
 
@@ -547,7 +572,7 @@ If-Match: "3"
       <article class="op-card">
         <div class="sig"><span class="m get">GET</span><span class="path">/v1/contracts/{contractID}/document-fields</span><span class="access">session</span></div>
         <p>Every field a lease template can use, computed for the contract, in a fixed order; empty when the register lacks what a field needs. Qualifications use the CIN with the CPF's number; roles agree with the registered genders (neutral when one is missing, feminine for a company); amounts and percentages come in words; <code>foro</code> is suggested as the property's city.</p>
-        <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>{ fields: [{ name, value }] }</code>, 419 of them, always in the same order. Three groups: the contract, the property and the money (<code>contrato_numero</code>, <code>escritorio_nome</code>, <code>imovel_endereco</code> and each line of it, <code>aluguel_valor</code> with <code>_numero</code> and <code>_extenso</code>, <code>garantia_texto</code>, the dates including <code>hoje</code>, and <code>foro</code>); each role as a whole (<code>locador_qualificacao</code>, <code>locador_nome</code>, <code>locador_quantidade</code>, and the agreement fields <code>locador_termo</code>, <code>locador_titulo</code>, <code>locador_termo_inicio</code>, <code>locador_do</code>, <code>locador_ao</code>, <code>locador_no</code>, <code>locador_pelo</code>, <code>locador_o</code>); and each party, field by field and numbered from 1 to 4 (<code>locador_1_nome</code>, <code>locatario_1_cpf</code>, <code>fiador_2_endereco_cidade</code>, 28 suffixes each). The CIN carries the CPF's number, and <code>..._rg</code> repeats it for an older model. The catalogue, with an example of every field, is <code>docs/campos.md</code>.</dd></dl>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>{ fields: [{ name, value }] }</code>, 443 of them, always in the same order. Three groups: the contract, the property and the money (<code>contrato_numero</code>, <code>escritorio_nome</code>, <code>imovel_endereco</code> and each line of it, <code>aluguel_valor</code> with <code>_numero</code> and <code>_extenso</code>, <code>garantia_texto</code>, the dates including <code>hoje</code>, and <code>foro</code>); each role as a whole (<code>locador_qualificacao</code>, <code>locador_nome</code>, <code>locador_quantidade</code>, and the agreement fields <code>locador_termo</code>, <code>locador_titulo</code>, <code>locador_termo_inicio</code>, <code>locador_do</code>, <code>locador_ao</code>, <code>locador_no</code>, <code>locador_pelo</code>, <code>locador_o</code>); and each party, field by field and numbered from 1 to 4 (<code>locador_1_nome</code>, <code>locatario_1_cpf</code>, <code>fiador_2_endereco_cidade</code>, 30 suffixes each, including <code>_o</code> and <code>_a</code>, the endings that agree with that person alone). The CIN carries the CPF's number, and <code>..._rg</code> repeats it for an older model. The catalogue, with an example of every field, is <code>docs/campos.md</code>.</dd></dl>
       </article>
 
       <article class="op-card">
@@ -581,32 +606,38 @@ If-Match: "3"
 
       <article class="op-card">
         <div class="sig"><span class="m get">GET</span><span class="path">/v1/rents/{rentID}</span><span class="access">session</span></div>
-        <p>With its charges and, while unpaid, <code>suggested_late_fee</code> for paying today.</p>
+        <p>With its charges, its <code>payments</code> in order, <code>principal_paid</code> and <code>outstanding</code>, and, while unpaid, the interest and penalty owed today (<code>suggested_late_fee</code>) and everything owed today (<code>owed_today</code>). <code>partially_paid</code> is true while money came in and something is open; the status stays <code>pending</code> or <code>overdue</code>.</p>
         <dl class="io"><dt>Answers</dt><dd><code>200</code> · <code>404</code></dd></dl>
       </article>
 
       <article class="op-card">
         <div class="sig"><span class="m post">POST</span><span class="path">/v1/rents/{rentID}/payment/preview</span><span class="access">session · writes</span></div>
-        <p>The late fee and total for a payment day. Records nothing.</p>
-        <dl class="io"><dt>Body</dt><dd><code>{ paid_on }</code></dd><dt>Answers</dt><dd><code>200</code> <code>{ late_fee: { days_late, penalty, interest, total }, total }</code></dd></dl>
+        <p>What is owed on a payment day, replaying the payments already recorded: the penalty once, on the principal (rent and charges) open the day after the due day; interest every day on the principal still open, over a thirty-day month; neither earns interest. Records nothing.</p>
+        <dl class="io"><dt>Body</dt><dd><code>{ paid_on }</code></dd><dt>Answers</dt><dd><code>200</code> <code>{ late_fee: { days_late, penalty, interest, total }, principal, total }</code></dd></dl>
       </article>
 
       <article class="op-card">
         <div class="sig"><span class="m post">POST</span><span class="path">/v1/rents/{rentID}/payment</span><span class="access">session · writes</span></div>
-        <p>Records the payment. Left out, <code>late_fee</code> is computed and <code>amount_paid</code> is the whole amount due. Not after today. Already paid, including by a simultaneous request, is a conflict.</p>
-        <dl class="io"><dt>Body</dt><dd><code>{ paid_on, amount_paid, late_fee }</code></dd><dt>Answers</dt><dd><code>200</code> · <code>409 conflict</code> · <code>422</code></dd></dl>
+        <p>Records a payment and, in the same transaction, its owners' ledger lines. Without <code>amount</code> it settles everything owed that day, computed. With <code>amount</code> it is partial: with the tax withheld it settles the interest, then the penalty, then the principal, split between the rent and each charge by what each has open (Código Civil art. 354). More than is owed is a <code>422</code> on <code>amount</code>; <code>late_fee</code> below what is owed forgives the rest. Sending <code>amount_paid</code> is a <code>422</code>. Not after today nor before the last payment. Once a rent has a payment its charges no longer change. Already paid, including by a simultaneous request, is a conflict.</p>
+        <dl class="io"><dt>Body</dt><dd><code>{ paid_on, amount, late_fee, income_tax_withheld }</code></dd><dt>Answers</dt><dd><code>200</code> · <code>409 conflict</code> · <code>422</code></dd></dl>
       </article>
 
       <article class="op-card">
         <div class="sig"><span class="m delete">DELETE</span><span class="path">/v1/rents/{rentID}/payment</span><span class="access">session · writes</span></div>
-        <p>Reverses a payment: back to unpaid, audited.</p>
-        <dl class="io"><dt>Answers</dt><dd><code>200</code> · <code>422</code> on <code>payment</code> when not paid</dd></dl>
+        <p>Reverses the last payment: its ledger lines removed, the earlier payments standing, the rent unpaid again, audited. Refused while any line of that payment is in a payout; the message names the payout to undo.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> · <code>422</code> on <code>payment</code> when not paid or paid out</dd></dl>
       </article>
 
       <article class="op-card">
         <div class="sig"><span class="m post">POST</span><span class="path">/v1/rents/{rentID}/charges</span><span class="access">session · writes</span></div>
-        <p>Bills condominium, IPTU, water, energy or another charge (with a description) with an unpaid instalment. Once a contract has a charge, its terms can no longer be replaced.</p>
-        <dl class="io"><dt>Body</dt><dd><code>{ kind, description, amount }</code></dd><dt>Answers</dt><dd><code>201</code> · <code>422</code> on <code>charges</code> once paid</dd></dl>
+        <p>Bills condominium, IPTU, water, energy or another charge (with a description) with an unpaid instalment. <code>destination</code>: <code>owner</code> enters the payout and pays the administration fee; <code>third_party</code> is paid on by the office and does neither. Once a contract has a charge, its terms can no longer be replaced.</p>
+        <dl class="io"><dt>Body</dt><dd><code>{ kind, description, amount, destination }</code></dd><dt>Answers</dt><dd><code>201</code> · <code>422</code> on <code>charges</code> once paid</dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m patch">PATCH</span><span class="path">/v1/rents/{rentID}/charges/{chargeID}</span><span class="access">session · writes</span></div>
+        <p>Changes where a charge goes, also on a paid rent: its ledger lines are written again. Refused once the rent is in a payout.</p>
+        <dl class="io"><dt>Body</dt><dd><code>{ destination }</code></dd><dt>Answers</dt><dd><code>200</code> · <code>404</code> · <code>422</code> on <code>destination</code></dd></dl>
       </article>
 
       <article class="op-card">
@@ -617,8 +648,73 @@ If-Match: "3"
 
       <article class="op-card">
         <div class="sig"><span class="m get">GET</span><span class="path">/v1/dashboard</span><span class="access">session</span></div>
-        <p>This month's expected, received and open amounts and the office's administration fee on the rents received, taken on the rent with its charges and not on the late fee; every overdue instalment; the portfolio; contracts ending within sixty days; contracts whose twelve months end within thirty days; and up to twenty instalments due today and overdue.</p>
-        <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>{ today, month, overdue, portfolio, expiring, adjustments, due_today, overdue_rents }</code></dd></dl>
+        <p>This month's expected, received and open amounts, the office's administration fee on the rents received (read from the ledger: the rent and the owner's charges, never the late fee) and what was paid out; what the office still owes its owners; every overdue instalment; the portfolio; contracts ending within sixty days; contracts whose twelve months end within thirty days; and up to twenty instalments due today and overdue.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>{ today, month, payouts, overdue, portfolio, expiring, adjustments, due_today, overdue_rents }</code></dd></dl>
+      </article>
+    </section>
+
+    <section class="block" id="payouts">
+      <h2>Payouts</h2>
+      <p>The owners' ledger. A received rent writes, for each landlord, their part of the rent, of the late fee (all the owner's) and of each charge that is theirs, less their part of the administration fee and of the tax withheld. The landlords are the property's owners with the property's shares on the day, when they are exactly the owners; otherwise the contract records each landlord's <code>share</code>. Each amount is split on its own with the remainder on the last landlord, so the parts add up to the centavo. Lines are never edited. A payout closes a set of one person's pending lines on the day the office transferred; the platform moves no money.</p>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/payouts/balances</span><span class="access">session</span></div>
+        <p>Everyone with pending lines, the oldest first. A balance can be below zero while debits wait for the next rent.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>{ balances: [{ person, pending, lines, oldest_on }] }</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/people/{personID}/ledger</span><span class="access">session</span></div>
+        <p>A person's pending lines and their sum. Each line carries <code>amount</code> (positive) and <code>signed</code> (its effect on the balance), and what it came from: the property's address, the contract, the rent, the charge.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>{ person, balance, pending, today }</code> · <code>404</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/people/{personID}/income-report</span><span class="access">session</span></div>
+        <p>A year of an individual owner's receipts, for the carnê-leão: the ledger's lines, paid out or not, added up by the month the office received them. Rents paid by an individual tenant and by a company are kept apart, since only the first goes in the carnê-leão. Typed debits and credits are informative. No tax is computed. A company is a <code>422</code>.</p>
+        <dl class="io"><dt>Query</dt><dd><code>year</code></dd><dt>Answers</dt><dd><code>200</code> <code>{ person, year, months: [{ month, individual, company, debits, credits }], total }</code> · <code>404</code> · <code>422</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/people/{personID}/ledger</span><span class="access">session · writes</span></div>
+        <p>A debit (an expense the office paid for the person) or a credit, with a description, a day not in the future and an optional property. Audited.</p>
+        <dl class="io"><dt>Body</dt><dd><code>{ kind, amount, description, occurred_on, property_id }</code></dd><dt>Answers</dt><dd><code>201</code> · <code>404</code> · <code>422</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m delete">DELETE</span><span class="path">/v1/ledger/{entryID}</span><span class="access">session · writes</span></div>
+        <p>Removes a typed line still pending. A rent's lines go with its payment's reversal.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>204</code> · <code>404</code> · <code>422</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m post">POST</span><span class="path">/v1/payouts</span><span class="access">session · writes</span></div>
+        <p>Records a payout over chosen lines: all the person's, pending and not later than <code>paid_on</code>, adding up to more than zero. Numbered per office and year from a counter that never goes back, so an undone payout's number is never reused. A line another payout took meanwhile is refused. Audited.</p>
+        <dl class="io"><dt>Body</dt><dd><code>{ person_id, paid_on, entry_ids, method, note }</code></dd><dt>Answers</dt><dd><code>201</code> <code>{ id, number, person, paid_on, total, method, note, entries }</code> · <code>409</code> · <code>422</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/payouts</span><span class="access">session</span></div>
+        <p>Newest first, optionally one person's.</p>
+        <dl class="io"><dt>Query</dt><dd><code>person_id</code>, <code>limit</code>, <code>cursor</code></dd><dt>Answers</dt><dd><code>200</code> <code>{ payouts, next_cursor }</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/payouts/{payoutID}</span><span class="access">session</span></div>
+        <p>The statement: the payout with its lines, by property, then by day.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> · <code>404</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m delete">DELETE</span><span class="path">/v1/payouts/{payoutID}</span><span class="access">session · writes</span></div>
+        <p>Undoes a payout recorded by mistake or returned: its lines are pending again. Audited.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>204</code> · <code>404</code></dd></dl>
+      </article>
+
+      <article class="op-card">
+        <div class="sig"><span class="m get">GET</span><span class="path">/v1/payouts/{payoutID}/document-fields</span><span class="access">session</span></div>
+        <p>123 fields for a statement template in the document service: the payout, the beneficiary with the parties' 30 suffixes under <code>proprietario_</code>, the administrator, the totals by kind, and each property numbered from 1 to 10. Nothing is stored. The catalogue is <code>docs/campos.md</code>, section 9.</p>
+        <dl class="io"><dt>Answers</dt><dd><code>200</code> <code>{ fields: [{ name, value }] }</code> · <code>404</code></dd></dl>
       </article>
     </section>
 

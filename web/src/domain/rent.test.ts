@@ -10,6 +10,10 @@ import {
   translateRentProblem,
   validateCharge,
   validatePayment,
+  amountReceived,
+  suggestedDestination,
+  destinationLabel,
+  splitPartial,
 } from "./rent.ts";
 
 describe("dates", () => {
@@ -31,18 +35,66 @@ describe("payments and charges", () => {
   const today = "2026-11-20";
 
   it("checks the day and typed amounts", () => {
-    const fields = (paidOn: string, lateFee = "", amountPaid = "") =>
-      validatePayment({ paidOn, lateFee, amountPaid }, today).map((p) => p.field);
+    const fields = (paidOn: string, lateFee = "", incomeTax = "", amount = "") =>
+      validatePayment({ paidOn, amount, lateFee, incomeTax }, today, "1600.00").map((p) => p.field);
     assert.deepEqual(fields("2026-11-20"), []);
     assert.deepEqual(fields(""), ["paidOn"]);
     assert.deepEqual(fields("2026-11-21"), ["paidOn"]);
-    assert.deepEqual(fields("2026-11-15", "abc", "0"), ["lateFee", "amountPaid"]);
-    assert.deepEqual(fields("2026-11-15", "0", "1.600,00"), []);
+    assert.deepEqual(fields("2026-11-15", "abc", "x"), ["lateFee", "incomeTax"]);
+    assert.deepEqual(fields("2026-11-15", "0", "1.600,01"), ["incomeTax"]);
+    assert.deepEqual(fields("2026-11-15", "0", "112,50"), []);
+    assert.deepEqual(fields("2026-11-15", "", "", "800,00"), []);
+    assert.deepEqual(fields("2026-11-15", "", "", "0"), ["amount"]);
+    assert.deepEqual(fields("2026-11-15", "", "", "oito"), ["amount"]);
+  });
+
+  it("splits a partial payment as the API does", () => {
+    // Ten days late on 1800.00: 186.00 of interest and penalty come first.
+    assert.deepEqual(splitPartial("900,00", "", "186.00", "1800.00"), {
+      lateFee: 18600,
+      principal: 71400,
+      remaining: 108600,
+      exceeds: false,
+    });
+    // Too little to reach the principal.
+    assert.deepEqual(splitPartial("100,00", "", "186.00", "1800.00"), {
+      lateFee: 10000,
+      principal: 0,
+      remaining: 180000,
+      exceeds: false,
+    });
+    // The tax withheld settles too.
+    assert.equal(splitPartial("1914,00", "72,00", "186.00", "1800.00")?.remaining, 0);
+    assert.equal(splitPartial("1986,01", "", "186.00", "1800.00")?.exceeds, true);
+    assert.equal(splitPartial("x", "", "186.00", "1800.00"), null);
+  });
+
+  it("puts the API's partial payment refusals in Portuguese, on their fields", () => {
+    assert.deepEqual(translateRentProblem({ field: "amount", message: "must be at most 1986.00, what is owed" }), {
+      field: "amount",
+      message: "O valor passa do que falta, R$ 1.986,00.",
+    });
+    assert.deepEqual(
+      translateRentProblem({ field: "paid_on", message: "must not be before the last payment, on 2026-11-11" }),
+      { field: "paidOn", message: "A data não pode ser anterior à do último pagamento, 11/11/2026." },
+    );
+  });
+
+  it("computes what a payment brings in, as the API does", () => {
+    assert.equal(amountReceived("2120.00", "35,00", "100,00"), 205500);
+    assert.equal(amountReceived("1600.00", "", ""), 160000);
+    assert.equal(amountReceived("1600.00", "abc", ""), null);
+  });
+
+  it("suggests where a charge goes", () => {
+    assert.equal(suggestedDestination("property_tax"), "owner");
+    assert.equal(suggestedDestination("condominium"), "third_party");
+    assert.equal(destinationLabel("owner"), "Proprietário");
   });
 
   it("asks what another charge is", () => {
-    assert.deepEqual(validateCharge({ kind: "other", description: "", amount: "10" }).map((p) => p.field), ["description"]);
-    assert.deepEqual(validateCharge({ kind: "condominium", description: "", amount: "" }).map((p) => p.field), ["amount"]);
+    assert.deepEqual(validateCharge({ kind: "other", description: "", amount: "10", destination: "owner" }).map((p) => p.field), ["description"]);
+    assert.deepEqual(validateCharge({ kind: "condominium", description: "", amount: "", destination: "third_party" }).map((p) => p.field), ["amount"]);
     assert.equal(chargeLabel("property_tax"), "IPTU");
   });
 
@@ -51,5 +103,9 @@ describe("payments and charges", () => {
       field: "paidOn",
       message: "O pagamento não pode ter data futura.",
     });
+    assert.deepEqual(
+      translateRentProblem({ field: "payment", message: "the rent is in payout 2026/0003; undo the payout first" }),
+      { field: "form", message: "Este aluguel já entrou no repasse 2026/0003. Desfaça o repasse antes." },
+    );
   });
 });

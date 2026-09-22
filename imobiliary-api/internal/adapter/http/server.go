@@ -38,6 +38,7 @@ type Options struct {
 	Properties    *usecase.Properties
 	Contracts     *usecase.Contracts
 	Rents         *usecase.Rents
+	Payouts       *usecase.Payouts
 	Documents     *usecase.Documents
 	Auditor       *usecase.Auditor
 	// Signer parses the access tokens this service issued.
@@ -64,6 +65,7 @@ type Server struct {
 	properties    *usecase.Properties
 	contracts     *usecase.Contracts
 	rents         *usecase.Rents
+	payouts       *usecase.Payouts
 	documents     *usecase.Documents
 	auditor       *usecase.Auditor
 	signer        *token.Signer
@@ -89,6 +91,7 @@ func NewServer(opts Options) *Server {
 		properties:    opts.Properties,
 		contracts:     opts.Contracts,
 		rents:         opts.Rents,
+		payouts:       opts.Payouts,
 		documents:     opts.Documents,
 		auditor:       opts.Auditor,
 		signer:        opts.Signer,
@@ -152,6 +155,8 @@ func (s *Server) Handler() http.Handler {
 
 	mux.Handle("GET /v1/organization", authenticated(http.HandlerFunc(s.handleOrganization)))
 	mux.Handle("PATCH /v1/organization", admin(http.HandlerFunc(s.handleRenameOrganization)))
+	mux.Handle("GET /v1/organization/administrator", authenticated(http.HandlerFunc(s.handleAdministrator)))
+	mux.Handle("PUT /v1/organization/administrator", admin(http.HandlerFunc(s.handleSetAdministrator)))
 	mux.Handle("GET /v1/organization/members", authenticated(http.HandlerFunc(s.handleMembers)))
 	mux.Handle("PATCH /v1/organization/members/{userID}", admin(http.HandlerFunc(s.handleChangeRole)))
 	mux.Handle("DELETE /v1/organization/members/{userID}", admin(http.HandlerFunc(s.handleRemoveMember)))
@@ -165,6 +170,10 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /v1/people/{personID}", authenticated(http.HandlerFunc(s.handleGetPerson)))
 	mux.Handle("PUT /v1/people/{personID}", write(http.HandlerFunc(s.handleUpdatePerson)))
 	mux.Handle("DELETE /v1/people/{personID}", write(http.HandlerFunc(s.handleDeletePerson)))
+	// Anonymisation at the end of the legal retention: every member sees who is
+	// due, and an administrator confirms each one.
+	mux.Handle("GET /v1/people/anonymization-candidates", authenticated(http.HandlerFunc(s.handleAnonymizationCandidates)))
+	mux.Handle("POST /v1/people/{personID}/anonymization", admin(http.HandlerFunc(s.handleAnonymizePerson)))
 
 	// Properties, likewise.
 	mux.Handle("GET /v1/properties", authenticated(http.HandlerFunc(s.handleListProperties)))
@@ -196,7 +205,21 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /v1/rents/{rentID}/payment", write(http.HandlerFunc(s.handleReversePayment)))
 	mux.Handle("POST /v1/rents/{rentID}/charges", write(http.HandlerFunc(s.handleAddCharge)))
 	mux.Handle("DELETE /v1/rents/{rentID}/charges/{chargeID}", write(http.HandlerFunc(s.handleRemoveCharge)))
+	mux.Handle("PATCH /v1/rents/{rentID}/charges/{chargeID}", write(http.HandlerFunc(s.handleChargeDestination)))
 	mux.Handle("GET /v1/dashboard", authenticated(http.HandlerFunc(s.handleDashboard)))
+
+	// The owners' ledger and payouts (PLANO-REPASSE.md). Recording a payout
+	// moves no money: it says the office already did.
+	mux.Handle("GET /v1/payouts/balances", authenticated(http.HandlerFunc(s.handleBalances)))
+	mux.Handle("GET /v1/people/{personID}/ledger", authenticated(http.HandlerFunc(s.handlePersonLedger)))
+	mux.Handle("POST /v1/people/{personID}/ledger", write(http.HandlerFunc(s.handleAddLedgerEntry)))
+	mux.Handle("GET /v1/people/{personID}/income-report", authenticated(http.HandlerFunc(s.handleIncomeReport)))
+	mux.Handle("DELETE /v1/ledger/{entryID}", write(http.HandlerFunc(s.handleDeleteLedgerEntry)))
+	mux.Handle("GET /v1/payouts", authenticated(http.HandlerFunc(s.handleListPayouts)))
+	mux.Handle("POST /v1/payouts", write(http.HandlerFunc(s.handleCreatePayout)))
+	mux.Handle("GET /v1/payouts/{payoutID}", authenticated(http.HandlerFunc(s.handleGetPayout)))
+	mux.Handle("DELETE /v1/payouts/{payoutID}", write(http.HandlerFunc(s.handleUndoPayout)))
+	mux.Handle("GET /v1/payouts/{payoutID}/document-fields", authenticated(http.HandlerFunc(s.handlePayoutDocumentFields)))
 
 	// Probes, and the catch-all that answers JSON rather than net/http's text.
 	mux.HandleFunc("GET /healthz", s.handleLive)

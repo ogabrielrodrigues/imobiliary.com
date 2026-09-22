@@ -12,6 +12,7 @@ import {
   parseMoney,
   parsePercent,
   partiesOf,
+  landlordSharesNeeded,
   stepOfField,
   termMonths,
   addMonths,
@@ -125,6 +126,30 @@ describe("validateContract", () => {
       { personId: "tenant", role: "tenant" },
       { personId: "g", role: "guarantor" },
     ]);
+  });
+
+  it("asks landlords for shares only when they are not the owners", () => {
+    const owned = { ...valid, propertyOwnerIds: ["owner"] };
+    assert.equal(landlordSharesNeeded(owned), false);
+    assert.deepEqual(partiesOf(owned)[0], { personId: "owner", role: "landlord" });
+
+    // A usufructuary alone holds the whole rent without typing it.
+    const alone = { ...owned, landlordIds: ["usufructuary"] };
+    assert.equal(landlordSharesNeeded(alone), true);
+    assert.deepEqual(fields(alone), []);
+    assert.deepEqual(partiesOf(alone)[0], { personId: "usufructuary", role: "landlord", share: "100" });
+
+    // Two co-owners' heirs, say: each share typed, adding up to 100.
+    const two = { ...owned, landlordIds: ["a", "b"], landlordShares: { a: "60", b: "30" } };
+    assert.deepEqual(fields(two), ["landlordShares"]);
+    const fixed = { ...two, landlordShares: { a: "66,6667", b: "33,3333" } };
+    assert.deepEqual(fields(fixed), []);
+    assert.deepEqual(
+      partiesOf(fixed).slice(0, 2).map((p) => p.share),
+      ["66.6667", "33.3333"],
+    );
+    assert.equal(stepOfField("landlordShares"), "parties");
+    assert.equal(contractFormField("parties[1].share"), "landlordShares");
   });
 });
 

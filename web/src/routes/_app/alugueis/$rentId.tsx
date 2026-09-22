@@ -20,15 +20,20 @@ import { Button } from "@/components/ui/button";
 import { formatDate, formatMoney } from "@/domain/contract";
 import { addressLine, addressPlace } from "@/domain/property";
 import {
+  CHARGE_DESTINATIONS,
   CHARGE_KINDS,
   chargeLabel,
+  suggestedDestination,
   todayInSaoPaulo,
   validateCharge,
+  type ChargeDestination,
   type ChargeInput,
   type ChargeKind,
   type RentDetail,
 } from "@/domain/rent";
-import { addCharge, getRent, removeCharge, reversePayment } from "@/server/rents";
+import { addCharge, getRent, removeCharge, reversePayment, setChargeDestination } from "@/server/rents";
+
+const DESTINATION_OPTIONS: readonly (readonly [string, string])[] = CHARGE_DESTINATIONS.map(([value, label]) => [value, label]);
 
 export const Route = createFileRoute("/_app/alugueis/$rentId")({
   loader: ({ params }) => getRent({ data: params.rentId }),
@@ -42,7 +47,7 @@ export const Route = createFileRoute("/_app/alugueis/$rentId")({
   component: RentPage,
 });
 
-/** One instalment: what is due, its charges, and its payment. */
+/** One instalment: what is due, its charges, and its payments. */
 function RentPage() {
   const result = Route.useLoaderData();
   const today = todayInSaoPaulo();
@@ -67,6 +72,7 @@ function RentPage() {
 
   const rent = result.value;
   const paid = rent.status === "paid";
+  const hasPayments = rent.payments.length > 0;
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-4 md:p-8">
@@ -78,7 +84,7 @@ function RentPage() {
               <h1 className="text-title-lg font-semibold tracking-[-0.015em]">
                 Parcela {rent.sequence}, vence {formatDate(rent.dueOn)}
               </h1>
-              <RentStatusBadge status={rent.status} />
+              <RentStatusBadge status={rent.status} partial={rent.partiallyPaid} />
             </div>
             <Link
               to="/contratos/$contractId"
@@ -90,7 +96,8 @@ function RentPage() {
             <span className="text-small text-muted-foreground">{rent.contract.tenantNames.join(", ")}</span>
           </div>
           <div className="ml-auto flex flex-wrap gap-2">
-            {paid ? <ReversePayment rent={rent} /> : <PaymentDialog rent={rent} size="default" />}
+            {hasPayments && <ReversePayment rent={rent} />}
+            {!paid && <PaymentDialog rent={rent} size="default" />}
           </div>
         </div>
       </header>
@@ -106,20 +113,53 @@ function RentPage() {
           ))}
           <dt className="font-medium">A pagar</dt>
           <dd className="text-right font-medium">{formatMoney(rent.due)}</dd>
-          {paid ? (
+          {hasPayments && (
             <>
-              <Row label="Multa e juros registrados">{formatMoney(rent.lateFee)}</Row>
-              <Row label={`Recebido em ${formatDate(rent.paidOn ?? "")}`}>{formatMoney(rent.amountPaid ?? "0.00")}</Row>
-            </>
-          ) : (
-            rent.suggestedLateFee.daysLate > 0 && (
-              <Row label={`Multa e juros se pago hoje (${rentStatusNote(rent, today)})`}>
-                {formatMoney(rent.suggestedLateFee.total)}
+              <Row label="Multa e juros recebidos">{formatMoney(rent.lateFee)}</Row>
+              {rent.incomeTaxWithheld !== "0.00" && (
+                <Row label="IRRF retido pelo locatário">− {formatMoney(rent.incomeTaxWithheld)}</Row>
+              )}
+              <Row label={paid ? `Recebido, quitado em ${formatDate(rent.paidOn ?? "")}` : "Recebido até agora"}>
+                {formatMoney(rent.amountPaid ?? "0.00")}
               </Row>
-            )
+            </>
+          )}
+          {!paid && (
+            <>
+              {rent.partiallyPaid && <Row label="Aluguel e cobranças em aberto">{formatMoney(rent.outstanding)}</Row>}
+              {rent.suggestedLateFee.total !== "0.00" && (
+                <Row label={`Multa e juros se pago hoje (${rentStatusNote(rent, today)})`}>
+                  {formatMoney(rent.suggestedLateFee.total)}
+                </Row>
+              )}
+              {(rent.partiallyPaid || rent.suggestedLateFee.total !== "0.00") && (
+                <>
+                  <dt className="font-medium">Para quitar hoje</dt>
+                  <dd className="text-right font-medium">{formatMoney(rent.owedToday)}</dd>
+                </>
+              )}
+            </>
           )}
         </dl>
       </Section>
+
+      {hasPayments && (
+        <Section title={rent.payments.length === 1 ? "Pagamento" : "Pagamentos"}>
+          <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
+            {rent.payments.map((p) => (
+              <li key={p.id} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-3 py-2 text-small tabular-nums">
+                <span className="min-w-24">{formatDate(p.paidOn)}</span>
+                <span className="font-medium">{formatMoney(p.amount)}</span>
+                <span className="text-caption text-muted-foreground">
+                  multa e juros {formatMoney(p.lateFee)}, aluguel e cobranças {formatMoney(p.principal)}
+                  {p.waived !== "0.00" && `, dispensados ${formatMoney(p.waived)}`}
+                  {p.incomeTaxWithheld !== "0.00" && `, IRRF ${formatMoney(p.incomeTaxWithheld)}`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
 
       <Charges rent={rent} />
     </div>
@@ -144,7 +184,7 @@ function Section({ title, children }: { readonly title: string; readonly childre
   );
 }
 
-const EMPTY_CHARGE: ChargeInput = { kind: "condominium", description: "", amount: "" };
+const EMPTY_CHARGE: ChargeInput = { kind: "condominium", description: "", amount: "", destination: "third_party" };
 
 function Charges({ rent }: { readonly rent: RentDetail }) {
   const router = useRouter();
@@ -152,7 +192,8 @@ function Charges({ rent }: { readonly rent: RentDetail }) {
   const [attempted, setAttempted] = useState(false);
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
-  const paid = rent.status === "paid";
+  // Once money came in, every payment's split depends on the charges.
+  const paid = rent.payments.length > 0;
 
   const local = attempted ? validateCharge(value) : [];
   const error = (field: string) => messageFor(failure, field) ?? local.find((p) => p.field === field)?.message;
@@ -170,6 +211,16 @@ function Charges({ rent }: { readonly rent: RentDetail }) {
     }
     setValue(EMPTY_CHARGE);
     setAttempted(false);
+    await router.invalidate();
+  }
+
+  async function onDestination(chargeId: string, destination: ChargeDestination) {
+    setFailure(null);
+    const result = await setChargeDestination({ data: { id: rent.id, chargeId, destination } });
+    if (!result.ok) {
+      setFailure(result.failure);
+      return;
+    }
     await router.invalidate();
   }
 
@@ -196,6 +247,21 @@ function Charges({ rent }: { readonly rent: RentDetail }) {
                 {c.description !== "" && <span className="text-muted-foreground">: {c.description}</span>}
               </span>
               <span className="tabular-nums">{formatMoney(c.amount)}</span>
+              <select
+                aria-label={`Destino de ${chargeLabel(c.kind)}`}
+                value={c.destination}
+                onChange={(event) => {
+                  const next = event.currentTarget.value as ChargeDestination;
+                  void onDestination(c.id, next);
+                }}
+                className="h-8 rounded-md border border-input-border bg-input px-2 text-small text-foreground outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/20"
+              >
+                {CHARGE_DESTINATIONS.map(([d, label]) => (
+                  <option key={d} value={d}>
+                    {label}
+                  </option>
+                ))}
+              </select>
               {!paid && (
                 <Button
                   type="button"
@@ -213,11 +279,14 @@ function Charges({ rent }: { readonly rent: RentDetail }) {
       )}
 
       {paid ? (
-        <p className="text-caption text-muted-foreground">As cobranças de um aluguel pago não mudam. Estorne o pagamento para alterá-las.</p>
+        <p className="text-caption text-muted-foreground">
+          Depois de um pagamento, só o destino de uma cobrança muda, e o repasse é refeito. Valor e tipo mudam estornando
+          os pagamentos.
+        </p>
       ) : (
         <form
           noValidate
-          className="grid gap-3 sm:grid-cols-[10rem_1fr_9rem_auto] sm:items-start"
+          className="grid gap-3 sm:grid-cols-[9rem_1fr_8rem_9rem_auto] sm:items-start"
           onSubmit={(event) => {
             event.preventDefault();
             void onAdd();
@@ -229,7 +298,8 @@ function Charges({ rent }: { readonly rent: RentDetail }) {
             onBlur={() => {}}
             onChange={(next) => {
               setFailure(null);
-              setValue((c) => ({ ...c, kind: next as ChargeKind }));
+              const kind = next as ChargeKind;
+              setValue((c) => ({ ...c, kind, destination: suggestedDestination(kind) }));
             }}
             options={CHARGE_KINDS}
           />
@@ -260,12 +330,26 @@ function Charges({ rent }: { readonly rent: RentDetail }) {
               setValue((c) => ({ ...c, amount: next }));
             }}
           />
+          <SelectField
+            label="Destino"
+            value={value.destination}
+            onBlur={() => {}}
+            onChange={(next) => {
+              setFailure(null);
+              setValue((c) => ({ ...c, destination: next as ChargeDestination }));
+            }}
+            options={DESTINATION_OPTIONS}
+          />
           <Button type="submit" variant="secondary" disabled={pending} className="sm:mt-5.5">
             <IconPlus data-icon="inline-start" aria-hidden="true" />
             {pending ? "Adicionando..." : "Adicionar"}
           </Button>
         </form>
       )}
+      <p className="text-caption text-muted-foreground">
+        Terceiro: o escritório repassa ao condomínio ou à concessionária, fora do repasse e da taxa. Proprietário: entra no
+        repasse e na base da taxa de administração.
+      </p>
       {failure !== null && messageFor(failure, "description") === undefined && messageFor(failure, "amount") === undefined && (
         <p role="alert" className="text-small text-destructive-soft">
           {failure.kind === "validation" ? failure.fields[0]?.message : summaryOf(failure)}
@@ -277,6 +361,8 @@ function Charges({ rent }: { readonly rent: RentDetail }) {
 
 function ReversePayment({ rent }: { readonly rent: RentDetail }) {
   const router = useRouter();
+  const last = rent.payments.at(-1);
+  const several = rent.payments.length > 1;
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [pending, setPending] = useState(false);
@@ -306,15 +392,19 @@ function ReversePayment({ rent }: { readonly rent: RentDetail }) {
         }}
       >
         <IconArrowBackUp data-icon="inline-start" aria-hidden="true" />
-        Estornar pagamento
+        {several ? "Estornar o último pagamento" : "Estornar pagamento"}
       </Button>
       {mounted && (
         <AlertDialog open={open} onOpenChange={(next) => !pending && setOpen(next)}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Estornar o pagamento?</AlertDialogTitle>
+              <AlertDialogTitle>{several ? "Estornar o último pagamento?" : "Estornar o pagamento?"}</AlertDialogTitle>
               <AlertDialogDescription>
-                O aluguel volta a ficar em aberto, sem valor recebido nem multa registrada. O estorno fica na auditoria.
+                {last !== undefined && `O pagamento de ${formatDate(last.paidOn)}, de ${formatMoney(last.amount)}, é desfeito. `}
+                {several
+                  ? "Os anteriores continuam, e o aluguel fica em aberto pelo que faltar."
+                  : "O aluguel volta a ficar em aberto, sem valor recebido."}{" "}
+                O estorno fica na auditoria.
               </AlertDialogDescription>
             </AlertDialogHeader>
             {failure !== null && (

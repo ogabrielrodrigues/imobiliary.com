@@ -10,12 +10,15 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AccessibilityPanel } from "@/components/settings/accessibility-panel";
 import { AppearancePanel } from "@/components/settings/appearance-panel";
 import { DataPanel } from "@/components/settings/data-panel";
+import { AdministratorSection } from "@/components/settings/administrator-section";
 import { OrganizationPanel } from "@/components/settings/organization-panel";
+import { RetentionSection } from "@/components/settings/retention-section";
 import { PasswordPanel } from "@/components/settings/password-panel";
 import { SecondFactorPanel } from "@/components/settings/second-factor-panel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { account } from "@/server/auth";
 import { organizationView } from "@/server/organization";
+import { anonymizationCandidates } from "@/server/people";
 
 const TABS = [
   { value: "aparencia", label: "Aparência", icon: IconPalette },
@@ -39,11 +42,13 @@ export const Route = createFileRoute("/_app/ajustes")({
    * keeps it. An unknown value falls back to the first tab rather than an
    * error: it is a preference about where to look, not data.
    */
-  validateSearch: (search: Record<string, unknown>): { aba?: Tab } =>
-    isTab(search["aba"]) ? { aba: search["aba"] } : {},
+  validateSearch: (search: Record<string, unknown>): { aba?: Tab | undefined } => ({
+    aba: isTab(search["aba"]) ? search["aba"] : undefined,
+  }),
   loader: async () => ({
     account: await account(),
     organization: await organizationView(),
+    retention: await anonymizationCandidates(),
   }),
   head: () => ({ meta: [{ title: "Ajustes | Imobiliary" }] }),
   component: SettingsPage,
@@ -98,11 +103,20 @@ function SettingsPage() {
 
         <TabsContent value="escritorio">
           {data.organization.ok ? (
-            <OrganizationPanel
-              user={user}
-              members={data.organization.value.members}
-              invitations={data.organization.value.invitations}
-            />
+            <div className="flex flex-col gap-4">
+              <OrganizationPanel
+                user={user}
+                members={data.organization.value.members}
+                invitations={data.organization.value.invitations}
+              />
+              <div className="max-w-2xl">
+                <AdministratorSection
+                  administrator={data.organization.value.administrator}
+                  isAdmin={user.role === "admin"}
+                />
+              </div>
+              {data.retention.ok && <RetentionSection candidates={data.retention.value} isAdmin={user.role === "admin"} />}
+            </div>
           ) : (
             <p className="text-small text-muted-foreground">
               Não foi possível carregar o escritório agora. Recarregue a página.

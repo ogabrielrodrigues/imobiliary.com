@@ -69,7 +69,7 @@ func (r *amendmentRepository) setRent(ctx context.Context, contractID uuid.UUID,
 		return fmt.Errorf("postgres: adjust contract rent: %w", domain.ErrPreconditionFailed)
 	}
 	if _, err := r.q.Exec(ctx,
-		`UPDATE rents SET rent_amount = $3 WHERE contract_id = $1 AND sequence >= $2 AND paid_on IS NULL`,
+		`UPDATE rents SET rent_amount = $3 WHERE contract_id = $1 AND sequence >= $2 AND amount_paid IS NULL`,
 		pgUUID(contractID), from, int64(rent)); err != nil {
 		return fmt.Errorf("postgres: adjust rents: %w", err)
 	}

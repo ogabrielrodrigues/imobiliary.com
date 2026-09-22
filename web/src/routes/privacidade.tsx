@@ -81,6 +81,15 @@ function PrivacyPage() {
           e-mail e telefone dessas pessoas são cifrados no banco de dados. Nomes e endereços não
           são, porque precisam ser pesquisáveis; eles são protegidos por controle de acesso.
         </P>
+        <P>
+          Cada pagamento de aluguel, inteiro ou em partes, e o livro de cada proprietário, com o
+          que o escritório repassou, ficam pelo prazo fiscal: cinco anos contados do ano seguinte
+          ao último registro. Passado esse prazo, a pessoa aparece para o escritório em Ajustes
+          para ser anonimizada. Nada é anonimizado sem que um administrador do escritório
+          confirme. Anonimizada, a pessoa perde nome, documento, contatos e endereços, e os
+          documentos gerados sobre ela no Imobiliary Docs são excluídos, salvo os de um contrato
+          que nomeia outras partes ainda cadastradas.
+        </P>
       </LegalSection>
 
       <LegalSection title="5. Registros que a lei exige">

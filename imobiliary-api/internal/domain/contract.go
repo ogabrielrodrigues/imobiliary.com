@@ -76,6 +76,10 @@ func IsNotice(code NoticeCode) bool { return slices.Contains(noticeCodes, code) 
 type ContractParty struct {
 	PersonID uuid.UUID
 	Role     PartyRole
+	// Share is a landlord's part of each rent, recorded only when the
+	// landlords are not exactly the property's owners; otherwise the
+	// property's shares decide (PLANO-REPASSE.md §1).
+	Share *Rate
 }
 
 // Acknowledgement records that someone saw a notice and chose to proceed.

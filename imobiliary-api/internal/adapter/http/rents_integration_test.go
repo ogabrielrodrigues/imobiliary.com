@@ -81,12 +81,12 @@ func TestRentPayments(t *testing.T) {
 
 	// A charge joins what is due.
 	a.expect(http.StatusCreated, http.MethodPost, path+"/charges", f.admin.access,
-		map[string]any{"kind": "condominium", "amount": "400.00"}).decode(t, &rent)
+		map[string]any{"kind": "condominium", "amount": "400.00", "destination": "third_party"}).decode(t, &rent)
 	if rent.ChargesTotal != "400.00" || rent.Due != "2000.00" || len(rent.Charges) != 1 {
 		t.Fatalf("after the charge %+v", rent)
 	}
 	a.expect(http.StatusUnprocessableEntity, http.MethodPost, path+"/charges", f.admin.access,
-		map[string]any{"kind": "other", "amount": "10.00"})
+		map[string]any{"kind": "other", "amount": "10.00", "destination": "owner"})
 
 	// Five days late: 10% of 2000.00 plus 1% a month for 5 of 30 days.
 	paidOn := start.AddDays(5).String()
@@ -112,7 +112,7 @@ func TestRentPayments(t *testing.T) {
 	}
 	a.expect(http.StatusConflict, http.MethodPost, path+"/payment", f.admin.access, map[string]any{"paid_on": paidOn})
 	a.expect(http.StatusUnprocessableEntity, http.MethodPost, path+"/charges", f.admin.access,
-		map[string]any{"kind": "water", "amount": "10.00"})
+		map[string]any{"kind": "water", "amount": "10.00", "destination": "third_party"})
 	a.expect(http.StatusUnprocessableEntity, http.MethodDelete, path+"/charges/"+rent.Charges[0].ID, f.admin.access, nil)
 
 	// Reversal puts it back as it was.
@@ -122,12 +122,16 @@ func TestRentPayments(t *testing.T) {
 	}
 	a.expect(http.StatusUnprocessableEntity, http.MethodDelete, path+"/payment", f.admin.access, nil)
 
-	// A late fee waived: the amount follows it unless typed.
+	// A late fee waived: the amount received follows it.
 	a.expect(http.StatusOK, http.MethodPost, path+"/payment", f.admin.access,
 		map[string]any{"paid_on": paidOn, "late_fee": "0.00"}).decode(t, &rent)
 	if *rent.AmountPaid != "2000.00" || rent.LateFee != "0.00" {
 		t.Errorf("waived late fee %+v", rent)
 	}
+
+	// The amount received is computed, never typed.
+	a.expect(http.StatusUnprocessableEntity, http.MethodPost, "/v1/rents/"+second+"/payment", f.admin.access,
+		map[string]any{"paid_on": paidOn, "amount_paid": "100.00"})
 
 	// Not in the future.
 	a.expect(http.StatusUnprocessableEntity, http.MethodPost, "/v1/rents/"+second+"/payment", f.admin.access,
@@ -180,7 +184,7 @@ func TestChargesBlockANewSchedule(t *testing.T) {
 	}
 	a.expect(http.StatusOK, http.MethodGet, "/v1/rents?contract_id="+c.ID, f.admin.access, nil).decode(t, &page)
 	a.expect(http.StatusCreated, http.MethodPost, "/v1/rents/"+page.Rents[2].ID+"/charges", f.admin.access,
-		map[string]any{"kind": "property_tax", "amount": "120.00"})
+		map[string]any{"kind": "property_tax", "amount": "120.00", "destination": "owner"})
 	edit := f.contract("S-1", "2031-01-01", "2031-12-31", "due_day", 5)
 	res := a.withHeader(http.MethodPut, "/v1/contracts/"+c.ID, f.admin.access, "If-Match", `"1"`, edit)
 	if res.status != http.StatusUnprocessableEntity || !strings.Contains(string(res.body), `"rents"`) {
@@ -201,9 +205,10 @@ func TestDashboard(t *testing.T) {
 	a.expect(http.StatusOK, http.MethodGet, "/v1/rents?status=overdue&contract_id="+c.ID, f.admin.access, nil).decode(t, &page)
 	overdue := len(page.Rents)
 	// Paid today, on time or not, it counts as received this month. The
-	// administration fee takes the charge too, and never the late fee.
+	// administration fee takes neither the late fee nor a charge the office
+	// only pays on to the condominium (user's rule, 2026-09-21).
 	a.expect(http.StatusCreated, http.MethodPost, "/v1/rents/"+page.Rents[1].ID+"/charges", f.admin.access,
-		map[string]any{"kind": "condominium", "amount": "400.00"})
+		map[string]any{"kind": "condominium", "amount": "400.00", "destination": "third_party"})
 	a.expect(http.StatusOK, http.MethodPost, "/v1/rents/"+page.Rents[1].ID+"/payment", f.admin.access,
 		map[string]any{"paid_on": today.String(), "late_fee": "35.00"})
 
@@ -233,7 +238,7 @@ func TestDashboard(t *testing.T) {
 		OverdueRents []rentBody `json:"overdue_rents"`
 	}
 	a.expect(http.StatusOK, http.MethodGet, "/v1/dashboard", f.admin.access, nil).decode(t, &d)
-	if d.Today != today.String() || d.Month.Received != "2035.00" || d.Month.ReceivedCount != 1 || d.Month.OfficeFee != "200.00" {
+	if d.Today != today.String() || d.Month.Received != "2035.00" || d.Month.ReceivedCount != 1 || d.Month.OfficeFee != "160.00" {
 		t.Errorf("month %+v", d.Month)
 	}
 	if d.Overdue.Count != overdue-1 || len(d.OverdueRents) != overdue-1 {

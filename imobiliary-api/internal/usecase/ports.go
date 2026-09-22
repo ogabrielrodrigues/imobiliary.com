@@ -22,10 +22,21 @@ import (
 type Clock func() time.Time
 
 // OrganizationRepository stores offices.
+// StoredAdministrator is the administrator as the database keeps it.
+type StoredAdministrator struct {
+	Kind           domain.AdministratorKind
+	DocumentSealed []byte
+	CRECI          string
+}
+
 type OrganizationRepository interface {
 	Create(ctx context.Context, o *domain.Organization) error
 	ByID(ctx context.Context, id uuid.UUID) (*domain.Organization, error)
 	Rename(ctx context.Context, id uuid.UUID, name string, at time.Time) error
+	// Administrator reads who administers, the document still sealed; nil
+	// when the office never said.
+	Administrator(ctx context.Context, id uuid.UUID) (*StoredAdministrator, error)
+	SetAdministrator(ctx context.Context, id uuid.UUID, a *StoredAdministrator, at time.Time) error
 	// Delete removes an office and, through the cascades, its memberships,
 	// invitations and sessions. Only an account closing as the office's sole
 	// member reaches it. An office that still holds business data is
@@ -248,6 +259,17 @@ type PersonRepository interface {
 	SetSpouse(ctx context.Context, personID uuid.UUID, spouseID *uuid.UUID, at time.Time) error
 	// Delete reports domain.ErrInUse when something still links to the person.
 	Delete(ctx context.Context, id uuid.UUID) error
+	// RetentionCandidates are the people not yet anonymised who own no
+	// property, are party to no contract running on today or later, have no
+	// ledger line waiting for a payout, and had some link to the office; each
+	// with the day of their last contract end, ledger line or payout.
+	RetentionCandidates(ctx context.Context, today domain.Date) ([]RetentionCandidate, error)
+	// Edges are the links between people: marriages and representatives.
+	Edges(ctx context.Context) ([]PersonEdge, error)
+	// PartyContracts are the contracts any of the people is party to.
+	PartyContracts(ctx context.Context, personIDs []uuid.UUID) ([]PartyContract, error)
+	// Anonymize clears what identifies a person and marks the record.
+	Anonymize(ctx context.Context, id uuid.UUID, at time.Time) error
 }
 
 // PropertyQuery filters and pages the list of properties.
@@ -323,6 +345,9 @@ type ContractPartyView struct {
 	Role     domain.PartyRole
 	Name     string
 	Kind     domain.PersonKind
+	// Share is a landlord's recorded share, when the landlords are not the
+	// property's owners.
+	Share *domain.Rate
 }
 
 // RentRecord is one stored instalment.
@@ -337,6 +362,10 @@ type RentRecord struct {
 	AmountPaid   *domain.Money
 	PaidOn       *domain.Date
 }
+
+// Touched reports whether any money was received for the rent, which is what
+// keeps it out of a termination's and an adjustment's reach.
+func (r *RentRecord) Touched() bool { return r.AmountPaid != nil }
 
 // ContractRepository stores contracts, bound to an organisation-scoped
 // transaction like the others.
@@ -368,28 +397,56 @@ type ScopedRepositories struct {
 	Contracts  ContractRepository
 	Amendments AmendmentRepository
 	Rents      RentRepository
+	Ledger     LedgerRepository
 	Dashboard  DashboardRepository
 	Audit      AuditRepository
 }
 
 // RentView is one instalment with what identifies its contract.
 type RentView struct {
-	ID               uuid.UUID
-	ContractID       uuid.UUID
-	Registry         string
-	Address          domain.Address
-	TenantNames      []string
-	Sequence         int
-	DueOn            domain.Date
-	Amount           domain.Money
-	ChargesTotal     domain.Money
-	LateFee          domain.Money
-	AmountPaid       *domain.Money
-	PaidOn           *domain.Date
+	ID           uuid.UUID
+	ContractID   uuid.UUID
+	Registry     string
+	Address      domain.Address
+	TenantNames  []string
+	Sequence     int
+	DueOn        domain.Date
+	Amount       domain.Money
+	ChargesTotal domain.Money
+	// LateFee, AmountPaid and IncomeTaxWithheld sum the payments; AmountPaid
+	// is nil while there is none. PaidOn is the day the principal was settled,
+	// nil while anything is open, so a partially paid rent has AmountPaid and
+	// no PaidOn.
+	LateFee    domain.Money
+	AmountPaid *domain.Money
+	PaidOn     *domain.Date
+	// PrincipalPaid is the part of the rent and charges already settled.
+	PrincipalPaid    domain.Money
 	LatePenaltyRate  domain.Rate
 	LateInterestRate domain.Rate
-	// Charges is filled by Get only.
-	Charges []domain.Charge
+	// IncomeTaxWithheld is what a company tenant kept, recorded with the
+	// payment; zero otherwise.
+	IncomeTaxWithheld domain.Money
+	// Charges and Payments are filled by Get only. Payments are in the order
+	// they settle: by day, then as recorded.
+	Charges  []domain.Charge
+	Payments []domain.RentPayment
+}
+
+// Touched reports whether any money was received for the rent. Such a rent
+// counts as paid for the contract: a termination keeps it and an adjustment
+// leaves it alone.
+func (r *RentView) Touched() bool { return r.AmountPaid != nil }
+
+// PartiallyPaid reports whether money came in and something is still open.
+func (r *RentView) PartiallyPaid() bool { return r.AmountPaid != nil && r.PaidOn == nil }
+
+// Outstanding is the principal still open.
+func (r *RentView) Outstanding() domain.Money { return r.Due() - r.PrincipalPaid }
+
+// Terms is what the rent's standing is computed from.
+func (r *RentView) Terms() domain.RentTerms {
+	return domain.RentTerms{Due: r.Due(), DueOn: r.DueOn, PenaltyRate: r.LatePenaltyRate, InterestRate: r.LateInterestRate}
 }
 
 // Due is the rent with its charges, what a payment settles before any late fee.
@@ -426,17 +483,104 @@ type RentRepository interface {
 	List(ctx context.Context, q RentQuery) ([]RentView, error)
 	// Get is one instalment with its charges.
 	Get(ctx context.Context, id uuid.UUID) (*RentView, error)
-	// Pay settles an unpaid instalment; one already paid is ErrConflict, so
-	// of two concurrent payments one fails.
-	Pay(ctx context.Context, id uuid.UUID, p domain.Payment) error
-	// Reverse puts a paid instalment back to unpaid; an unpaid one is ErrConflict.
-	Reverse(ctx context.Context, id uuid.UUID) error
+	// Lock holds the instalment's row until the transaction ends, so two
+	// payments of one rent are planned one after the other.
+	Lock(ctx context.Context, id uuid.UUID) error
+	// AddPayment stores a payment and brings the rent's sums up to date;
+	// settledOn is the day the principal closed, when it did.
+	AddPayment(ctx context.Context, p *domain.RentPayment, settledOn *domain.Date) error
+	// DeletePayment removes a payment and brings the rent's sums up to date,
+	// leaving the rent unpaid.
+	DeletePayment(ctx context.Context, rentID, paymentID uuid.UUID) error
 	// AddCharge adds a charge to an unpaid instalment; a paid one is ErrConflict.
 	AddCharge(ctx context.Context, c *domain.Charge, at time.Time) error
 	// RemoveCharge removes a charge from an unpaid instalment.
 	RemoveCharge(ctx context.Context, rentID, chargeID uuid.UUID) error
 	// HasCharges reports whether any instalment of a contract carries a charge.
 	HasCharges(ctx context.Context, contractID uuid.UUID) (bool, error)
+	// SetChargeDestination changes where a charge goes, paid rent or not.
+	SetChargeDestination(ctx context.Context, rentID, chargeID uuid.UUID, d domain.ChargeDestination) error
+	// PaidWithoutEntries is every instalment with a payment whose lines were
+	// never written: the rents received before the ledger existed.
+	PaidWithoutEntries(ctx context.Context) ([]uuid.UUID, error)
+}
+
+// EntryView is a ledger line with what a person needs to recognise it.
+type EntryView struct {
+	domain.LedgerEntry
+	// Address is the property's, when the line names one.
+	Address *domain.Address
+	// Registry, RentSequence and RentDueOn describe the rent a line came from.
+	Registry     string
+	RentSequence int
+	RentDueOn    *domain.Date
+	// ChargeKind and ChargeDescription describe the charge a line came from.
+	ChargeKind        domain.ChargeKind
+	ChargeDescription string
+}
+
+// Balance is a beneficiary's pending lines, summed.
+type Balance struct {
+	PersonID uuid.UUID
+	Name     string
+	Kind     domain.PersonKind
+	// Pending is the signed sum of the lines without a payout; it can be
+	// below zero when debits wait for the next rent.
+	Pending  int64
+	Lines    int
+	OldestOn domain.Date
+}
+
+// PayoutSummary is a row of the payouts list.
+type PayoutSummary struct {
+	domain.Payout
+	PersonName string
+	PersonKind domain.PersonKind
+}
+
+// PayoutQuery pages payouts, newest first, optionally one person's.
+type PayoutQuery struct {
+	PersonID *uuid.UUID
+	After    *PayoutCursor
+	Limit    int
+}
+
+// PayoutCursor pages the payouts list.
+type PayoutCursor struct {
+	PaidOn domain.Date
+	ID     uuid.UUID
+}
+
+// LedgerRepository keeps the owners' ledger and its payouts, bound to an
+// organisation-scoped transaction.
+type LedgerRepository interface {
+	// Insert writes lines, each with its ID and creation time already set.
+	Insert(ctx context.Context, entries []domain.LedgerEntry) error
+	// RentEntries are the lines a rent wrote, locked until the transaction ends.
+	RentEntries(ctx context.Context, rentID uuid.UUID) ([]domain.LedgerEntry, error)
+	// DeleteRentEntries removes a rent's lines; one inside a payout refuses.
+	DeleteRentEntries(ctx context.Context, rentID uuid.UUID) error
+	// DeletePaymentEntries removes one payment's lines, with the same refusal.
+	DeletePaymentEntries(ctx context.Context, paymentID uuid.UUID) error
+	Entry(ctx context.Context, id uuid.UUID) (*domain.LedgerEntry, error)
+	DeleteEntry(ctx context.Context, id uuid.UUID) error
+	// Entries are lines by ID, locked until the transaction ends. An ID that
+	// names no line is left out.
+	Entries(ctx context.Context, ids []uuid.UUID) ([]domain.LedgerEntry, error)
+	// Pending is a person's lines without a payout, oldest first.
+	Pending(ctx context.Context, personID uuid.UUID) ([]EntryView, error)
+	Balances(ctx context.Context) ([]Balance, error)
+	// CreatePayout numbers and stores a payout and closes the lines in it.
+	// A line closed in the meantime by another payout is ErrConflict.
+	CreatePayout(ctx context.Context, p *domain.Payout, entryIDs []uuid.UUID) error
+	Payout(ctx context.Context, id uuid.UUID) (*PayoutSummary, error)
+	PayoutEntries(ctx context.Context, id uuid.UUID) ([]EntryView, error)
+	Payouts(ctx context.Context, q PayoutQuery) ([]PayoutSummary, error)
+	// DeletePayout undoes a payout; its lines return to pending.
+	DeletePayout(ctx context.Context, id uuid.UUID) error
+	// IncomeByMonth sums a person's lines between two days, paid out or not,
+	// by month, kind and the kind of tenant who paid the rent.
+	IncomeByMonth(ctx context.Context, personID uuid.UUID, from, to domain.Date) ([]IncomeRow, error)
 }
 
 // MonthFigures are the receipts of a month.
@@ -447,12 +591,25 @@ type MonthFigures struct {
 	// Received is what came in during the month, whatever the due day.
 	Received      domain.Money
 	ReceivedCount int
-	// Open is what is due in the month and not paid.
+	// Open is what is due in the month and still open, less what partial
+	// payments settled. ReceivedCount counts payments, not rents.
 	Open      domain.Money
 	OpenCount int
 	// OfficeFee is the administration fee on the rents received in the month,
-	// taken on the rent with its charges and not on the late fee.
+	// read from the ledger's fee lines, so it is always what the owners were
+	// charged: the rent and the owner's charges, never the late fee.
 	OfficeFee domain.Money
+	// PaidOut is what the office transferred to owners in the month.
+	PaidOut      domain.Money
+	PaidOutCount int
+}
+
+// PayoutFigures are what the office still owes its owners today.
+type PayoutFigures struct {
+	// Pending is the sum of every balance above zero.
+	Pending domain.Money
+	// Beneficiaries is how many people have a balance above zero.
+	Beneficiaries int
 }
 
 // Portfolio is what the office manages today.
@@ -483,6 +640,7 @@ type DashboardRepository interface {
 	// AdjustmentsDue lists running contracts with an index whose twelve months
 	// since the start or the last adjustment end by until.
 	AdjustmentsDue(ctx context.Context, today, until domain.Date, limit int) ([]ContractDeadline, error)
+	Payouts(ctx context.Context) (PayoutFigures, error)
 }
 
 // AmendmentRepository stores rent adjustments, bound to an organisation-scoped

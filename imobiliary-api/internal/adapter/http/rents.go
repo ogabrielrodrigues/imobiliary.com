@@ -20,10 +20,11 @@ type rentContractBody struct {
 }
 
 type chargeBody struct {
-	ID          string            `json:"id"`
-	Kind        domain.ChargeKind `json:"kind"`
-	Description string            `json:"description"`
-	Amount      domain.Money      `json:"amount"`
+	ID          string                   `json:"id"`
+	Kind        domain.ChargeKind        `json:"kind"`
+	Description string                   `json:"description"`
+	Amount      domain.Money             `json:"amount"`
+	Destination domain.ChargeDestination `json:"destination"`
 }
 
 type lateFeeBody struct {
@@ -49,14 +50,37 @@ type rentViewBody struct {
 	LateFee    domain.Money  `json:"late_fee"`
 	AmountPaid *domain.Money `json:"amount_paid"`
 	PaidOn     *domain.Date  `json:"paid_on"`
-	Status     string        `json:"status"`
+	// IncomeTaxWithheld is what a company tenant kept, deducted from the
+	// amount received and from the owners' payout.
+	IncomeTaxWithheld domain.Money `json:"income_tax_withheld"`
+	// PrincipalPaid is the part of the rent and charges already settled, and
+	// Outstanding the part still open. PartiallyPaid is true while money came
+	// in and something is still open; the status stays pending or overdue.
+	PrincipalPaid domain.Money `json:"principal_paid"`
+	Outstanding   domain.Money `json:"outstanding"`
+	PartiallyPaid bool         `json:"partially_paid"`
+	Status        string       `json:"status"`
+}
+
+type rentPaymentBody struct {
+	ID        string       `json:"id"`
+	PaidOn    domain.Date  `json:"paid_on"`
+	Amount    domain.Money `json:"amount"`
+	LateFee   domain.Money `json:"late_fee"`
+	Waived    domain.Money `json:"waived"`
+	Principal domain.Money `json:"principal"`
+	IncomeTax domain.Money `json:"income_tax_withheld"`
 }
 
 type rentDetailBody struct {
 	rentViewBody
-	Charges []chargeBody `json:"charges"`
-	// SuggestedLateFee is for paying today; zero once paid.
+	Charges  []chargeBody      `json:"charges"`
+	Payments []rentPaymentBody `json:"payments"`
+	// SuggestedLateFee is the interest and penalty owed today; zero once paid.
 	SuggestedLateFee lateFeeBody `json:"suggested_late_fee"`
+	// OwedToday is everything owed today: the principal still open with the
+	// interest and penalty; zero once paid.
+	OwedToday domain.Money `json:"owed_today"`
 }
 
 func presentRentView(r *usecase.RentView, today domain.Date) rentViewBody {
@@ -77,7 +101,8 @@ func presentRentView(r *usecase.RentView, today domain.Date) rentViewBody {
 			ID: r.ContractID.String(), Registry: r.Registry, Address: presentPropertyAddress(r.Address), TenantNames: names,
 		},
 		Sequence: r.Sequence, DueOn: r.DueOn, Amount: r.Amount, ChargesTotal: r.ChargesTotal, Due: r.Due(),
-		LateFee: r.LateFee, AmountPaid: r.AmountPaid, PaidOn: r.PaidOn, Status: status,
+		LateFee: r.LateFee, AmountPaid: r.AmountPaid, PaidOn: r.PaidOn, IncomeTaxWithheld: r.IncomeTaxWithheld,
+		PrincipalPaid: r.PrincipalPaid, Outstanding: r.Outstanding(), PartiallyPaid: r.PartiallyPaid(), Status: status,
 	}
 }
 
@@ -85,10 +110,20 @@ func writeRent(w http.ResponseWriter, s *Server, status int, d *usecase.RentDeta
 	out := rentDetailBody{
 		rentViewBody:     presentRentView(d.Rent, d.Today),
 		Charges:          make([]chargeBody, 0, len(d.Rent.Charges)),
+		Payments:         make([]rentPaymentBody, 0, len(d.Rent.Payments)),
 		SuggestedLateFee: presentLateFee(d.Suggested),
+		OwedToday:        d.Standing.Total(),
+	}
+	for _, p := range d.Rent.Payments {
+		out.Payments = append(out.Payments, rentPaymentBody{
+			ID: p.ID.String(), PaidOn: p.PaidOn, Amount: p.Amount, LateFee: p.LateFee, Waived: p.Waived,
+			Principal: p.Principal, IncomeTax: p.IncomeTax,
+		})
 	}
 	for _, c := range d.Rent.Charges {
-		out.Charges = append(out.Charges, chargeBody{ID: c.ID.String(), Kind: c.Kind, Description: c.Description, Amount: c.Amount})
+		out.Charges = append(out.Charges, chargeBody{
+			ID: c.ID.String(), Kind: c.Kind, Description: c.Description, Amount: c.Amount, Destination: c.Destination,
+		})
 	}
 	writeJSON(w, s.logger, status, out)
 }
@@ -190,9 +225,17 @@ func (s *Server) handleGetRent(w http.ResponseWriter, r *http.Request) {
 }
 
 type paymentRequest struct {
-	PaidOn     string `json:"paid_on"`
+	PaidOn string `json:"paid_on"`
+	// Amount is what came in, for a partial payment; empty settles everything
+	// owed on the day, computed.
+	Amount  string `json:"amount"`
+	LateFee string `json:"late_fee"`
+	// IncomeTaxWithheld is what a company tenant kept; empty is none.
+	IncomeTaxWithheld string `json:"income_tax_withheld"`
+	// AmountPaid is not accepted: a payment in full is computed, and a partial
+	// one is sent as amount. It stays in the shape so a client that still
+	// sends it is told so rather than ignored.
 	AmountPaid string `json:"amount_paid"`
-	LateFee    string `json:"late_fee"`
 }
 
 func (body paymentRequest) toInput() (usecase.PaymentInput, error) {
@@ -203,26 +246,37 @@ func (body paymentRequest) toInput() (usecase.PaymentInput, error) {
 	} else if body.PaidOn == "" {
 		v.Add("paid_on", "is required")
 	}
-	for _, f := range []struct {
-		field, raw string
-		dst        **domain.Money
-	}{{"amount_paid", body.AmountPaid, &in.AmountPaid}, {"late_fee", body.LateFee, &in.LateFee}} {
-		if f.raw == "" {
-			continue
+	if body.AmountPaid != "" {
+		v.Add("amount_paid", "is computed: the rent, its charges and the late fee, less the tax withheld; send amount for a partial payment")
+	}
+	if body.Amount != "" {
+		if m, err := domain.ParseMoney(body.Amount); err == nil {
+			in.Amount = &m
+		} else {
+			v.Add("amount", "must be an amount such as 1500.00")
 		}
-		m, err := domain.ParseMoney(f.raw)
-		if err != nil {
-			v.Add(f.field, "must be an amount such as 1500.00")
-			continue
+	}
+	if body.LateFee != "" {
+		if m, err := domain.ParseMoney(body.LateFee); err == nil {
+			in.LateFee = &m
+		} else {
+			v.Add("late_fee", "must be an amount such as 1500.00")
 		}
-		*f.dst = &m
+	}
+	if body.IncomeTaxWithheld != "" {
+		if m, err := domain.ParseMoney(body.IncomeTaxWithheld); err == nil {
+			in.IncomeTax = m
+		} else {
+			v.Add("income_tax_withheld", "must be an amount such as 1500.00")
+		}
 	}
 	return in, v.OrNil()
 }
 
 type paymentPreviewBody struct {
-	LateFee lateFeeBody  `json:"late_fee"`
-	Total   domain.Money `json:"total"`
+	LateFee   lateFeeBody  `json:"late_fee"`
+	Principal domain.Money `json:"principal"`
+	Total     domain.Money `json:"total"`
 }
 
 func (s *Server) handlePreviewPayment(w http.ResponseWriter, r *http.Request) {
@@ -245,7 +299,7 @@ func (s *Server) handlePreviewPayment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, s.logger, err)
 		return
 	}
-	writeJSON(w, s.logger, http.StatusOK, paymentPreviewBody{LateFee: presentLateFee(preview.LateFee), Total: preview.Total})
+	writeJSON(w, s.logger, http.StatusOK, paymentPreviewBody{LateFee: presentLateFee(preview.LateFee), Principal: preview.Principal, Total: preview.Total})
 }
 
 func (s *Server) handlePayRent(w http.ResponseWriter, r *http.Request) {
@@ -288,6 +342,7 @@ type chargeRequest struct {
 	Kind        string `json:"kind"`
 	Description string `json:"description"`
 	Amount      string `json:"amount"`
+	Destination string `json:"destination"`
 }
 
 func (s *Server) handleAddCharge(w http.ResponseWriter, r *http.Request) {
@@ -300,7 +355,10 @@ func (s *Server) handleAddCharge(w http.ResponseWriter, r *http.Request) {
 		writeDecodeError(w, s.logger, err)
 		return
 	}
-	charge := &domain.Charge{Kind: domain.ChargeKind(body.Kind), Description: body.Description}
+	charge := &domain.Charge{
+		Kind: domain.ChargeKind(body.Kind), Description: body.Description,
+		Destination: domain.ChargeDestination(body.Destination),
+	}
 	if m, err := domain.ParseMoney(body.Amount); err == nil {
 		charge.Amount = m
 	} else {
@@ -335,6 +393,31 @@ func (s *Server) handleRemoveCharge(w http.ResponseWriter, r *http.Request) {
 	writeRent(w, s, http.StatusOK, d)
 }
 
+func (s *Server) handleChargeDestination(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.rentID(w, r)
+	if !ok {
+		return
+	}
+	charge, err := requiredUUID("charge_id", r.PathValue("chargeID"))
+	if err != nil {
+		writeError(w, s.logger, err)
+		return
+	}
+	var body struct {
+		Destination string `json:"destination"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeDecodeError(w, s.logger, err)
+		return
+	}
+	d, err := s.rents.SetChargeDestination(r.Context(), callerFrom(r.Context()), id, charge, domain.ChargeDestination(body.Destination))
+	if err != nil {
+		writeError(w, s.logger, err)
+		return
+	}
+	writeRent(w, s, http.StatusOK, d)
+}
+
 // --- dashboard ------------------------------------------------------------------
 
 type deadlineBody struct {
@@ -356,7 +439,13 @@ type dashboardBody struct {
 		Open          domain.Money `json:"open"`
 		OpenCount     int          `json:"open_count"`
 		OfficeFee     domain.Money `json:"office_fee"`
+		PaidOut       domain.Money `json:"paid_out"`
+		PaidOutCount  int          `json:"paid_out_count"`
 	} `json:"month"`
+	Payouts struct {
+		Pending       domain.Money `json:"pending"`
+		Beneficiaries int          `json:"beneficiaries"`
+	} `json:"payouts"`
 	Overdue struct {
 		Count  int          `json:"count"`
 		Amount domain.Money `json:"amount"`
@@ -392,6 +481,8 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	out.Month.Expected, out.Month.ExpectedCount = v.Month.Expected, v.Month.ExpectedCount
 	out.Month.Received, out.Month.ReceivedCount = v.Month.Received, v.Month.ReceivedCount
 	out.Month.Open, out.Month.OpenCount, out.Month.OfficeFee = v.Month.Open, v.Month.OpenCount, v.Month.OfficeFee
+	out.Month.PaidOut, out.Month.PaidOutCount = v.Month.PaidOut, v.Month.PaidOutCount
+	out.Payouts.Pending, out.Payouts.Beneficiaries = v.Payouts.Pending, v.Payouts.Beneficiaries
 	out.Overdue.Count, out.Overdue.Amount = v.OverdueCount, v.OverdueAmount
 	out.Portfolio.Properties, out.Portfolio.LeasedProperties = v.Portfolio.Properties, v.Portfolio.LeasedProperties
 	out.Portfolio.ActiveContracts, out.Portfolio.RentRoll = v.Portfolio.ActiveContracts, v.Portfolio.RentRoll
